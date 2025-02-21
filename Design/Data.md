@@ -259,6 +259,7 @@ public struct PlayerState {
     public Dictionary<Position, Card> Battlefield; // Played cards with positioning
     public Queue<Card> DiscardPile;   // Public graveyard (last-in ordering)
     public int ActionPoints;          // Action points available for the player
+    public Card Headquarter;          // Special card representing the player's headquarter
 }
 
 public class BoardState {
@@ -272,6 +273,7 @@ public class SharedZones {
     public List<Card> Exile;          // Removed-from-game cards
     public List<Card> Limbo;          // Cards in transition between zones
 }
+
 ```
 
 Key considerations:
@@ -281,7 +283,9 @@ Key considerations:
 3. Added hand zone with maximum size constraint
 4. Explicit exile zone for removed cards
 5. Positional battlefield with grid coordinates
-6. Transitional limbo zone for cards moving between areas. This is not used yet.
+6. Transitional limbo zone for cards moving between areas.
+
+The concept of a "Limbo" zone in card games typically refers to a temporary state where cards are in transition between different zones or states. This can be useful for handling complex game mechanics where cards need to be temporarily removed from play but are not yet in their final destination zone.
 
 Example usage:
 
@@ -293,7 +297,8 @@ var board = new BoardState {
             Hand = new List<Card>(),
             Battlefield = new Dictionary<Position, Card>(),
             DiscardPile = new Queue<Card>(),
-            ActionPoints = 10
+            ActionPoints = 10,
+            Headquarter = p1Headquarter
         },
         ["P2"] = new PlayerState { /* ... */ }
     },
