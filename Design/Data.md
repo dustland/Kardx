@@ -122,6 +122,15 @@ The following is an example of a condition:
 
 The effect definition specifies how the ability's impact is calculated and applied. The dynamic calculation can incorporate multiple attributes from the caster.
 
+Effect types:
+
+- `damage`: Deals damage to a target card.
+- `heal`: Heals a target card.
+- `buff`: Applies a buff to a target card.
+- `debuff`: Applies a debuff to a target card.
+
+You can also define custom effect types by extending the `EffectDefinition` class.
+
 ```cs
 public class EffectDefinition
 {
