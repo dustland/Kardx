@@ -1,53 +1,244 @@
-# System Data Design
+# Kardx System Data Design
 
-## Basic Design
+## Overview
 
-### Data Layer
+This document details the enhanced data system design for a Kardx-alike card game. The design emphasizes modularity, a data-driven approach to abilities, and extensibility by clearly separating the following layers:
 
-The data layer is responsible for storing and managing the data of the game.
+- **Data Layer**: Manages static card definitions, zones, and base attributes.
+- **Logic Layer**: Handles game rules, turn phases, and the dynamic application of card abilities and effects.
+- **UI Layer**: Presents the data to the player while supporting animations, lazy-loaded images (using WebP), and responsive design.
 
-### Logic Layer
+Game designers can now add or modify abilities simply by updating JSON configurations, which enhances iteration speed and flexibility.
 
-The logic layer is responsible for providing the logic of the game, handling the rules and the game flow.
+## Card Definitions
 
-### UI Layer
+### Card Type
 
-The UI layer is responsible for displaying the data to the player.
-
-## 1. Card Abstraction
-
-Our design abstracts each card as a modular entity with the following core attributes:
+Each card is defined by a static type that serves as a blueprint for all of its instances. The updated CardType now includes metadata for localization, resource cost, rarity, and associated abilities.
 
 ```cs
-public class CardData
+public class CardType
 {
-    public string id; // unique identifier
-    public string name; // name of the card
-    public string description; // description of the card
-    public string type; // creature, spell, equipment
-    public string subtype; // subtype of the card
-    public int attack; // attack of the card
-    public int defense; // defense of the card
-    public int magic;
-    public int price;
-    public int points; // cost of using this card
-    public string image;
-    public string rarity;
-    public string set;
+    public string Id; // Unique identifier (GUID or slug)
+    public string Name; // Localization key for the card name
+    public string Description; // Localization key for the card description
+    public string Category; // e.g., Creature, Spell, Artifact, etc.
+    public string Subtype; // Archetype (e.g., Warrior, Mage)
+    public int Cost; // Resource cost to play the card
+    public int Attack;
+    public int Defense;
+    public int Magic;
+    public int Rarity; // e.g., Common = 1, Rare = 2, Epic = 3, Legendary = 4
+    public string Set; // Card edition or set identifier
+    public string ImageUrl; // Optimized WebP image URL with size metadata
+    public Dictionary<string, int> BaseAttributes; // Additional base attributes (e.g., health, speed)
+    public List<AbilityDefinition> Abilities; // Ability definitions associated with the card
 }
 ```
 
-## 2. Board State
+### Card Instance
+
+A card instance represents a live card in the system—whether in a deck, hand, or on the battlefield. In addition to linking back to the static definition, the instance maintains dynamic state such as current level, modifiers, and computed attributes.
+
+```cs
+public class Card
+{
+    public Guid InstanceId;        // Unique instance identifier
+    public CardType CardType;      // Reference to the static card definition
+    public int Level;
+    public int Experience;
+    public int OwnerId;            // Identifier for the owner (e.g., player ID)
+    public string ControllerId;    // ID of the current controlling player (for control effects)
+    public List<Modifier> Modifiers; // Active temporary modifiers (buffs/debuffs)
+    public Dictionary<string, int> DynamicAttributes; // Computed attributes (from buffs, equipment, etc.)
+}
+
+// Auxiliary modifier class for temporary stat changes
+public class Modifier {
+    public string Source;    // Origin of the modifier (e.g., card ID or effect)
+    public string Attribute; // Target attribute (e.g., "attack" or "defense")
+    public int Value;        // Modifier value (positive or negative)
+    public int Duration;     // Duration in turns (0 if the modifier is instant or permanent until removed)
+}
+```
+
+## Zones and Board State
 
 The board state is responsible for storing the state of the board, i.e. the cards on the board, the cards in the hand, the cards in the deck, etc.
 
 ```cs
-public class BoardState
-{
-    public List<CardData> cards;
-    public List<CardData> hand;
-    public List<CardData> deck;
-    public List<CardData> graveyard; // cards that have been removed from the game
-    public List<CardData> board; // cards that are on the board
+public class BoardState {
+    public List<Card> Deck;        // Cards yet to be drawn
+    public List<Card> Hand;        // Cards in the player's hand
+    public List<Card> Battlefield; // Cards currently in play
+    public List<Card> Graveyard;   // Destroyed or used cards
+    public List<Card> Exile;       // Cards temporarily or permanently removed from play
 }
 ```
+
+## Battle System and Turn Phases
+
+The battle system manages the flow of the game using distinct phases (draw, main, combat, and end). This modular approach allows for granular control of events and state updates.
+
+```cs
+public class BattleManager {
+    public BoardState Board;         // The current state of game zones
+    public int TurnNumber;
+    public string CurrentTurnPlayerId;
+
+    public void StartBattle() {
+        // Initialize board state, shuffle decks, and select the starting player
+    }
+
+    public void NextTurn() {
+        // Transition to the next turn and cycle through phases
+    }
+
+    public void ExecuteCombatPhase() {
+        // Handle combat interactions such as attack resolution and trigger combat effects
+    }
+
+    public void EndTurn() {
+        // Cleanup end-of-turn states (e.g., expire modifiers, resolve end-turn triggers, draw cards)
+    }
+}
+```
+
+## Data-Driven Ability System
+
+Card abilities are defined as data, enabling designers to adjust functionality without code changes. Abilities include triggers, costs, visual effects, and preconditions.
+
+### Ability Definition
+
+Below is a JSON example of a `fireball` ability. This definition specifies when the ability triggers, its cost, how it targets, and the accompanying visual/audio feedback.
+
+```json
+{
+  "id": "fireball",
+  "trigger": "onCast", // Trigger condition: when the card is played
+  "category": "spell",
+  "cost": 3,
+  "range": 3,
+  "target": "enemy",
+  "effect": {
+    "type": "damage",
+    "base": 5,
+    "scaling": {
+      "attribute": "magic",
+      "multiplier": 1.5
+    },
+    "cooldown": 2,
+    "duration": 0, // Instant effect
+    "animation": "fireball_anim",
+    "sound": "fireball_sound"
+  },
+  "conditions": [
+    {
+      "type": "mana",
+      "value": 3
+    }
+  ]
+}
+```
+
+### Effect Definition
+
+The effect definition specifies how the ability's impact is calculated and applied. The dynamic calculation can incorporate multiple attributes from the caster.
+
+```json
+{
+  "type": "damage",
+  "target": "single",
+  "calculation": "base + (caster.magic * multiplier) + (caster.attack * bonusFactor)",
+  "attributes": [
+    {
+      "name": "base",
+      "value": 5
+    },
+    {
+      "name": "multiplier",
+      "value": 1.5
+    },
+    {
+      "name": "bonusFactor",
+      "value": 0.5
+    }
+  ],
+  "cooldown": 2,
+  "animation": "explosion_anim",
+  "sound": "damage_sound"
+}
+```
+
+## Rule Engine and Effect Application
+
+The rule engine dynamically interprets and applies ability effects based on their JSON definitions. It validates conditions, computes effect values, and alters game state accordingly.
+
+```cs
+public class RuleEngine
+{
+    public int CalculateEffect(EffectDefinition effect, Card caster)
+    {
+        // Parse the calculation expression (e.g., using an expression parser)
+        // Evaluate "base + (caster.magic * multiplier) + (caster.attack * bonusFactor)"
+        // Return the computed numeric result.
+    }
+
+    public void ApplyEffect(EffectDefinition effect, Card caster, Card target)
+    {
+        // Evaluate any prerequisites and then apply the calculated effect value
+        // Update the target card's state (e.g., damage, buffs/debuffs).
+    }
+
+    public bool ValidateAbilityConditions(List<Condition> conditions, Card card)
+    {
+        // Check if all conditions (resource cost, cooldowns, etc.) pass
+        // Return true if the card is permitted to use this ability.
+    }
+
+    public void TriggerAbility(AbilityDefinition ability, Card caster, Card target)
+    {
+        if (ValidateAbilityConditions(ability.Conditions, caster))
+        {
+            ApplyEffect(ability.Effect, caster, target);
+            // Optionally initiate visual effects, sound, and set ability cooldown.
+        }
+    }
+}
+```
+
+### Example Usage
+
+Below is an example showing how to define and trigger a fireball ability:
+
+```cs
+// Define a fireball ability with dynamic scaling
+var fireballAbility = new AbilityDefinition {
+    Id = "fireball",
+    Trigger = "onCast",
+    Cost = 3,
+    Range = 3,
+    Effect = new EffectDefinition {
+        Type = "damage",
+        Base = 5,
+        Scaling = new EffectScaling {
+            Attribute = "magic",
+            Multiplier = 1.5
+        },
+        Cooldown = 2,
+        Animation = "fire_explosion",
+        Sound = "fireball_sound"
+    },
+    Conditions = new List<Condition> {
+        new Condition { Type = "mana", Value = 3 }
+    }
+};
+
+// Calculate the damage using the rule engine and apply the ability
+int damage = ruleEngine.CalculateEffect(fireballAbility.Effect, caster);
+ruleEngine.TriggerAbility(fireballAbility, caster, target);
+```
+
+## Conclusion
+
+This document provides a realistic and flexible architecture suitable for a Kardx-alike card game. By cleanly separating static card definitions from dynamic game state and encapsulating ability logic in data, the system supports rapid iteration and easier extensibility. Designers can now introduce new cards, abilities, or gameplay mechanics purely through data updates, while developers maintain a robust backend that manages complex game rules.
