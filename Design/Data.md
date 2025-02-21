@@ -258,7 +258,7 @@ public struct PlayerState {
     public List<Card> Hand;           // Current playable cards (max 10)
     public Dictionary<Position, Card> Battlefield; // Played cards with positioning
     public Queue<Card> DiscardPile;   // Public graveyard (last-in ordering)
-    public int ActionPoints;          // Action points available for the player
+    public int Credits;          // Credits available for the player to spend
     public Card Headquarter;          // Special card representing the player's headquarter
 }
 
@@ -297,7 +297,7 @@ var board = new BoardState {
             Hand = new List<Card>(),
             Battlefield = new Dictionary<Position, Card>(),
             DiscardPile = new Queue<Card>(),
-            ActionPoints = 10,
+            Credits = 10,
             Headquarter = p1Headquarter
         },
         ["P2"] = new PlayerState { /* ... */ }
@@ -312,7 +312,7 @@ var board = new BoardState {
 
 ## Battle System
 
-The battle system is straightforward, with players taking turns to perform actions. Each player can spend points to move cards, attack, or enhance their cards. The game is won when a player's headquarters card, which is always on the battlefield, is reduced to zero health.
+The battle system is straightforward, with players taking turns to perform actions. Each player can spend credits to move cards, attack, or enhance their cards. The game is won when a player's headquarters card, which is always on the battlefield, is reduced to zero health.
 
 ```cs
 public class BattleManager {
@@ -323,15 +323,15 @@ public class BattleManager {
     public void StartBattle(Player player1, Player player2) {
         // Initializes the board state and sets up the initial conditions for the battle.
         CurrentTurnPlayerId = player1.Id; // Start with player 1
-        Board.Players[player1.Id].ActionPoints = 10; // Example starting action points
-        Board.Players[player2.Id].ActionPoints = 10; // Example starting action points
+        Board.Players[player1.Id].Credits = 10; // Example starting credits
+        Board.Players[player2.Id].Credits = 10; // Example starting credits
     }
 
     public void MoveCard(Card card, Zone targetZone) {
-        // Check if the player has enough action points to move the card
-        if (Board.Players[CurrentTurnPlayerId].ActionPoints >= card.Cost) {
-            // Deduct action points
-            Board.Players[CurrentTurnPlayerId].ActionPoints -= card.Cost;
+        // Check if the player has enough credits to move the card
+        if (Board.Players[CurrentTurnPlayerId].Credits >= card.Cost) {
+            // Deduct credits
+            Board.Players[CurrentTurnPlayerId].Credits -= card.Cost;
 
             // Move the card to the target zone
             // Implement logic to update the card's position in the game state
@@ -339,15 +339,15 @@ public class BattleManager {
             // Handle any immediate effects of moving the card
             ApplyCardEffects(card, targetZone);
         } else {
-            // Notify the player that they don't have enough action points
+            // Notify the player that they don't have enough credits
         }
     }
 
     public void Attack(Card attacker, Card target) {
-        // Check if the player has enough action points to attack
-        if (Board.Players[CurrentTurnPlayerId].ActionPoints >= attacker.Cost) {
-            // Deduct action points
-            Board.Players[CurrentTurnPlayerId].ActionPoints -= attacker.Cost;
+        // Check if the player has enough credits to attack
+        if (Board.Players[CurrentTurnPlayerId].Credits >= attacker.Cost) {
+            // Deduct credits
+            Board.Players[CurrentTurnPlayerId].Credits -= attacker.Cost;
 
             // Calculate damage and apply it to both cards
             int damageToTarget = CalculateDamage(attacker, target);
@@ -360,13 +360,13 @@ public class BattleManager {
             CheckCardDestruction(attacker);
             CheckCardDestruction(target);
         } else {
-            // Notify the player that they don't have enough action points
+            // Notify the player that they don't have enough credits
         }
     }
 
     public void EndTurn() {
-        // Add action points for the current player, capped at 9.
-        Board.Players[CurrentTurnPlayerId].ActionPoints = Math.Min(Board.Players[CurrentTurnPlayerId].ActionPoints + 5, 9);
+        // Add credits for the current player, capped at 9.
+        Board.Players[CurrentTurnPlayerId].Credits = Math.Min(Board.Players[CurrentTurnPlayerId].Credits + 5, 9);
         // Finalizes the current turn, processing any necessary end-of-turn effects.
         CurrentTurnPlayerId = GetOpponentId(CurrentTurnPlayerId);
         TurnNumber++;
