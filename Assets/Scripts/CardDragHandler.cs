@@ -1,36 +1,74 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
-  private RectTransform rectTransform;
-  private Vector3 originalPosition;
   private CanvasGroup canvasGroup;
+  private RectTransform rectTransform;
+  private Vector2 originalPosition;
+  private Transform originalParent;
+  private Image battlefieldBackground;
+  public bool IsDragging { get; private set; }
 
-  void Start()
+  // Add reference to drop zone
+  private BattleFieldDropZone dropZone;
+
+  void Awake()
   {
-    rectTransform = GetComponent<RectTransform>();
     canvasGroup = GetComponent<CanvasGroup>();
-    originalPosition = transform.position;
+    if (canvasGroup == null)
+    {
+      canvasGroup = gameObject.AddComponent<CanvasGroup>();
+    }
+    rectTransform = GetComponent<RectTransform>();
+    battlefieldBackground = GameObject.Find("BattleField").GetComponent<Image>();
+    dropZone = FindObjectOfType<BattleFieldDropZone>();
   }
 
   public void OnBeginDrag(PointerEventData eventData)
   {
-    canvasGroup.alpha = 0.6f;  // 透明度变暗
-    canvasGroup.blocksRaycasts = false; // 允许拖动时穿透 UI
+    IsDragging = true;
+    canvasGroup.blocksRaycasts = false;
+    originalPosition = rectTransform.anchoredPosition;
+    originalParent = transform.parent;
+
+    // Show battlefield background
+    if (battlefieldBackground != null)
+    {
+      battlefieldBackground.color = new Color(1, 1, 1, 0.2f); // Semi-transparent white
+    }
   }
 
   public void OnDrag(PointerEventData eventData)
   {
-    rectTransform.position = eventData.position; // 让卡牌跟随鼠标
+    rectTransform.position = eventData.position;
   }
 
   public void OnEndDrag(PointerEventData eventData)
   {
-    canvasGroup.alpha = 1.0f;
+    IsDragging = false;
     canvasGroup.blocksRaycasts = true;
 
-    // 如果没有放到合法区域，回到原位置
-    transform.position = originalPosition;
+    // Hide battlefield background
+    if (battlefieldBackground != null)
+    {
+      battlefieldBackground.color = new Color(1, 1, 1, 0f);
+    }
+
+    // Check if we're over a valid drop zone
+    if (dropZone == null || !dropZone.CanAcceptCard(gameObject))
+    {
+      ReturnToOriginalPosition();
+    }
+
+    // Force layout refresh
+    LayoutRebuilder.ForceRebuildLayoutImmediate(transform.parent as RectTransform);
+  }
+
+  public void ReturnToOriginalPosition()
+  {
+    rectTransform.anchoredPosition = originalPosition;
+    transform.SetParent(originalParent);
   }
 }

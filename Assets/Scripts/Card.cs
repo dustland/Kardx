@@ -6,22 +6,28 @@ public class Card : MonoBehaviour, IPointerClickHandler
 {
   private Image cardImage;
   private GameManager gameManager;
+  private CardDragHandler dragHandler;
 
   void Awake()
   {
     // Get components on initialization
     cardImage = GetComponent<Image>();
     gameManager = FindObjectOfType<GameManager>();
+    dragHandler = GetComponent<CardDragHandler>();
   }
 
   public void OnPointerClick(PointerEventData eventData)
   {
-    var cardInfoView = gameManager.GetCardInfoView();
-    if (cardInfoView != null)
+    // Only handle click if we're not dragging
+    if (!dragHandler.IsDragging)
     {
-      // First activate the GameObject to ensure Awake() is called
-      cardInfoView.gameObject.SetActive(true);
-      cardInfoView.ShowCard(cardImage.sprite);
+      var cardInfoView = gameManager.GetCardInfoView();
+      if (cardInfoView != null)
+      {
+        // First activate the GameObject to ensure Awake() is called
+        cardInfoView.gameObject.SetActive(true);
+        cardInfoView.ShowCard(cardImage.sprite);
+      }
     }
   }
 }
