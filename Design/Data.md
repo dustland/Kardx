@@ -244,15 +244,16 @@ ruleEngine.TriggerAbility(ambushAbility, caster, target);
 The board state manages separate game zones for each player and shared game areas. This ensures proper isolation of player-specific card collections while maintaining shared game elements.
 
 ```cs
-public struct PlayerZones {
+public struct PlayerState {
     public Stack<Card> Deck;          // Private draw pile (random access via shuffle)
     public List<Card> Hand;           // Current playable cards (max 10)
     public Dictionary<Position, Card> Battlefield; // Played cards with positioning
     public Queue<Card> DiscardPile;   // Public graveyard (last-in ordering)
+    public int ActionPoints;          // Action points available for the player
 }
 
 public class BoardState {
-    public Dictionary<string, PlayerZones> Players; // Key: player ID
+    public Dictionary<string, PlayerState> Players; // Key: player ID
     public SharedZones Global;        // Neutral game areas
     public List<GameEffect> ActiveEffects; // Ongoing game-wide effects
 }
@@ -277,14 +278,15 @@ Example usage:
 
 ```cs
 var board = new BoardState {
-    Players = new Dictionary<string, PlayerZones> {
-        ["P1"] = new PlayerZones {
+    Players = new Dictionary<string, PlayerState> {
+        ["P1"] = new PlayerState {
             Deck = new Stack<Card>(p1Deck),
             Hand = new List<Card>(),
             Battlefield = new Dictionary<Position, Card>(),
-            DiscardPile = new Queue<Card>()
+            DiscardPile = new Queue<Card>(),
+            ActionPoints = 10
         },
-        ["P2"] = new PlayerZones { /* ... */ }
+        ["P2"] = new PlayerState { /* ... */ }
     },
     Global = new SharedZones {
         NeutralDeck = new Stack<Card>(environmentCards),
@@ -303,19 +305,19 @@ public class BattleManager {
     public BoardState Board { get; private set; }
     public int TurnNumber { get; private set; }
     public string CurrentTurnPlayerId { get; private set; }
-    private int actionPoints; // Track action points for the current turn
 
     public void StartBattle(Player player1, Player player2) {
         // Initializes the board state and sets up the initial conditions for the battle.
         CurrentTurnPlayerId = player1.Id; // Start with player 1
-        actionPoints = 10; // Example starting action points
+        Board.Players[player1.Id].ActionPoints = 10; // Example starting action points
+        Board.Players[player2.Id].ActionPoints = 10; // Example starting action points
     }
 
     public void MoveCard(Card card, Zone targetZone) {
         // Check if the player has enough action points to move the card
-        if (actionPoints >= card.Cost) {
+        if (Board.Players[CurrentTurnPlayerId].ActionPoints >= card.Cost) {
             // Deduct action points
-            actionPoints -= card.Cost;
+            Board.Players[CurrentTurnPlayerId].ActionPoints -= card.Cost;
 
             // Move the card to the target zone
             // Implement logic to update the card's position in the game state
@@ -329,9 +331,9 @@ public class BattleManager {
 
     public void Attack(Card attacker, Card target) {
         // Check if the player has enough action points to attack
-        if (actionPoints >= attacker.Cost) {
+        if (Board.Players[CurrentTurnPlayerId].ActionPoints >= attacker.Cost) {
             // Deduct action points
-            actionPoints -= attacker.Cost;
+            Board.Players[CurrentTurnPlayerId].ActionPoints -= attacker.Cost;
 
             // Calculate damage and apply it to both cards
             int damageToTarget = CalculateDamage(attacker, target);
@@ -349,13 +351,14 @@ public class BattleManager {
     }
 
     public void EndTurn() {
+        // Add action points for the current player, capped at 9.
+        Board.Players[CurrentTurnPlayerId].ActionPoints = Math.Min(Board.Players[CurrentTurnPlayerId].ActionPoints + 5, 9);
         // Finalizes the current turn, processing any necessary end-of-turn effects.
         CurrentTurnPlayerId = GetOpponentId(CurrentTurnPlayerId);
         TurnNumber++;
-        actionPoints = 10; // Reset action points for the next player
     }
 
-    private void ApplyCardEffects(Card card, Zone targetZone) {
+    private void ApplyCardEffects(Card source, Card target) {
         // Implement logic to apply any effects triggered by moving the card
     }
 
@@ -366,7 +369,7 @@ public class BattleManager {
 
     private void CheckCardDestruction(Card card) {
         if (card.Health <= 0) {
-            // Remove the card from the game state
+            // Remove the card from the game state and apply any destruction effects.
         }
     }
 
