@@ -20,17 +20,18 @@ Each card is defined by a static type that serves as a blueprint for all of its 
 public class CardType
 {
     public string Id; // Unique identifier (GUID or slug)
-    public string Name; // Localization key for the card name
-    public string Description; // Localization key for the card description
+    public string NameKey; // Localization key for the card name
+    public string DescriptionKey; // Localization key for the card description
     public string Category; // e.g., Creature, Spell, Artifact, etc.
     public string Subtype; // Archetype (e.g., Warrior, Mage)
     public int Cost; // Resource cost to play the card
-    public int BaseHealth;    // Was "Defense"
-    public int AttackPower;   // Was "Attack"
+    public int Health; // Base health of the card
+    public int Attack; // Attack power of the card
+    public int CounterAttack; // Power used for counterattacks
     public int Rarity; // e.g., Common = 1, Rare = 2, Epic = 3, Legendary = 4
-    public string Set; // Card edition or set identifier
+    public string SetId; // Card edition or set identifier
     public string ImageUrl; // Optimized WebP image URL with size metadata
-    public Dictionary<string, int> BaseAttributes; // Additional base attributes (e.g., health, speed)
+    public Dictionary<string, int> Attributes; // Additional base attributes (e.g., health, speed)
     public List<AbilityDefinition> Abilities; // Ability definitions associated with the card
 }
 ```
@@ -50,7 +51,7 @@ public class Card
     public string ControllerId;
     public List<Modifier> Modifiers; // Active temporary modifiers (buffs/debuffs)
     public Dictionary<string, int> DynamicAttributes; // Computed attributes (from buffs, equipment, etc.)
-    public HealthValue Health;
+    public int Health; // Current health of the card
 }
 ```
 
@@ -59,7 +60,6 @@ public class Card
 Modifiers are temporary stat changes that can be applied to cards. They are used to implement card abilities and effects.
 
 ```cs
-// Auxiliary modifier class for temporary stat changes
 public class Modifier {
     public string SourceCardId;  // Identifier for the card that applied the modifier
     public int RemainingTurns;   // Number of turns the modifier will last
@@ -67,7 +67,6 @@ public class Modifier {
     public string Attribute;     // The attribute being modified (e.g., "attack", "defense")
     public ModifierType Type;    // Type of modifier (e.g., Buff, Debuff)
 
-    // Additional methods for handling modifier logic
     public bool IsActive() {
         // Determine if the modifier is currently active based on conditions
     }
@@ -98,23 +97,14 @@ public class AbilityDefinition
     public string Target;      // Targeting scope (e.g., "enemy", "ally", "self")
     public EffectDefinition Effect; // Effect to apply when triggered
     public List<Condition> Conditions; // Activation requirements
-
-    /// <summary>
-    /// Cooldown configuration - if null, no cooldown
-    /// </summary>
-    public int? Cooldown;
+    public int? Cooldown;      // Cooldown configuration - if null, no cooldown
 }
 
 public class Condition
 {
     public string Type;    // Condition type (e.g., "zone", "healthThreshold")
     public string Value;   // Condition value (e.g., "forest", "50")
-
-    /// <summary>
-    /// Optional comparison operator for numeric conditions
-    /// Default: "==" for string comparisons
-    /// </summary>
-    public string Operator; // ">", "<", ">=", "<=", "!=", "=="
+    public string Operator; // Optional comparison operator for numeric conditions
 }
 ```
 
@@ -251,53 +241,137 @@ ruleEngine.TriggerAbility(ambushAbility, caster, target);
 
 ## Zones and Board State
 
-The board state is responsible for storing the state of the board, i.e. the cards on the board, the cards in the hand, the cards in the deck, etc.
+The board state manages separate game zones for each player and shared game areas. This ensures proper isolation of player-specific card collections while maintaining shared game elements.
 
 ```cs
+public struct PlayerZones {
+    public Stack<Card> Deck;          // Private draw pile (random access via shuffle)
+    public List<Card> Hand;           // Current playable cards (max 10)
+    public Dictionary<Position, Card> Battlefield; // Played cards with positioning
+    public Queue<Card> DiscardPile;   // Public graveyard (last-in ordering)
+}
+
 public class BoardState {
-    public Stack<Card> Deck;          // Proper draw mechanism
-    public Dictionary<Position, Card> Battlefield;
-    public Queue<Card> DiscardPile;     // Last-in ordering
+    public Dictionary<string, PlayerZones> Players; // Key: player ID
+    public SharedZones Global;        // Neutral game areas
+    public List<GameEffect> ActiveEffects; // Ongoing game-wide effects
+}
+
+public class SharedZones {
+    public Stack<Card> NeutralDeck;   // Environment/quest cards
+    public List<Card> Exile;          // Removed-from-game cards
+    public List<Card> Limbo;          // Cards in transition between zones
 }
 ```
 
-## Battle System and Turn Phases
+Key considerations:
 
-The battle system manages the flow of the game using distinct phases (draw, main, combat, and end). This modular approach allows for granular control of events and state updates.
+1. Separate zones per player (deck/hand/battlefield/discard)
+2. Clear distinction between player-specific and shared zones
+3. Added hand zone with maximum size constraint
+4. Explicit exile zone for removed cards
+5. Positional battlefield with grid coordinates
+6. Transitional limbo zone for cards moving between areas. This is not used yet.
+
+Example usage:
 
 ```cs
-public enum TurnPhase {
-    Begin, Draw, Main, Battle, End, Cleanup
-}
+var board = new BoardState {
+    Players = new Dictionary<string, PlayerZones> {
+        ["P1"] = new PlayerZones {
+            Deck = new Stack<Card>(p1Deck),
+            Hand = new List<Card>(),
+            Battlefield = new Dictionary<Position, Card>(),
+            DiscardPile = new Queue<Card>()
+        },
+        ["P2"] = new PlayerZones { /* ... */ }
+    },
+    Global = new SharedZones {
+        NeutralDeck = new Stack<Card>(environmentCards),
+        Exile = new List<Card>(),
+        Limbo = new List<Card>()
+    }
+};
+```
 
+## Battle System
+
+The battle system is straightforward, with players taking turns to perform actions. Each player can spend points to move cards, attack, or enhance their cards. The game is won when a player's headquarters card, which is always on the battlefield, is reduced to zero health.
+
+```cs
 public class BattleManager {
-    public BoardState Board;         // The current state of game zones
-    public int TurnNumber;
-    public string CurrentTurnPlayerId;
-    public TurnPhase CurrentPhase;
+    public BoardState Board { get; private set; }
+    public int TurnNumber { get; private set; }
+    public string CurrentTurnPlayerId { get; private set; }
+    private int actionPoints; // Track action points for the current turn
 
-    public void StartBattle() {
-        // Initialize board state, shuffle decks, and select the starting player
+    public void StartBattle(Player player1, Player player2) {
+        // Initializes the board state and sets up the initial conditions for the battle.
+        CurrentTurnPlayerId = player1.Id; // Start with player 1
+        actionPoints = 10; // Example starting action points
     }
 
-    public void NextTurn() {
-        // Transition to the next turn and cycle through phases
+    public void MoveCard(Card card, Zone targetZone) {
+        // Check if the player has enough action points to move the card
+        if (actionPoints >= card.Cost) {
+            // Deduct action points
+            actionPoints -= card.Cost;
+
+            // Move the card to the target zone
+            // Implement logic to update the card's position in the game state
+
+            // Handle any immediate effects of moving the card
+            ApplyCardEffects(card, targetZone);
+        } else {
+            // Notify the player that they don't have enough action points
+        }
     }
 
-    public void ExecuteCombatPhase() {
-        // Handle combat interactions such as attack resolution and trigger combat effects
+    public void Attack(Card attacker, Card target) {
+        // Check if the player has enough action points to attack
+        if (actionPoints >= attacker.Cost) {
+            // Deduct action points
+            actionPoints -= attacker.Cost;
+
+            // Calculate damage and apply it to both cards
+            int damageToTarget = CalculateDamage(attacker, target);
+            int damageToAttacker = CalculateDamage(target, attacker);
+
+            target.Health -= damageToTarget;
+            attacker.Health -= damageToAttacker;
+
+            // Check if any cards are destroyed
+            CheckCardDestruction(attacker);
+            CheckCardDestruction(target);
+        } else {
+            // Notify the player that they don't have enough action points
+        }
     }
 
     public void EndTurn() {
-        // Cleanup end-of-turn states (e.g., expire modifiers, resolve end-turn triggers, draw cards)
+        // Finalizes the current turn, processing any necessary end-of-turn effects.
+        CurrentTurnPlayerId = GetOpponentId(CurrentTurnPlayerId);
+        TurnNumber++;
+        actionPoints = 10; // Reset action points for the next player
     }
 
-    public void ProcessModifiers() {  // Was "CleanupModifiers"
-        // Handle turn progression and removal
+    private void ApplyCardEffects(Card card, Zone targetZone) {
+        // Implement logic to apply any effects triggered by moving the card
+    }
+
+    private int CalculateDamage(Card attacker, Card target) {
+        // Implement logic to calculate damage based on card attributes
+        return attacker.AttackPower; // Example calculation
+    }
+
+    private void CheckCardDestruction(Card card) {
+        if (card.Health <= 0) {
+            // Remove the card from the game state
+        }
+    }
+
+    private string GetOpponentId(string playerId) {
+        // Returns the ID of the opponent player based on the current player's ID.
     }
 }
 ```
-
-## Conclusion
-
-This document provides a realistic and flexible architecture suitable for a Kardx-alike card game. By cleanly separating static card definitions from dynamic game state and encapsulating ability logic in data, the system supports rapid iteration and easier extensibility. Designers can now introduce new cards, abilities, or gameplay mechanics purely through data updates, while developers maintain a robust backend that manages complex game rules.
