@@ -25,9 +25,8 @@ public class CardType
     public string Category; // e.g., Creature, Spell, Artifact, etc.
     public string Subtype; // Archetype (e.g., Warrior, Mage)
     public int Cost; // Resource cost to play the card
-    public int Attack;
-    public int Defense;
-    public int Magic;
+    public int BaseHealth;    // Was "Defense"
+    public int AttackPower;   // Was "Attack"
     public int Rarity; // e.g., Common = 1, Rare = 2, Epic = 3, Legendary = 4
     public string Set; // Card edition or set identifier
     public string ImageUrl; // Optimized WebP image URL with size metadata
@@ -47,18 +46,17 @@ public class Card
     public CardType CardType;      // Reference to the static card definition
     public int Level;
     public int Experience;
-    public int OwnerId;            // Identifier for the owner (e.g., player ID)
-    public string ControllerId;    // ID of the current controlling player (for control effects)
+    public string OwnerId;
+    public string ControllerId;
     public List<Modifier> Modifiers; // Active temporary modifiers (buffs/debuffs)
     public Dictionary<string, int> DynamicAttributes; // Computed attributes (from buffs, equipment, etc.)
+    public HealthValue Health;
 }
 
 // Auxiliary modifier class for temporary stat changes
 public class Modifier {
-    public string Source;    // Origin of the modifier (e.g., card ID or effect)
-    public string Attribute; // Target attribute (e.g., "attack" or "defense")
-    public int Value;        // Modifier value (positive or negative)
-    public int Duration;     // Duration in turns (0 if the modifier is instant or permanent until removed)
+    public string SourceCardId;  // Was "Source"
+    public int RemainingTurns;   // Was "Duration"
 }
 ```
 
@@ -68,11 +66,9 @@ The board state is responsible for storing the state of the board, i.e. the card
 
 ```cs
 public class BoardState {
-    public List<Card> Deck;        // Cards yet to be drawn
-    public List<Card> Hand;        // Cards in the player's hand
-    public List<Card> Battlefield; // Cards currently in play
-    public List<Card> Graveyard;   // Destroyed or used cards
-    public List<Card> Exile;       // Cards temporarily or permanently removed from play
+    public Stack<Card> Deck;          // Proper draw mechanism
+    public Dictionary<Position, Card> Battlefield;
+    public Queue<Card> DiscardPile;     // Last-in ordering
 }
 ```
 
@@ -81,10 +77,15 @@ public class BoardState {
 The battle system manages the flow of the game using distinct phases (draw, main, combat, and end). This modular approach allows for granular control of events and state updates.
 
 ```cs
+public enum TurnPhase {
+    Begin, Draw, Main, Battle, End, Cleanup
+}
+
 public class BattleManager {
     public BoardState Board;         // The current state of game zones
     public int TurnNumber;
     public string CurrentTurnPlayerId;
+    public TurnPhase CurrentPhase;
 
     public void StartBattle() {
         // Initialize board state, shuffle decks, and select the starting player
@@ -101,6 +102,10 @@ public class BattleManager {
     public void EndTurn() {
         // Cleanup end-of-turn states (e.g., expire modifiers, resolve end-turn triggers, draw cards)
     }
+
+    public void ProcessModifiers() {  // Was "CleanupModifiers"
+        // Handle turn progression and removal
+    }
 }
 ```
 
@@ -115,7 +120,7 @@ Below is a JSON example of a `fireball` ability. This definition specifies when 
 ```json
 {
   "id": "fireball",
-  "trigger": "onCast", // Trigger condition: when the card is played
+  "trigger": "onPlay", // Was "onCast"
   "category": "spell",
   "cost": 3,
   "range": 3,
@@ -149,7 +154,7 @@ The effect definition specifies how the ability's impact is calculated and appli
 {
   "type": "damage",
   "target": "single",
-  "calculation": "base + (caster.magic * multiplier) + (caster.attack * bonusFactor)",
+  "formula": "base + (caster.magic * multiplier) + (caster.attack * bonusFactor)", // Was "calculation"
   "attributes": [
     {
       "name": "base",
