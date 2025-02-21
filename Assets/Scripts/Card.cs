@@ -1,20 +1,27 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 public class Card : MonoBehaviour, IPointerClickHandler
 {
-  private CardManager cardManager;
+  private Image cardImage;
+  private GameManager gameManager;
 
-  void Start()
+  void Awake()
   {
-    // 在场景中查找 CardManager
-    cardManager = FindObjectOfType<CardManager>();
+    // Get components on initialization
+    cardImage = GetComponent<Image>();
+    gameManager = FindObjectOfType<GameManager>();
   }
 
   public void OnPointerClick(PointerEventData eventData)
   {
-    // 当卡牌被点击时，移动到战场
-    Debug.Log("Card clicked", gameObject);
-    cardManager.PlayCard(gameObject);
+    var cardInfoView = gameManager.GetCardInfoView();
+    if (cardInfoView != null)
+    {
+      // First activate the GameObject to ensure Awake() is called
+      cardInfoView.gameObject.SetActive(true);
+      cardInfoView.ShowCard(cardImage.sprite);
+    }
   }
 }

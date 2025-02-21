@@ -12,7 +12,6 @@ GameObject:
   - component: {fileID: 208809015195407516}
   - component: {fileID: 2066580606401858920}
   - component: {fileID: 7797801947349420384}
-  - component: {fileID: 1117723902227308386}
   - component: {fileID: 4865309679951694841}
   - component: {fileID: 7305068422991085686}
   - component: {fileID: 3909449120910613397}
@@ -92,20 +91,6 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
---- !u!114 &1117723902227308386
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2848189636294331043}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 227d32483d5ef41e4a53425513f45c0a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  frontImage: {fileID: -1655203178421251210, guid: e88089da3cc04463bb265c1c89eb839c, type: 3}
-  backImage: {fileID: -7540064123073174036, guid: 1bde1f64b34f9497bb03601cd7f84d9b, type: 3}
 --- !u!114 &4865309679951694841
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -150,7 +135,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1117723902227308386}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: CardFlip, Assembly-CSharp
         m_MethodName: FlipCard
         m_Mode: 1
