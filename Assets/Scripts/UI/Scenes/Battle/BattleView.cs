@@ -7,6 +7,7 @@ using Kardx.UI.Components.Card;
 
 namespace Kardx.UI.Scenes.Battle
 {
+  using Card = Kardx.Core.Data.Cards.Card; // Alias for Card
   public class BattleView : MonoBehaviour
   {
     [Header("Core References")]

@@ -10,7 +10,6 @@ namespace Kardx.Core.Data.Cards
   {
     [Header("Identity")]
     [SerializeField] private string id;  // Unique identifier (GUID or slug)
-    [SerializeField] private string title;  // Localization key for the card title
     [SerializeField] private string name;  // Localization key for the card name
     [SerializeField] private string description;  // Localization key for the card description
     [SerializeField] private CardCategory category;  // e.g., Unit, Order, Countermeasure

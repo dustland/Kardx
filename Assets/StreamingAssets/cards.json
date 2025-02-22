@@ -1,0 +1,122 @@
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Blitzkrieg",
+    "description": "Deal 3 damage to an enemy unit immediately when played.",
+    "trigger": "OnPlay",
+    "category": "Tactic",
+    "cost": 2,
+    "target": "enemy",
+    "effect": "Damage",
+    "conditions": ["HasEnoughMana"],
+    "cooldown": 1
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440001",
+    "name": "Field Repairs",
+    "description": "Restore 2 health to this unit after attacking.",
+    "trigger": "OnAttack",
+    "category": "Passive",
+    "cost": 0,
+    "target": "self",
+    "effect": "Heal",
+    "conditions": ["IsDamaged"],
+    "cooldown": null
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440002",
+    "name": "Last Stand",
+    "description": "Grant +2 attack to an ally when this unit dies.",
+    "trigger": "OnDeath",
+    "category": "Tactic",
+    "cost": 1,
+    "target": "ally",
+    "effect": "Buff",
+    "conditions": ["IsAlly"],
+    "cooldown": 2
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440003",
+    "name": "Reconnaissance",
+    "description": "Draw 1 card at the start of your turn.",
+    "trigger": "OnTurnStart",
+    "category": "Passive",
+    "cost": 0,
+    "target": "self",
+    "effect": "Draw",
+    "conditions": [],
+    "cooldown": null
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440004",
+    "name": "Ambush",
+    "description": "Deal 2 damage to an enemy unit when it attacks.",
+    "trigger": "OnAttack",
+    "category": "Tactic",
+    "cost": 1,
+    "target": "enemy",
+    "effect": "Damage",
+    "conditions": ["IsAttacking"],
+    "cooldown": 1
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440005",
+    "name": "Fortify",
+    "description": "Gain +3 defense for this turn.",
+    "trigger": "OnPlay",
+    "category": "Tactic",
+    "cost": 2,
+    "target": "self",
+    "effect": "Buff",
+    "conditions": ["HasEnoughMana"],
+    "cooldown": 2
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440006",
+    "name": "Artillery Barrage",
+    "description": "Deal 5 damage to an enemy unit.",
+    "trigger": "OnPlay",
+    "category": "Tactic",
+    "cost": 3,
+    "target": "enemy",
+    "effect": "Damage",
+    "conditions": ["HasEnoughMana"],
+    "cooldown": 2
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440007",
+    "name": "Medic Team",
+    "description": "Restore 4 health to an ally unit.",
+    "trigger": "OnPlay",
+    "category": "Tactic",
+    "cost": 2,
+    "target": "ally",
+    "effect": "Heal",
+    "conditions": ["HasEnoughMana"],
+    "cooldown": 1
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440008",
+    "name": "Counterattack",
+    "description": "Deal 2 damage to an attacker when this unit is attacked.",
+    "trigger": "OnDefend",
+    "category": "Passive",
+    "cost": 0,
+    "target": "enemy",
+    "effect": "Damage",
+    "conditions": ["IsAttacked"],
+    "cooldown": null
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440009",
+    "name": "Rallying Cry",
+    "description": "Give all ally units +1 attack this turn.",
+    "trigger": "OnPlay",
+    "category": "Tactic",
+    "cost": 3,
+    "target": "ally",
+    "effect": "Buff",
+    "conditions": ["HasEnoughMana"],
+    "cooldown": 3
+  }
+]
