@@ -22,9 +22,10 @@ public class CardType
     public string Id; // Unique identifier (GUID or slug)
     public string NameKey; // Localization key for the card name
     public string DescriptionKey; // Localization key for the card description
-    public string Category; // e.g., Creature, Spell, Artifact, etc.
+    public string Category; // e.g., Unit, Order, Countermeasure, Headquarters
     public string Subtype; // Archetype (e.g., Warrior, Mage)
-    public int Cost; // Resource cost to play the card
+    public int DeploymentCost; // Resource cost to play the card onto the battlefield
+    public int OperationCost; // Resource cost to use the card's abilities or actions
     public int Health; // Base health of the card
     public int Attack; // Attack power of the card
     public int CounterAttack; // Power used for counterattacks
@@ -327,41 +328,30 @@ public class BattleManager {
         Board.Players[player2.Id].Credits = 10; // Example starting credits
     }
 
-    public void MoveCard(Card card, Zone targetZone) {
-        // Check if the player has enough credits to move the card
-        if (Board.Players[CurrentTurnPlayerId].Credits >= card.Cost) {
-            // Deduct credits
-            Board.Players[CurrentTurnPlayerId].Credits -= card.Cost;
-
-            // Move the card to the target zone
-            // Implement logic to update the card's position in the game state
-
-            // Handle any immediate effects of moving the card
-            ApplyCardEffects(card, targetZone);
-        } else {
-            // Notify the player that they don't have enough credits
+    public bool DeployCard(Card card) {
+        var playerState = Board.Players[CurrentTurnPlayerId];
+        if (playerState.Credits >= card.CardType.DeploymentCost) {
+            playerState.Credits -= card.CardType.DeploymentCost;
+            playerState.Hand.Remove(card);
+            playerState.Battlefield.Add(new Position(), card); // Add card to battlefield
+            return true;
         }
+        return false; // Not enough credits
     }
 
-    public void Attack(Card attacker, Card target) {
-        // Check if the player has enough credits to attack
-        if (Board.Players[CurrentTurnPlayerId].Credits >= attacker.Cost) {
-            // Deduct credits
-            Board.Players[CurrentTurnPlayerId].Credits -= attacker.Cost;
-
-            // Calculate damage and apply it to both cards
-            int damageToTarget = CalculateDamage(attacker, target);
-            int damageToAttacker = CalculateDamage(target, attacker);
-
-            target.Health -= damageToTarget;
-            attacker.Health -= damageToAttacker;
-
-            // Check if any cards are destroyed
-            CheckCardDestruction(attacker);
-            CheckCardDestruction(target);
-        } else {
-            // Notify the player that they don't have enough credits
+    public bool OperateCard(Card card) {
+        var playerState = Board.Players[CurrentTurnPlayerId];
+        if (playerState.Credits >= card.CardType.OperationCost) {
+            playerState.Credits -= card.CardType.OperationCost;
+            // Execute card's ability or action
+            ExecuteCardAbility(card);
+            return true;
         }
+        return false; // Not enough credits
+    }
+
+    private void ExecuteCardAbility(Card card) {
+        // Implement logic to execute the card's ability
     }
 
     public void EndTurn() {
