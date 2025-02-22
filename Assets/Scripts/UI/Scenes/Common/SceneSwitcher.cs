@@ -6,33 +6,41 @@ namespace Kardx.UI.Scenes.Common
   public class SceneSwitcher : MonoBehaviour
   {
     [Header("Scene Names")]
-    [SerializeField] private string mainMenuScene = "MainMenu";
-    [SerializeField] private string battleScene = "Battle";
-    [SerializeField] private string deckBuilderScene = "DeckBuilder";
-    [SerializeField] private string shopScene = "Shop";
+    [SerializeField] private string homeScene = "HomeScene";
+    [SerializeField] private string battleScene = "BattleScene";
+    [SerializeField] private string deckBuilderScene = "DeckBuilderScene";
+    [SerializeField] private string cardScene = "CardScene";
 
     [Header("Transition Settings")]
     [SerializeField] private float transitionDuration = 1f;
     [SerializeField] private GameObject transitionEffect;
 
-    public void LoadMainMenu()
+    public void GoHome()
     {
-      StartCoroutine(LoadSceneWithTransition(mainMenuScene));
+      // StartCoroutine(LoadSceneWithTransition(homeScene));
+      Debug.Log("Going to home scene");
+      SceneManager.LoadScene(homeScene);
     }
 
-    public void LoadBattle()
+    public void GoToBattle()
     {
-      StartCoroutine(LoadSceneWithTransition(battleScene));
+      // StartCoroutine(LoadSceneWithTransition(battleScene));
+      Debug.Log("Going to battle scene");
+      SceneManager.LoadScene(battleScene);
     }
 
-    public void LoadDeckBuilder()
+    public void GoToDeckBuilder()
     {
-      StartCoroutine(LoadSceneWithTransition(deckBuilderScene));
+      // StartCoroutine(LoadSceneWithTransition(deckBuilderScene));
+      Debug.Log("Going to deck builder scene");
+      SceneManager.LoadScene(deckBuilderScene);
     }
 
-    public void LoadShop()
+    public void GoToCard()
     {
-      StartCoroutine(LoadSceneWithTransition(shopScene));
+      Debug.Log("Going to card scene");
+      // StartCoroutine(LoadSceneWithTransition(shopScene));
+      SceneManager.LoadScene(cardScene);
     }
 
     private System.Collections.IEnumerator LoadSceneWithTransition(string sceneName)
