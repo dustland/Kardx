@@ -14,6 +14,15 @@ This project is explained in the following documents:
 
 - [Data Design](./Design/Data.md)
 
+## Development
+
+Other than Unity 6 (v6000.0.38f1), you will need to install these additional dependencies in Unity:
+
+- [Edit with Windsurf](https://github.com/Asuta/com.unity.ide.windsurf) - Install from Git URL: https://github.com/Asuta/com.unity.ide.windsurf.git.windsurf.git
+- [NewtonSoft JSON](https://github.com/JamesNK/Newtonsoft.Json) - Add from package manager: `com.unity.nuget.newtonsoft-json`
+
+Windsurf has much better performance comparing to Cursor IDE.
+
 ## Implementation
 
 This project is built using the Unity 6 (v6000.0.38f1) game engine and Cursor IDE. Please make sure to use the same version to avoid any compatibility issues.

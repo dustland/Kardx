@@ -120,6 +120,34 @@ namespace Kardx.Core.Data.Cards
     {
       return JsonUtility.ToJson(this);
     }
+
+    public void Initialize(
+        string id,
+        string name,
+        string description,
+        CardCategory category,
+        string subtype,
+        int deploymentCost,
+        int operationCost,
+        int baseDefence,
+        int baseAttack,
+        int baseCounterAttack,
+        CardRarity rarity,
+        string setId)
+    {
+        this.id = id;
+        this.name = name;
+        this.description = description;
+        this.category = category;
+        this.subtype = subtype;
+        this.deploymentCost = deploymentCost;
+        this.operationCost = operationCost;
+        this.baseDefence = baseDefence;
+        this.baseAttack = baseAttack;
+        this.baseCounterAttack = baseCounterAttack;
+        this.rarity = rarity;
+        this.setId = setId;
+    }
   }
 
   // Helper class for serializing dictionaries in Unity
