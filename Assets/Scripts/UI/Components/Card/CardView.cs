@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using Kardx.Core;
+using Kardx.Core.Data.Cards;
 
 namespace Kardx.UI.Components.Card
 {
@@ -14,11 +15,14 @@ namespace Kardx.UI.Components.Card
     [Header("UI Elements")]
     [SerializeField] private Image cardImage;
     [SerializeField] private Image frameImage;
-    [SerializeField] private TMP_Text nameText;
-    [SerializeField] private TMP_Text descriptionText;
-    [SerializeField] private TMP_Text costText;
-    [SerializeField] private TMP_Text attackText;
-    [SerializeField] private TMP_Text healthText;
+    [SerializeField] private TextMeshProUGUI nameText;
+    [SerializeField] private TextMeshProUGUI descriptionText;
+    [SerializeField] private TextMeshProUGUI deploymentCostText;
+    [SerializeField] private TextMeshProUGUI operationCostText;
+    [SerializeField] private TextMeshProUGUI attackText;
+    [SerializeField] private TextMeshProUGUI defenceText;
+    [SerializeField] private TextMeshProUGUI abilityText;
+    [SerializeField] private TextMeshProUGUI abilityDescriptionText;
     [SerializeField] private GameObject highlightEffect;
 
     [Header("Animation")]
@@ -34,32 +38,30 @@ namespace Kardx.UI.Components.Card
       dragHandler = GetComponent<CardDragHandler>();
     }
 
-    public void Initialize(Card cardData)
+    private void Start()
     {
-      card = cardData;
-      UpdateDisplay();
-
-      if (dragHandler != null)
-      {
-        dragHandler.OnDragStarted += HandleDragStarted;
-        dragHandler.OnDragEnded += HandleDragEnded;
-      }
+      UpdateCardView();
     }
 
-    public void UpdateDisplay()
+    public void UpdateCardView()
     {
       if (card == null) return;
 
-      var cardType = card.CardType;
-
-      nameText.text = cardType.NameKey;
-      descriptionText.text = cardType.DescriptionKey;
-      costText.text = cardType.DeploymentCost.ToString();
+      nameText.text = card.Name;
+      descriptionText.text = card.Description;
+      deploymentCostText.text = card.DeploymentCost.ToString();
+      operationCostText.text = card.OperationCost.ToString();
       attackText.text = card.Attack.ToString();
-      healthText.text = $"{card.CurrentHealth}/{card.MaxHealth}";
+      defenceText.text = card.CurrentDefence.ToString();
+      abilityText.text = card.CurrentAbility.Name;
+      abilityDescriptionText.text = card.CurrentAbility.Description;
 
       UpdateCardFrame();
       UpdateModifierEffects();
+
+      // Load and set the card image
+      // Assuming you have a method to load images from URLs
+      LoadCardImage(card.ImageUrl);
     }
 
     private void UpdateCardFrame()
@@ -72,7 +74,7 @@ namespace Kardx.UI.Components.Card
           break;
         case CardCategory.Countermeasure:
           break;
-        case CardCategory.Headquarters:
+        case CardCategory.Headquarter:
           break;
       }
     }
@@ -82,6 +84,11 @@ namespace Kardx.UI.Components.Card
       foreach (var modifier in card.Modifiers)
       {
       }
+    }
+
+    private void LoadCardImage(string url)
+    {
+      // Implement image loading logic here
     }
 
     public void PlayDeployAnimation()
@@ -145,6 +152,12 @@ namespace Kardx.UI.Components.Card
         dragHandler.OnDragStarted -= HandleDragStarted;
         dragHandler.OnDragEnded -= HandleDragEnded;
       }
+    }
+
+    public void Initialize(Card card)
+    {
+      this.card = card;
+      UpdateCardView();
     }
   }
 }

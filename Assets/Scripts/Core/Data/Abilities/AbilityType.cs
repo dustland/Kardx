@@ -5,46 +5,46 @@ using UnityEngine;
 namespace Kardx.Core.Data.Abilities
 {
   [Serializable]
-  public class AbilityDefinition
+  public class AbilityType
   {
     [SerializeField] private string id;  // Unique ability identifier
-    [SerializeField] private string nameKey;  // Localization key for ability name
-    [SerializeField] private string descriptionKey;  // Localization key for description
+    [SerializeField] private string name;  // Localization key for ability name
+    [SerializeField] private string description;  // Localization key for description
     [SerializeField] private TriggerType trigger;  // Event that activates the ability
-    [SerializeField] private string category;  // Ability type (e.g., "tactic", "passive")
+    [SerializeField] private AbilityCategory category;  // Ability type (e.g., "tactic", "passive")
     [SerializeField] private int cost;  // Resource cost to activate
     [SerializeField] private string target;  // Targeting scope (e.g., "enemy", "ally", "self")
-    [SerializeField] private EffectDefinition effect;  // Effect to apply when triggered
+    [SerializeField] private EffectType effect;  // Effect to apply when triggered
     [SerializeField] private List<Condition> conditions = new();  // Activation requirements
     [SerializeField] private int? cooldown;  // Optional cooldown in turns
 
     // Public properties
     public string Id => id;
-    public string NameKey => nameKey;
-    public string DescriptionKey => descriptionKey;
+    public string Name => name;
+    public string Description => description;
     public TriggerType Trigger => trigger;
-    public string Category => category;
+    public AbilityCategory Category => category;
     public int Cost => Mathf.Max(0, cost);
     public string Target => target;
-    public EffectDefinition Effect => effect;
+    public EffectType Effect => effect;
     public IReadOnlyList<Condition> Conditions => conditions;
     public int? Cooldown => cooldown;
 
     // Constructor
-    public AbilityDefinition(
+    public AbilityType(
         string id,
-        string nameKey,
-        string descriptionKey,
+        string name,
+        string description,
         TriggerType trigger,
-        string category,
+        AbilityCategory category,
         int cost,
         string target,
-        EffectDefinition effect,
+        EffectType effect,
         int? cooldown = null)
     {
       this.id = id;
-      this.nameKey = nameKey;
-      this.descriptionKey = descriptionKey;
+      this.name = name;
+      this.description = description;
       this.trigger = trigger;
       this.category = category;
       this.cost = cost;
@@ -71,8 +71,8 @@ namespace Kardx.Core.Data.Abilities
     public bool IsValid()
     {
       return !string.IsNullOrEmpty(id) &&
-             !string.IsNullOrEmpty(nameKey) &&
-             !string.IsNullOrEmpty(descriptionKey) &&
+             !string.IsNullOrEmpty(name) &&
+             !string.IsNullOrEmpty(description) &&
              effect != null;
     }
   }

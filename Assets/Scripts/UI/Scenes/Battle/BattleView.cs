@@ -110,7 +110,7 @@ namespace Kardx.UI.Scenes.Battle
         var cardView = cardGO.GetComponent<CardView>();
         if (cardView != null)
         {
-          cardView.UpdateDisplay();
+          cardView.UpdateCardView();
         }
       }
     }

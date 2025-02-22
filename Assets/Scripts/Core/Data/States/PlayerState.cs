@@ -172,7 +172,7 @@ namespace Kardx.Core.Data.States
     // Headquarter management
     public void SetHeadquarter(Card card)
     {
-      if (card.CardType.Category == CardCategory.Headquarters)
+      if (card.CardType.Category == CardCategory.Headquarter)
       {
         headquarter = card;
       }

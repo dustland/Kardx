@@ -10,8 +10,9 @@ namespace Kardx.Core.Data.Cards
   {
     [Header("Identity")]
     [SerializeField] private string id;  // Unique identifier (GUID or slug)
-    [SerializeField] private string nameKey;  // Localization key for the card name
-    [SerializeField] private string descriptionKey;  // Localization key for the card description
+    [SerializeField] private string title;  // Localization key for the card title
+    [SerializeField] private string name;  // Localization key for the card name
+    [SerializeField] private string description;  // Localization key for the card description
     [SerializeField] private CardCategory category;  // e.g., Unit, Order, Countermeasure
     [SerializeField] private string subtype;  // Archetype (e.g., Warrior, Mage)
 
@@ -20,9 +21,9 @@ namespace Kardx.Core.Data.Cards
     [SerializeField, Min(0)] private int operationCost;  // Resource cost to use abilities
 
     [Header("Stats")]
-    [SerializeField, Min(1)] private int baseHealth;  // Base health of the card
+    [SerializeField, Min(1)] private int baseDefence;  // Base defense of the card
     [SerializeField, Min(0)] private int baseAttack;  // Attack power of the card
-    [SerializeField, Min(0)] private int counterAttack;  // Power used for counterattacks
+    [SerializeField, Min(0)] private int baseCounterAttack;  // Power used for counterattacks
 
     [Header("Metadata")]
     [SerializeField] private CardRarity rarity;  // Card rarity level
@@ -33,45 +34,45 @@ namespace Kardx.Core.Data.Cards
 
     [Header("Attributes & Abilities")]
     [SerializeField] private SerializableDictionary<string, int> attributes = new();
-    [SerializeField] private List<AbilityDefinition> abilities = new();
+    [SerializeField] private List<AbilityType> abilities = new();
 
     // Public properties with validation
     public string Id => id;
-    public string NameKey => nameKey;
-    public string DescriptionKey => descriptionKey;
+    public string Name => name;
+    public string Description => description;
     public CardCategory Category => category;
     public string Subtype => subtype;
     public int DeploymentCost => deploymentCost;
-    public int OperationCost => operationCost;
-    public int BaseHealth => baseHealth;
+    public int OperationCost => operationCost; // Orders and Countermeasures do not have operational costs.
+    public int BaseDefence => baseDefence;
     public int BaseAttack => baseAttack;
-    public int CounterAttack => counterAttack;
+    public int BaseCounterAttack => baseCounterAttack;
     public CardRarity Rarity => rarity;
     public string SetId => setId;
     public string ImageUrl => imageUrl;
     public IReadOnlyDictionary<string, int> Attributes => attributes;
-    public IReadOnlyList<AbilityDefinition> Abilities => abilities;
+    public IReadOnlyList<AbilityType> Abilities => abilities;
 
 #if UNITY_EDITOR
-        private void OnValidate()
-        {
-            // Ensure minimum values
-            deploymentCost = Mathf.Max(0, deploymentCost);
-            operationCost = Mathf.Max(0, operationCost);
-            baseHealth = Mathf.Max(1, baseHealth);
-            baseAttack = Mathf.Max(0, baseAttack);
-            counterAttack = Mathf.Max(0, counterAttack);
+    private void OnValidate()
+    {
+      // Ensure minimum values
+      deploymentCost = Mathf.Max(0, deploymentCost);
+      operationCost = Mathf.Max(0, operationCost);
+      baseDefence = Mathf.Max(1, baseDefence);
+      baseAttack = Mathf.Max(0, baseAttack);
+      baseCounterAttack = Mathf.Max(0, baseCounterAttack);
 
-            // Generate ID if empty
-            if (string.IsNullOrEmpty(id))
-            {
-                id = Guid.NewGuid().ToString();
-            }
-        }
+      // Generate ID if empty
+      if (string.IsNullOrEmpty(id))
+      {
+          id = Guid.NewGuid().ToString();
+      }
+    }
 #endif
 
     // Methods to modify abilities and attributes (only during card creation/editing)
-    public void AddAbility(AbilityDefinition ability)
+    public void AddAbility(AbilityType ability)
     {
       if (ability != null && !abilities.Contains(ability))
       {
@@ -79,7 +80,7 @@ namespace Kardx.Core.Data.Cards
       }
     }
 
-    public void RemoveAbility(AbilityDefinition ability)
+    public void RemoveAbility(AbilityType ability)
     {
       abilities.Remove(ability);
     }

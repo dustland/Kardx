@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Kardx.Core.Data.Abilities;
+using System.Linq;
 
 namespace Kardx.Core.Data.Cards
 {
@@ -16,11 +17,12 @@ namespace Kardx.Core.Data.Cards
     [SerializeField] private string controllerId;  // Player currently controlling the card
     [SerializeField] private List<Modifier> modifiers = new();  // Active temporary modifiers
     [SerializeField] private Dictionary<string, int> dynamicAttributes = new();  // Computed attributes
-    [SerializeField] private int currentHealth;  // Current health value
-
+    [SerializeField] private int currentDefence;  // Current defence value
+    [SerializeField] private string currentAbilityId;  // Current applied ability, should be one of the abilities in the card type
     // Public properties
     public Guid InstanceId => instanceId;
     public CardType CardType => cardType;
+    public AbilityType CurrentAbility => cardType.Abilities.FirstOrDefault(a => a.Id == currentAbilityId);
     public int Level => level;
     public int Experience => experience;
     public string OwnerId => ownerId;
@@ -29,15 +31,22 @@ namespace Kardx.Core.Data.Cards
     public IReadOnlyDictionary<string, int> DynamicAttributes => dynamicAttributes;
 
     // Computed properties
-    public int CurrentHealth
+    // When current defence is 0, the card is destroyed
+    public int CurrentDefence
     {
-      get => currentHealth;
-      private set => currentHealth = Mathf.Clamp(value, 0, MaxHealth);
+      get => currentDefence;
+      private set => currentDefence = Mathf.Clamp(value, 0, Defense);
     }
 
-    public int MaxHealth => cardType.BaseHealth + GetAttributeModifier("health");
+    public int Defense => cardType.BaseDefence + GetAttributeModifier("defense");
     public int Attack => cardType.BaseAttack + GetAttributeModifier("attack");
-    public int CounterAttack => cardType.CounterAttack + GetAttributeModifier("counterAttack");
+    public int CounterAttack => cardType.BaseCounterAttack + GetAttributeModifier("counterAttack");
+
+    public int DeploymentCost => cardType.DeploymentCost;
+    public int OperationCost => cardType.OperationCost;
+    public string ImageUrl => cardType.ImageUrl;
+    public string Name => cardType.Name;
+    public string Description => cardType.Description;
 
     // Constructor
     public Card(CardType cardType, string ownerId)
@@ -48,7 +57,8 @@ namespace Kardx.Core.Data.Cards
       this.controllerId = ownerId;
       this.level = 1;
       this.experience = 0;
-      this.currentHealth = cardType.BaseHealth;
+      this.currentDefence = cardType.BaseDefence;
+      this.currentAbilityId = cardType.Abilities.Count > 0 ? cardType.Abilities[0].Id : string.Empty; // Check if Abilities is not empty
     }
 
     // Health modification methods
@@ -56,9 +66,9 @@ namespace Kardx.Core.Data.Cards
     {
       if (amount > 0)
       {
-        CurrentHealth -= amount;
+        CurrentDefence -= amount;
         // Trigger any relevant effects
-        OnHealthChanged();
+        OnDefenceChanged();
       }
     }
 
@@ -66,9 +76,9 @@ namespace Kardx.Core.Data.Cards
     {
       if (amount > 0)
       {
-        CurrentHealth += amount;
+        CurrentDefence += amount;
         // Trigger any relevant effects
-        OnHealthChanged();
+        OnDefenceChanged();
       }
     }
 
@@ -149,7 +159,7 @@ namespace Kardx.Core.Data.Cards
     }
 
     // Event handlers
-    protected virtual void OnHealthChanged()
+    protected virtual void OnDefenceChanged()
     {
       // Override in derived classes or use events if needed
     }

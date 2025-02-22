@@ -2,18 +2,18 @@ namespace Kardx.Core
 {
   public enum CardCategory
   {
-    Unit,
-    Order,
-    Countermeasure,
-    Headquarters
+    Unit, // Represents a deployable unit
+    Order, // Trigger a one-time effect and are then discarded
+    Countermeasure, // can be activated to cancel out opponent Orders
+    Headquarter // Headquarter is a special card that can be deployed on the battlefield and is not a unit
   }
 
   public enum CardRarity
   {
-    Common = 1,
-    Rare = 2,
-    Epic = 3,
-    Legendary = 4
+    Standard = 1,
+    Limited = 2,
+    Special = 3,
+    Elite = 4
   }
 
   public enum ZoneType
@@ -33,7 +33,13 @@ namespace Kardx.Core
     Status
   }
 
-  public enum EffectType
+  public enum AbilityCategory
+  {
+    Tactic,
+    Passive
+  }
+
+  public enum EffectCategory
   {
     Damage,
     Heal,

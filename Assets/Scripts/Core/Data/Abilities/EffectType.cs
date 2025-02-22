@@ -5,9 +5,9 @@ using UnityEngine;
 namespace Kardx.Core.Data.Abilities
 {
   [Serializable]
-  public class EffectDefinition
+  public class EffectType
   {
-    [SerializeField] private EffectType type;  // Effect type (e.g., "damage", "heal", "buff")
+    [SerializeField] private EffectCategory category;  // Effect type (e.g., "damage", "heal", "buff")
     [SerializeField] private string target;  // "single", "area", "self"
     [SerializeField] private string formula;  // Mathematical formula for effect calculation
     [SerializeField] private List<EffectAttribute> attributes = new();  // Parameters used in formula
@@ -16,7 +16,7 @@ namespace Kardx.Core.Data.Abilities
     [SerializeField] private string soundKey;  // Reference to audio effect
 
     // Public properties
-    public EffectType Type => type;
+    public EffectCategory Category => category;
     public string Target => target;
     public string Formula => formula;
     public IReadOnlyList<EffectAttribute> Attributes => attributes;
@@ -25,15 +25,15 @@ namespace Kardx.Core.Data.Abilities
     public string SoundKey => soundKey;
 
     // Constructor
-    public EffectDefinition(
-        EffectType type,
+    public EffectType(
+        EffectCategory category,
         string target,
         string formula,
         string animationKey,
         string soundKey,
         int? cooldown = null)
     {
-      this.type = type;
+      this.category = category;
       this.target = target;
       this.formula = formula;
       this.animationKey = animationKey;
