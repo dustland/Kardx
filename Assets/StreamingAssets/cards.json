@@ -12,7 +12,7 @@
     "baseCounterAttack": 1,
     "rarity": "Standard",
     "setId": "base_set",
-    "imageUrl": "BasicGermanB.webp",
+    "imageUrl": "BasicGermanB1.png",
     "attributes": {
       "health": 5,
       "speed": 1
@@ -32,7 +32,7 @@
     "baseCounterAttack": 0,
     "rarity": "Limited",
     "setId": "base_set",
-    "imageUrl": "T_blitzkreig_improved.webp",
+    "imageUrl": "T_blitzkreig_improved1.png",
     "attributes": {
       "health": 4,
       "range": 3
@@ -52,7 +52,7 @@
     "baseCounterAttack": 2,
     "rarity": "Elite",
     "setId": "base_set",
-    "imageUrl": "T_t_80_light_tank.webp",
+    "imageUrl": "T_t_80_light_tank1.png",
     "attributes": {
       "health": 8,
       "speed": 2
@@ -72,7 +72,7 @@
     "baseCounterAttack": 0,
     "rarity": "Standard",
     "setId": "base_set",
-    "imageUrl": "SovietBasicB.webp",
+    "imageUrl": "SovietBasicB1.png",
     "attributes": {
       "health": 4,
       "speed": 1
@@ -92,7 +92,7 @@
     "baseCounterAttack": 1,
     "rarity": "Limited",
     "setId": "base_set",
-    "imageUrl": "T_soviet_infantry_x.webp",
+    "imageUrl": "T_soviet_infantry_x1.png",
     "attributes": {
       "health": 4,
       "speed": 3
@@ -112,7 +112,7 @@
     "baseCounterAttack": 0,
     "rarity": "Elite",
     "setId": "base_set",
-    "imageUrl": "T_blitzkreig_improved.webp",
+    "imageUrl": "T_blitzkreig_improved1.png",
     "attributes": {
       "health": 5,
       "range": 2
@@ -132,7 +132,7 @@
     "baseCounterAttack": 0,
     "rarity": "Standard",
     "setId": "base_set",
-    "imageUrl": "BasicGermanB.webp",
+    "imageUrl": "BasicGermanB1.png",
     "attributes": {
       "health": 3,
       "speed": 4
@@ -152,7 +152,7 @@
     "baseCounterAttack": 2,
     "rarity": "Limited",
     "setId": "base_set",
-    "imageUrl": "T_soviet_infantry_x.webp",
+    "imageUrl": "T_soviet_infantry_x1.png",
     "attributes": {
       "health": 6,
       "speed": 5
@@ -172,7 +172,7 @@
     "baseCounterAttack": 0,
     "rarity": "Standard",
     "setId": "base_set",
-    "imageUrl": "SovietBasicB.webp",
+    "imageUrl": "SovietBasicB1.png",
     "attributes": {
       "health": 4,
       "speed": 2
@@ -192,7 +192,7 @@
     "baseCounterAttack": 3,
     "rarity": "Elite",
     "setId": "base_set",
-    "imageUrl": "T_t_80_light_tank.webp",
+    "imageUrl": "T_t_80_light_tank1.png",
     "attributes": {
       "health": 10,
       "speed": 1

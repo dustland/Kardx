@@ -206,9 +206,9 @@ namespace Kardx.UI.Components.Card
 
             try
             {
-                // Keep the full filename including extension for WebP files
-                string fileName = Path.GetFileName(imageUrl);
-                Debug.Log($"[CardView] Loading image for {cardType.Name} from: {fileName}");
+                // Remove file extension as Unity adds its own
+                string fileName = Path.GetFileNameWithoutExtension(imageUrl);
+                Debug.Log($"[CardView] Loading image for {cardType.Name} from: Cards/{fileName}");
 
                 // Load sprite from Cards folder
                 Sprite sprite = Resources.Load<Sprite>($"Cards/{fileName}");
@@ -221,15 +221,12 @@ namespace Kardx.UI.Components.Card
                 }
                 else
                 {
-                    Debug.LogError(
-                        $"[CardView] Failed to load sprite for {cardType.Name}. "
-                            + $"Tried path: Resources/Cards/{fileName}"
-                    );
+                    Debug.LogError($"[CardView] Failed to load image for {cardType.Name} from Cards/{fileName}");
                 }
             }
-            catch (Exception ex)
+            catch (Exception e)
             {
-                Debug.LogError($"[CardView] Error loading card image: {ex.Message}");
+                Debug.LogError($"[CardView] Error loading image for {cardType.Name}: {e.Message}");
             }
         }
 

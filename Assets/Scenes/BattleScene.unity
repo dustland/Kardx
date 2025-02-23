@@ -559,9 +559,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5606bee6aaf8247d480310df616f2cd3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  gridPosition: {x: 0, y: 0}
-  isOccupied: 0
-  highlightEffect: {fileID: 0}
+  highlightImage: {fileID: 0}
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0
@@ -886,16 +884,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 653352580d3f34e57b65eda78f2de592, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  battleCanvas: {fileID: 0}
   handArea: {fileID: 985749914}
   battlefieldArea: {fileID: 383897158}
   opponentHandArea: {fileID: 1539676910}
   opponentBattlefieldArea: {fileID: 522217789}
   discardArea: {fileID: 0}
   cardPrefab: {fileID: 2520979994167464494, guid: 70d878790cddb4adfa555fe0cc32137d, type: 3}
-  turnText: {fileID: 1278659093}
-  creditsText: {fileID: 1505250934}
-  opponentCreditsText: {fileID: 143837733}
+  turnText: {fileID: 1278659094}
+  creditsText: {fileID: 1505250935}
+  opponentCreditsText: {fileID: 143837734}
   cardBackSprite: {fileID: 0}
   cardSpacing: 1.2
   handCurveHeight: 0.5
