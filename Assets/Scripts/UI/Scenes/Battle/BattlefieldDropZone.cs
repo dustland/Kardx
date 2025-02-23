@@ -4,53 +4,75 @@ using UnityEngine.EventSystems;
 
 namespace Kardx.UI.Scenes.Battle
 {
-    public class BattlefieldDropZone : MonoBehaviour, IDropHandler
-    {
-        [Header("Drop Zone Settings")]
-        [SerializeField]
-        private Vector2Int gridPosition;
+    using Card = Kardx.Core.Data.Cards.Card;
 
+    public class BattlefieldDropZone
+        : MonoBehaviour,
+            IDropHandler,
+            IPointerEnterHandler,
+            IPointerExitHandler
+    {
+        [Header("References")]
         [SerializeField]
-        private bool isOccupied;
+        private BattleView battleView;
 
         [Header("Visual Feedback")]
         [SerializeField]
         private GameObject highlightEffect;
 
-        public Vector2Int GridPosition => gridPosition;
-        public bool IsOccupied => isOccupied;
+        private void Start()
+        {
+            // Ensure we have a reference to BattleView
+            if (battleView == null)
+            {
+                battleView = GetComponentInParent<BattleView>();
+            }
+        }
 
-        // Event for notifying BattleView
-        public event System.Action<CardView, Vector2Int> OnCardDropped;
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            var cardView = eventData.pointerDrag?.GetComponent<CardView>();
+            if (cardView != null && IsValidDropTarget(cardView.Card))
+            {
+                SetHighlight(true);
+            }
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            SetHighlight(false);
+        }
 
         public void OnDrop(PointerEventData eventData)
         {
-            var cardView = eventData.pointerDrag.GetComponent<CardView>();
-            if (cardView != null && IsValidDropTarget())
+            CardView cardView = eventData.pointerDrag?.GetComponent<CardView>();
+            if (cardView == null)
+                return;
+
+            if (IsValidDropTarget(cardView.Card))
             {
                 HandleCardDrop(cardView);
             }
         }
 
-        public bool IsValidDropTarget()
-        {
-            return !isOccupied;
-        }
-
         private void HandleCardDrop(CardView cardView)
         {
-            // Position the card in the grid
-            cardView.transform.SetParent(transform);
-            cardView.transform.localPosition = Vector3.zero;
+            if (battleView == null)
+                return;
 
-            // Mark the zone as occupied
-            SetOccupied(true);
-
-            // Notify BattleView
-            OnCardDropped?.Invoke(cardView, gridPosition);
+            // Try to deploy the card through BattleManager
+            if (battleView.DeployCard(cardView.Card))
+            {
+                // Move the card to this drop zone and position it properly
+                cardView.transform.SetParent(transform);
+                cardView.transform.localPosition = Vector3.zero;
+                cardView.transform.localScale = Vector3.one;
+                
+                SetHighlight(false);
+            }
         }
 
-        public void SetHighlight(bool active)
+        private void SetHighlight(bool active)
         {
             if (highlightEffect != null)
             {
@@ -58,19 +80,14 @@ namespace Kardx.UI.Scenes.Battle
             }
         }
 
-        public void SetOccupied(bool occupied)
+        public bool IsValidDropTarget(Card card)
         {
-            isOccupied = occupied;
-            SetHighlight(!occupied); // Highlight available drop zones
-        }
+            if (card == null || battleView == null)
+                return false;
 
-        public void ClearZone()
-        {
-            SetOccupied(false);
-            foreach (Transform child in transform)
-            {
-                Destroy(child.gameObject);
-            }
+            // Check if this is a player's battlefield and if the card can be deployed
+            return transform.parent.CompareTag("PlayerBattlefield")
+                && battleView.CanDeployCard(card);
         }
     }
 }

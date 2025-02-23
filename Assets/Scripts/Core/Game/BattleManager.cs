@@ -13,7 +13,7 @@ namespace Kardx.Core.Game
     {
         private readonly BoardState boardState;
         private readonly ILogger logger;
-        private readonly int startingHandSize = 5;
+        private readonly int startingHandSize = 2;
         private readonly int maxTurns = 50;
 
         // Public properties
@@ -52,17 +52,32 @@ namespace Kardx.Core.Game
 
             // Reset and initialize board state
             boardState.Reset();
-            boardState.AddPlayer(player1Id, new PlayerState(player1Id, LoadPlayerDeck(player1Id)));
-            boardState.AddPlayer(player2Id, new PlayerState(player2Id, LoadPlayerDeck(player2Id)));
+            boardState.AddPlayer(
+                player1Id,
+                new PlayerState(player1Id, LoadPlayerDeck(player1Id), logger)
+            );
+            boardState.AddPlayer(
+                player2Id,
+                new PlayerState(player2Id, LoadPlayerDeck(player2Id), logger)
+            );
             boardState.SetCurrentPlayer(player1Id);
 
             IsBattleInProgress = true;
 
-            // Shuffle decks and draw starting hands
-            Player1State.ShuffleDeck();
-            Player2State.ShuffleDeck();
-            Player1State.DrawCards(startingHandSize);
-            Player2State.DrawCards(startingHandSize);
+            // Draw starting hands
+            for (int i = 0; i < startingHandSize; i++)
+            {
+                if (Player1State.DrawCard())
+                {
+                    var hand = Player1State.Hand;
+                    NotifyCardDrawn(hand[hand.Count - 1]);
+                }
+                if (Player2State.DrawCard())
+                {
+                    var hand = Player2State.Hand;
+                    NotifyCardDrawn(hand[hand.Count - 1]);
+                }
+            }
 
             // Start first turn
             StartTurn();
@@ -87,14 +102,13 @@ namespace Kardx.Core.Game
                 return;
             }
 
-            // Draw card for new turn
+            // Get current player and start their turn
             var currentPlayer = GetCurrentPlayerState();
-            if (currentPlayer.DrawCard() is Card card)
+            if (currentPlayer.DrawCard())
             {
-                NotifyCardDrawn(card);
+                var hand = currentPlayer.Hand;
+                NotifyCardDrawn(hand[hand.Count - 1]);
             }
-
-            // End of turn is a action from player's turn, so here we should only do the draw action
         }
 
         public void EndTurn()
@@ -105,25 +119,17 @@ namespace Kardx.Core.Game
             StartTurn();
         }
 
-        public bool DeployCard(Card card, int position)
+        public bool DeployCard(Card card)
         {
             if (!IsBattleInProgress)
                 return false;
 
             var currentPlayer = GetCurrentPlayerState();
 
-            // Check if the position is valid
-            if (!currentPlayer.IsValidBattlefieldPosition(position))
-                return false;
-
-            // Check if player has enough credits
-            if (!currentPlayer.SpendCredits(card.CardType.DeploymentCost))
-                return false;
-
             // Deploy the card
-            if (currentPlayer.DeployCard(card, position))
+            if (currentPlayer.DeployCard(card))
             {
-                NotifyCardDeployed(card, position);
+                NotifyCardDeployed(card, currentPlayer.Battlefield.Count - 1);
                 return true;
             }
 
@@ -138,7 +144,7 @@ namespace Kardx.Core.Game
             var currentPlayer = GetCurrentPlayerState();
 
             // Check if player has enough credits
-            if (!currentPlayer.SpendCredits(card.CardType.OperationCost))
+            if (!currentPlayer.SpendCredits(card.OperationCost))
             {
                 return false;
             }
@@ -187,7 +193,7 @@ namespace Kardx.Core.Game
             OnCardDiscarded?.Invoke(card);
         }
 
-        private PlayerState GetCurrentPlayerState()
+        public PlayerState GetCurrentPlayerState()
         {
             return boardState.Players[boardState.CurrentPlayerId];
         }

@@ -8,13 +8,11 @@ This document details the enhanced data system design for a [Kards](https://kard
 - **Logic Layer**: Handles game rules, turn phases, and the dynamic application of card abilities and effects.
 - **UI Layer**: Presents the data to the player while supporting animations, lazy-loaded images (using WebP), and responsive design.
 
-Game designers can now add or modify abilities simply by updating JSON configurations, which enhances iteration speed and flexibility.
-
-## Card Definitions
+## Card System
 
 ### Card Type
 
-Each card is defined by a static type that serves as a blueprint for all of its instances. The updated CardType now includes metadata for localization, resource cost, rarity, and associated abilities.
+Each card is defined by a static type that serves as a blueprint for all of its instances:
 
 ```cs
 public class CardType

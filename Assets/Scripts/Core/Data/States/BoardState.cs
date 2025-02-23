@@ -110,12 +110,6 @@ namespace Kardx.Core.Data.States
         {
             var currentPlayer = players[currentPlayerId];
 
-            // Process card modifiers
-            foreach (var card in currentPlayer.Battlefield.Values)
-            {
-                card.ClearExpiredModifiers();
-            }
-
             // Process game effects
             foreach (var effect in activeEffects.ToList())
             {
@@ -131,8 +125,8 @@ namespace Kardx.Core.Data.States
         {
             var currentPlayer = players[currentPlayerId];
 
-            // Refresh player resources
-            currentPlayer.RefreshCredits();
+            // Start player's turn (add credits and draw card)
+            currentPlayer.StartTurn();
 
             // Process game effects
             foreach (var effect in activeEffects)

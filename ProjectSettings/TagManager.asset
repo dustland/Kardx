@@ -6,6 +6,7 @@ TagManager:
   tags:
   - GameManager
   - Card
+  - PlayerBattlefield
   layers:
   - Default
   - TransparentFX
