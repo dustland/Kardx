@@ -110,30 +110,33 @@ namespace Kardx.UI.Components.Card
                 }
 
                 // Get the active card data source (either Card or CardType)
-                var cardData = card?.CardType ?? cardType;
-                if (cardData == null)
-                {
-                    Debug.LogError("[CardView] Both card.CardType and cardType are null");
-                    return;
-                }
+                var name = card != null ? card.Name : cardType?.Name ?? "";
+                var description = card != null ? card.Description : cardType?.Description ?? "";
+                var deploymentCost =
+                    card != null ? card.DeploymentCost : cardType?.DeploymentCost ?? 0;
+                var operationCost =
+                    card != null ? card.OperationCost : cardType?.OperationCost ?? 0;
+                var attack = card != null ? card.Attack : cardType?.BaseAttack ?? 0;
+                var defence = card != null ? card.CurrentDefence : cardType?.BaseDefence ?? 0;
+                var imageUrl = card != null ? card.ImageUrl : cardType?.ImageUrl;
+                var abilities = card != null ? card.CardType.Abilities : cardType?.Abilities;
 
-                // Update UI elements safely with null checks on both the UI element and the data
+                // Update UI elements safely
                 if (nameText != null)
-                    nameText.text = card?.Name ?? cardData.Name ?? "";
+                    nameText.text = name;
                 if (descriptionText != null)
-                    descriptionText.text = card?.Description ?? cardData.Description ?? "";
+                    descriptionText.text = description;
                 if (deploymentCostText != null)
-                    deploymentCostText.text = (card?.DeploymentCost ?? cardData.DeploymentCost).ToString();
+                    deploymentCostText.text = deploymentCost.ToString();
                 if (operationCostText != null)
-                    operationCostText.text = (card?.OperationCost ?? cardData.OperationCost).ToString();
+                    operationCostText.text = operationCost.ToString();
                 if (attackText != null)
-                    attackText.text = (card?.Attack ?? cardData.BaseAttack).ToString();
+                    attackText.text = attack.ToString();
                 if (defenceText != null)
-                    defenceText.text = (card?.CurrentDefence ?? cardData.BaseDefence).ToString();
+                    defenceText.text = defence.ToString();
 
-                // Handle abilities safely
-                var abilities = card?.CardType?.Abilities ?? cardData.Abilities;
-                if (abilities?.Count > 0 && abilities[0] != null)
+                // Handle abilities if available
+                if (abilities != null && abilities.Count > 0 && abilities[0] != null)
                 {
                     if (abilityText != null)
                         abilityText.text = abilities[0].Name ?? "";
@@ -148,7 +151,6 @@ namespace Kardx.UI.Components.Card
                         abilityDescriptionText.text = "";
                 }
 
-                // These methods have their own null checks and error handling
                 UpdateCardFrame();
                 if (card != null)
                 {
@@ -159,55 +161,32 @@ namespace Kardx.UI.Components.Card
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[CardView] Error updating card view: {ex.Message}\nStack trace: {ex.StackTrace}");
-                // Don't rethrow - we want to keep the card partially functional even if some parts fail
+                Debug.LogError($"[CardView] Error updating card view: {ex.Message}");
+                throw;
             }
         }
 
         private void UpdateCardFrame()
         {
-            if (frameImage == null) return;
-
             var category =
-                card != null ? card.CardType?.Category : cardType?.Category ?? CardCategory.Unit;
+                card != null ? card.CardType.Category : cardType?.Category ?? CardCategory.Unit;
 
-            try 
+            switch (category)
             {
-                switch (category)
-                {
-                    case CardCategory.Unit:
-                        // Set frame for Unit
-                        break;
-                    case CardCategory.Order:
-                        // Set frame for Order
-                        break;
-                    case CardCategory.Countermeasure:
-                        // Set frame for Countermeasure
-                        break;
-                    case CardCategory.Headquarter:
-                        // Set frame for Headquarter
-                        break;
-                    default:
-                        Debug.LogWarning($"[CardView] Unknown card category: {category}");
-                        break;
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"[CardView] Error updating card frame: {ex.Message}");
-                // Don't rethrow - this is not critical
+                case CardCategory.Unit:
+                    break;
+                case CardCategory.Order:
+                    break;
+                case CardCategory.Countermeasure:
+                    break;
+                case CardCategory.Headquarter:
+                    break;
             }
         }
 
         private void UpdateModifierEffects()
         {
-            if (card?.Modifiers == null) return;
-            
-            foreach (var modifier in card.Modifiers)
-            {
-                if (modifier == null) continue;
-                // Handle modifier effects here
-            }
+            foreach (var modifier in card.Modifiers) { }
         }
 
         private void LoadCardImage()

@@ -2,7 +2,9 @@ using System.Collections.Generic;
 using Kardx.Core.Data.Cards;
 using Kardx.Core.Data.States;
 using Kardx.Core.Game;
+using Kardx.Core.Logging;
 using Kardx.UI.Components.Card;
+using TMPro;
 using UnityEngine;
 
 namespace Kardx.UI.Scenes.Battle
@@ -12,9 +14,6 @@ namespace Kardx.UI.Scenes.Battle
     public class BattleView : MonoBehaviour
     {
         [Header("Core References")]
-        [SerializeField]
-        private BattleManager battleManager;
-
         [SerializeField]
         private Canvas battleCanvas;
 
@@ -47,9 +46,6 @@ namespace Kardx.UI.Scenes.Battle
         [SerializeField]
         private GameObject cardPrefab;
 
-        [SerializeField]
-        private GameObject dropZonePrefab;
-
         [Header("Visual Settings")]
         [SerializeField]
         private float cardSpacing = 1.2f;
@@ -57,52 +53,36 @@ namespace Kardx.UI.Scenes.Battle
         [SerializeField]
         private float handCurveHeight = 0.5f;
 
+        [SerializeField]
+        private BattlefieldDropZone battlefieldDropZone; // Single dropzone for player1's battlefield
+
+        // Non-serialized fields
+        private BattleManager battleManager;
+
         // Track UI elements
         private Dictionary<Card, GameObject> cardUIElements = new();
-        private Dictionary<Vector2Int, BattlefieldDropZone> dropZones = new();
+
+        private void Awake()
+        {
+            // Other initialization if needed
+        }
 
         private void Start()
         {
-            InitializeBattlefield();
+            Debug.Log("Starting battle");
+            // Create BattleManager instance
+            battleManager = new BattleManager(new UnityLogger());
+
+            // Start the battle
+            battleManager.StartBattle("Player1", "Player2");
+            UpdateUI();
             SubscribeToBattleEvents();
         }
 
-        private void InitializeBattlefield()
+        public void EndTurn()
         {
-            // Create drop zones in a grid pattern
-            for (int x = 0; x < 5; x++)
-            {
-                for (int y = 0; y < 3; y++)
-                {
-                    var position = new Vector2Int(x, y);
-                    var dropZone = CreateDropZone(position);
-                    dropZones[position] = dropZone;
-                }
-            }
-        }
-
-        private BattlefieldDropZone CreateDropZone(Vector2Int position)
-        {
-            var dropZoneGO = Instantiate(dropZonePrefab, battlefieldArea);
-            var dropZone = dropZoneGO.GetComponent<BattlefieldDropZone>();
-
-            // Position the drop zone in the grid
-            var worldPos = GridToWorldPosition(position);
-            dropZoneGO.transform.localPosition = worldPos;
-
-            // Subscribe to drop events
-            dropZone.OnCardDropped += HandleDropZoneCardDropped;
-
-            return dropZone;
-        }
-
-        private void HandleDropZoneCardDropped(CardView cardView, Vector2Int position)
-        {
-            // Notify BattleManager that a card was played
-            if (battleManager != null && cardView.Card != null)
-            {
-                battleManager.DeployCard(cardView.Card, position);
-            }
+            battleManager.EndTurn();
+            UpdateUI();
         }
 
         private void SubscribeToBattleEvents()
@@ -110,14 +90,42 @@ namespace Kardx.UI.Scenes.Battle
             if (battleManager == null)
                 return;
 
+            // Only keep essential events for UI updates
             battleManager.OnCardDeployed += HandleCardDeployed;
-            battleManager.OnCardActivated += HandleCardActivated;
             battleManager.OnCardDrawn += HandleCardDrawn;
             battleManager.OnCardDiscarded += HandleCardDiscarded;
-            battleManager.OnCardDamaged += HandleCardDamaged;
-            battleManager.OnCardHealed += HandleCardHealed;
-            battleManager.OnModifierAdded += HandleModifierAdded;
-            battleManager.OnModifierRemoved += HandleModifierRemoved;
+        }
+
+        private void UpdateUI()
+        {
+            if (battleManager == null)
+                return;
+
+            // Update turn text
+            if (
+                turnText != null
+                && turnText.TryGetComponent<TMPro.TextMeshProUGUI>(out var turnTMP)
+            )
+            {
+                turnTMP.text = $"Turn {battleManager.TurnNumber}";
+            }
+
+            // Update credits text
+            if (
+                creditsText != null
+                && creditsText.TryGetComponent<TMPro.TextMeshProUGUI>(out var creditsTMP)
+            )
+            {
+                creditsTMP.text = $"{battleManager.Player1State?.Credits ?? 0}";
+            }
+
+            if (
+                opponentCreditsText != null
+                && opponentCreditsText.TryGetComponent<TMPro.TextMeshProUGUI>(out var oppCreditsTMP)
+            )
+            {
+                oppCreditsTMP.text = $"{battleManager.Player2State?.Credits ?? 0}";
+            }
         }
 
         // UI Card Creation and Management
@@ -182,14 +190,12 @@ namespace Kardx.UI.Scenes.Battle
             }
         }
 
-        private void MoveCardToBattlefield(Card card, Vector2Int position)
+        private void MoveCardToBattlefield(Card card, int position)
         {
             if (!cardUIElements.TryGetValue(card, out GameObject cardGO))
                 return;
-            if (!dropZones.TryGetValue(position, out BattlefieldDropZone dropZone))
-                return;
 
-            cardGO.transform.SetParent(dropZone.transform, false);
+            cardGO.transform.SetParent(battlefieldDropZone.transform, false);
             cardGO.transform.localPosition = Vector3.zero;
 
             var cardView = cardGO.GetComponent<CardView>();
@@ -199,31 +205,14 @@ namespace Kardx.UI.Scenes.Battle
                 cardView.PlayDeployAnimation();
             }
 
-            dropZone.SetOccupied(true);
-        }
-
-        private Vector3 GridToWorldPosition(Vector2Int gridPos)
-        {
-            float x = gridPos.x * 2.0f - 4.0f; // Center the grid
-            float y = gridPos.y * 2.5f - 2.5f; // Center the grid
-            return new Vector3(x, y, 0);
+            battlefieldDropZone.SetOccupied(true);
         }
 
         // Event Handlers
-        private void HandleCardDeployed(Card card, Vector2Int position)
+        private void HandleCardDeployed(Card card, int position)
         {
             MoveCardToBattlefield(card, position);
             UpdateCardUI(card);
-        }
-
-        private void HandleCardActivated(Card card)
-        {
-            UpdateCardUI(card);
-            if (cardUIElements.TryGetValue(card, out GameObject cardGO))
-            {
-                var cardView = cardGO.GetComponent<CardView>();
-                cardView?.PlayAttackAnimation();
-            }
         }
 
         private void HandleCardDrawn(Card card)
@@ -236,76 +225,19 @@ namespace Kardx.UI.Scenes.Battle
         {
             if (cardUIElements.TryGetValue(card, out GameObject cardGO))
             {
-                // Animate to discard pile before destroying
-                StartCoroutine(AnimateToDiscard(cardGO));
+                Destroy(cardGO);
+                cardUIElements.Remove(card);
             }
-        }
-
-        private System.Collections.IEnumerator AnimateToDiscard(GameObject cardGO)
-        {
-            float duration = 0.5f;
-            float elapsed = 0;
-            Vector3 startPos = cardGO.transform.position;
-            Vector3 endPos = discardArea.position;
-
-            while (elapsed < duration)
-            {
-                elapsed += Time.deltaTime;
-                float t = elapsed / duration;
-                cardGO.transform.position = Vector3.Lerp(startPos, endPos, t);
-                yield return null;
-            }
-
-            Destroy(cardGO);
-            cardUIElements.Remove(cardGO.GetComponent<CardView>().Card);
-        }
-
-        private void HandleCardDamaged(Card card, int amount)
-        {
-            UpdateCardUI(card);
-            if (cardUIElements.TryGetValue(card, out GameObject cardGO))
-            {
-                var cardView = cardGO.GetComponent<CardView>();
-                cardView?.PlayDamageAnimation();
-            }
-        }
-
-        private void HandleCardHealed(Card card, int amount)
-        {
-            UpdateCardUI(card);
-        }
-
-        private void HandleModifierAdded(Card card, Modifier modifier)
-        {
-            UpdateCardUI(card);
-        }
-
-        private void HandleModifierRemoved(Card card, Modifier modifier)
-        {
-            UpdateCardUI(card);
         }
 
         private void OnDestroy()
         {
             if (battleManager != null)
             {
+                // Unsubscribe from essential events
                 battleManager.OnCardDeployed -= HandleCardDeployed;
-                battleManager.OnCardActivated -= HandleCardActivated;
                 battleManager.OnCardDrawn -= HandleCardDrawn;
                 battleManager.OnCardDiscarded -= HandleCardDiscarded;
-                battleManager.OnCardDamaged -= HandleCardDamaged;
-                battleManager.OnCardHealed -= HandleCardHealed;
-                battleManager.OnModifierAdded -= HandleModifierAdded;
-                battleManager.OnModifierRemoved -= HandleModifierRemoved;
-            }
-
-            // Unsubscribe from drop zone events
-            foreach (var dropZone in dropZones.Values)
-            {
-                if (dropZone != null)
-                {
-                    dropZone.OnCardDropped -= HandleDropZoneCardDropped;
-                }
             }
         }
     }
