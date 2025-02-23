@@ -337,17 +337,5 @@ namespace Kardx.UI.Components.Card
                 dragHandler.OnDragEnded -= (success) => isDragging = false;
             }
         }
-
-        private void HandleDragStarted()
-        {
-            if (!isDraggable)
-                return;
-            transform.SetAsLastSibling();
-        }
-
-        private void HandleDragEnded(bool wasSuccessful)
-        {
-            if (!wasSuccessful) { }
-        }
     }
 }

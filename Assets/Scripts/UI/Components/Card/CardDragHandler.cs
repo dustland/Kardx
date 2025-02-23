@@ -9,98 +9,91 @@ namespace Kardx.UI.Components.Card
 
     public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
-        [Header("Drag Settings")]
-        [SerializeField]
-        private float dragSpeed = 1f;
-
-        [SerializeField]
-        private float returnSpeed = 10f;
-
-        [SerializeField]
-        private float minDragDistance = 10f; // Minimum distance to consider it a drag
-
         private Vector3 originalPosition;
-        private bool isDragging;
-        private Vector2 dragStartPosition;
-        private RectTransform rectTransform;
+        private Transform originalParent;
         private Canvas canvas;
         private CardView cardView;
         private CanvasGroup canvasGroup;
-        private Transform originalParent;
-        private int originalSiblingIndex; // Store the original sibling index
 
         public event Action OnDragStarted;
         public event Action<bool> OnDragEnded;
 
         private void Awake()
         {
-            rectTransform = GetComponent<RectTransform>();
             canvas = GetComponentInParent<Canvas>();
             cardView = GetComponent<CardView>();
             canvasGroup = GetComponent<CanvasGroup>();
 
+            // Ensure we have a CanvasGroup
             if (canvasGroup == null)
             {
                 canvasGroup = gameObject.AddComponent<CanvasGroup>();
             }
-
-            // Find the drag parent (should be a child of Canvas for proper sorting)
-            // Removed dragParent as it's no longer needed
+            // Make sure it blocks raycasts by default
+            canvasGroup.blocksRaycasts = true;
         }
 
         public void OnBeginDrag(PointerEventData eventData)
         {
-            if (!CanDragCard())
+            if (cardView == null || cardView.Card == null)
             {
-                Debug.Log("Cannot drag card");
+                Debug.Log("Cannot drag: card or cardView is null");
                 return;
             }
 
-            isDragging = true;
+            var battleView = canvas.GetComponentInParent<BattleView>();
+            if (battleView == null || !battleView.CanDeployCard(cardView.Card))
+            {
+                Debug.Log("Cannot drag: invalid battle view or cannot deploy card");
+                return;
+            }
+
             originalPosition = transform.position;
             originalParent = transform.parent;
-
-            // Store the original sibling index so we can restore it if drag fails
-            originalSiblingIndex = transform.GetSiblingIndex();
-
-            // Set as last sibling in the canvas to ensure it renders on top
             transform.SetParent(canvas.transform);
-            transform.SetAsLastSibling();
-
-            canvasGroup.blocksRaycasts = false;
+            canvasGroup.blocksRaycasts = false; // Disable raycast blocking during drag
             OnDragStarted?.Invoke();
         }
 
         public void OnDrag(PointerEventData eventData)
         {
-            if (!isDragging)
+            if (originalParent == null)
                 return;
 
-            Vector2 position;
+            Vector2 pos;
             RectTransformUtility.ScreenPointToLocalPointInRectangle(
                 canvas.transform as RectTransform,
                 eventData.position,
                 canvas.worldCamera,
-                out position
+                out pos
             );
+            transform.position = canvas.transform.TransformPoint(pos);
 
-            transform.position = Vector3.Lerp(
-                transform.position,
-                canvas.transform.TransformPoint(position),
-                Time.deltaTime * dragSpeed
-            );
+            // Highlight potential drop zones
+            var raycastResults = new System.Collections.Generic.List<RaycastResult>();
+            EventSystem.current.RaycastAll(eventData, raycastResults);
+
+            foreach (var hit in raycastResults)
+            {
+                var dropZone = hit.gameObject.GetComponent<BattlefieldDropZone>();
+                if (dropZone != null)
+                {
+                    dropZone.SetHighlight(dropZone.IsValidDropTarget(cardView.Card));
+                    break;
+                }
+            }
         }
 
         public void OnEndDrag(PointerEventData eventData)
         {
-            if (!isDragging)
+            if (originalParent == null)
                 return;
 
             canvasGroup.blocksRaycasts = true;
-            bool wasSuccessful = false;
 
             var raycastResults = new System.Collections.Generic.List<RaycastResult>();
             EventSystem.current.RaycastAll(eventData, raycastResults);
+            bool wasSuccessful = false;
 
             foreach (var hit in raycastResults)
             {
@@ -108,51 +101,17 @@ namespace Kardx.UI.Components.Card
                 if (dropZone != null && dropZone.IsValidDropTarget(cardView.Card))
                 {
                     wasSuccessful = true;
-                    // Let the dropzone handle the parenting
                     break;
                 }
             }
 
             if (!wasSuccessful)
             {
-                // Return to original position and parent
                 transform.SetParent(originalParent);
-                transform.SetSiblingIndex(originalSiblingIndex);
                 transform.position = originalPosition;
             }
 
-            isDragging = false;
             OnDragEnded?.Invoke(wasSuccessful);
         }
-
-        private bool CanDragCard()
-        {
-            if (cardView == null)
-            {
-                Debug.Log("CanDragCard: Card view is null");
-                return false;
-            }
-
-            // Get BattleView reference
-            var battleView = canvas.GetComponentInParent<BattleView>();
-            if (battleView == null)
-            {
-                Debug.Log("CanDragCard: Battle view is null");
-                return false;
-            }
-
-            // Only allow dragging cards from player's hand that can be deployed
-            return battleView.CanDeployCard(cardView.Card);
-        }
-
-        private bool IsValidDropTarget(BattlefieldDropZone dropZone)
-        {
-            if (cardView == null || dropZone == null)
-                return false;
-
-            return dropZone.IsValidDropTarget(cardView.Card);
-        }
-
-        // Removed ReturnToOriginalPosition as it's no longer needed
     }
 }

@@ -1,93 +1,82 @@
 using Kardx.UI.Components.Card;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace Kardx.UI.Scenes.Battle
 {
     using Card = Kardx.Core.Data.Cards.Card;
 
-    public class BattlefieldDropZone
-        : MonoBehaviour,
-            IDropHandler,
-            IPointerEnterHandler,
-            IPointerExitHandler
+    public class BattlefieldDropZone : MonoBehaviour, IDropHandler
     {
-        [Header("References")]
         [SerializeField]
+        private Image highlightImage;
         private BattleView battleView;
 
-        [Header("Visual Feedback")]
-        [SerializeField]
-        private GameObject highlightEffect;
-
-        private void Start()
+        private void Awake()
         {
-            // Ensure we have a reference to BattleView
-            if (battleView == null)
+            battleView = GetComponentInParent<BattleView>();
+            if (!highlightImage)
+                CreateHighlight();
+
+            // Ensure this GameObject can receive drops
+            var graphic = GetComponent<Graphic>();
+            if (graphic == null)
             {
-                battleView = GetComponentInParent<BattleView>();
+                var image = gameObject.AddComponent<Image>();
+                image.color = Color.clear; // Make it invisible
+                image.raycastTarget = true;
             }
         }
 
-        public void OnPointerEnter(PointerEventData eventData)
+        private void CreateHighlight()
         {
-            var cardView = eventData.pointerDrag?.GetComponent<CardView>();
-            if (cardView != null && IsValidDropTarget(cardView.Card))
-            {
-                SetHighlight(true);
-            }
-        }
+            var go = new GameObject("Highlight");
+            highlightImage = go.AddComponent<Image>();
+            highlightImage.transform.SetParent(transform);
 
-        public void OnPointerExit(PointerEventData eventData)
-        {
-            SetHighlight(false);
+            var rt = highlightImage.rectTransform;
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.sizeDelta = Vector2.zero;
+            rt.localScale = Vector3.one;
+
+            highlightImage.color = new Color(1f, 1f, 0f, 0.3f);
+            highlightImage.enabled = false;
+            highlightImage.raycastTarget = false; // Don't block drops
         }
 
         public void OnDrop(PointerEventData eventData)
         {
-            CardView cardView = eventData.pointerDrag?.GetComponent<CardView>();
+            Debug.Log("OnDrop called");
+            var cardView = eventData.pointerDrag?.GetComponent<CardView>();
             if (cardView == null)
+            {
+                Debug.Log("No CardView found on dropped object");
                 return;
-
-            if (IsValidDropTarget(cardView.Card))
-            {
-                HandleCardDrop(cardView);
             }
-        }
 
-        private void HandleCardDrop(CardView cardView)
-        {
-            if (battleView == null)
+            if (battleView == null || !battleView.DeployCard(cardView.Card))
+            {
+                Debug.Log("Failed to deploy card");
                 return;
-
-            // Try to deploy the card through BattleManager
-            if (battleView.DeployCard(cardView.Card))
-            {
-                // Move the card to this drop zone and position it properly
-                cardView.transform.SetParent(transform);
-                cardView.transform.localPosition = Vector3.zero;
-                cardView.transform.localScale = Vector3.one;
-                
-                SetHighlight(false);
             }
-        }
 
-        private void SetHighlight(bool active)
-        {
-            if (highlightEffect != null)
-            {
-                highlightEffect.SetActive(active);
-            }
+            Debug.Log("Card deployed successfully");
+            cardView.transform.SetParent(transform);
+            cardView.transform.localPosition = Vector3.zero;
+            cardView.transform.localScale = Vector3.one;
         }
 
         public bool IsValidDropTarget(Card card)
         {
-            if (card == null || battleView == null)
-                return false;
+            return battleView?.CanDeployCard(card) ?? false;
+        }
 
-            // Check if this is a player's battlefield and if the card can be deployed
-            return transform.parent.CompareTag("PlayerBattlefield")
-                && battleView.CanDeployCard(card);
+        public void SetHighlight(bool show)
+        {
+            if (highlightImage)
+                highlightImage.enabled = show;
         }
     }
 }
