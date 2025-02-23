@@ -1,15 +1,18 @@
 using System;
+using System.IO;
+using System.Linq;
 using Kardx.Core;
 using Kardx.Core.Data.Cards;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace Kardx.UI.Components.Card
 {
     using Card = Kardx.Core.Data.Cards.Card; // Alias for Card
 
-    public class CardView : MonoBehaviour
+    public class CardView : MonoBehaviour, IPointerClickHandler
     {
         [Header("Card Data")]
         [SerializeField]
@@ -65,6 +68,7 @@ namespace Kardx.UI.Components.Card
         private CardDetailView cardDetailView;
 
         private bool isDraggable = true;
+        private bool isDragging = false; // Track if we're currently dragging
 
         public Card Card => card;
         public CardType CardType => cardType;
@@ -72,6 +76,19 @@ namespace Kardx.UI.Components.Card
         private void Awake()
         {
             dragHandler = GetComponent<CardDragHandler>();
+            if (dragHandler != null)
+            {
+                dragHandler.OnDragStarted += () => isDragging = true;
+                dragHandler.OnDragEnded += (success) =>
+                {
+                    isDragging = false;
+                    // Small delay to ensure click doesn't fire immediately after drag
+                    if (success)
+                    {
+                        CancelInvoke(nameof(ShowDetail));
+                    }
+                };
+            }
         }
 
         private void Start()
@@ -93,33 +110,30 @@ namespace Kardx.UI.Components.Card
                 }
 
                 // Get the active card data source (either Card or CardType)
-                var name = card != null ? card.Name : cardType?.Name ?? "";
-                var description = card != null ? card.Description : cardType?.Description ?? "";
-                var deploymentCost =
-                    card != null ? card.DeploymentCost : cardType?.DeploymentCost ?? 0;
-                var operationCost =
-                    card != null ? card.OperationCost : cardType?.OperationCost ?? 0;
-                var attack = card != null ? card.Attack : cardType?.BaseAttack ?? 0;
-                var defence = card != null ? card.CurrentDefence : cardType?.BaseDefence ?? 0;
-                var imageUrl = card != null ? card.ImageUrl : cardType?.ImageUrl;
-                var abilities = card != null ? card.CardType.Abilities : cardType?.Abilities;
+                var cardData = card?.CardType ?? cardType;
+                if (cardData == null)
+                {
+                    Debug.LogError("[CardView] Both card.CardType and cardType are null");
+                    return;
+                }
 
-                // Update UI elements safely
+                // Update UI elements safely with null checks on both the UI element and the data
                 if (nameText != null)
-                    nameText.text = name;
+                    nameText.text = card?.Name ?? cardData.Name ?? "";
                 if (descriptionText != null)
-                    descriptionText.text = description;
+                    descriptionText.text = card?.Description ?? cardData.Description ?? "";
                 if (deploymentCostText != null)
-                    deploymentCostText.text = deploymentCost.ToString();
+                    deploymentCostText.text = (card?.DeploymentCost ?? cardData.DeploymentCost).ToString();
                 if (operationCostText != null)
-                    operationCostText.text = operationCost.ToString();
+                    operationCostText.text = (card?.OperationCost ?? cardData.OperationCost).ToString();
                 if (attackText != null)
-                    attackText.text = attack.ToString();
+                    attackText.text = (card?.Attack ?? cardData.BaseAttack).ToString();
                 if (defenceText != null)
-                    defenceText.text = defence.ToString();
+                    defenceText.text = (card?.CurrentDefence ?? cardData.BaseDefence).ToString();
 
-                // Handle abilities if available
-                if (abilities != null && abilities.Count > 0 && abilities[0] != null)
+                // Handle abilities safely
+                var abilities = card?.CardType?.Abilities ?? cardData.Abilities;
+                if (abilities?.Count > 0 && abilities[0] != null)
                 {
                     if (abilityText != null)
                         abilityText.text = abilities[0].Name ?? "";
@@ -134,46 +148,110 @@ namespace Kardx.UI.Components.Card
                         abilityDescriptionText.text = "";
                 }
 
+                // These methods have their own null checks and error handling
                 UpdateCardFrame();
                 if (card != null)
                 {
                     UpdateModifierEffects();
                 }
 
-                LoadCardImage(imageUrl);
+                LoadCardImage();
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[CardView] Error updating card view: {ex.Message}");
+                Debug.LogError($"[CardView] Error updating card view: {ex.Message}\nStack trace: {ex.StackTrace}");
+                // Don't rethrow - we want to keep the card partially functional even if some parts fail
             }
         }
 
         private void UpdateCardFrame()
         {
-            var category =
-                card != null ? card.CardType.Category : cardType?.Category ?? CardCategory.Unit;
+            if (frameImage == null) return;
 
-            switch (category)
+            var category =
+                card != null ? card.CardType?.Category : cardType?.Category ?? CardCategory.Unit;
+
+            try 
             {
-                case CardCategory.Unit:
-                    break;
-                case CardCategory.Order:
-                    break;
-                case CardCategory.Countermeasure:
-                    break;
-                case CardCategory.Headquarter:
-                    break;
+                switch (category)
+                {
+                    case CardCategory.Unit:
+                        // Set frame for Unit
+                        break;
+                    case CardCategory.Order:
+                        // Set frame for Order
+                        break;
+                    case CardCategory.Countermeasure:
+                        // Set frame for Countermeasure
+                        break;
+                    case CardCategory.Headquarter:
+                        // Set frame for Headquarter
+                        break;
+                    default:
+                        Debug.LogWarning($"[CardView] Unknown card category: {category}");
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[CardView] Error updating card frame: {ex.Message}");
+                // Don't rethrow - this is not critical
             }
         }
 
         private void UpdateModifierEffects()
         {
-            foreach (var modifier in card.Modifiers) { }
+            if (card?.Modifiers == null) return;
+            
+            foreach (var modifier in card.Modifiers)
+            {
+                if (modifier == null) continue;
+                // Handle modifier effects here
+            }
         }
 
-        private void LoadCardImage(string url)
+        private void LoadCardImage()
         {
-            // Implement image loading logic here
+            if (cardImage == null || cardType == null)
+            {
+                Debug.LogWarning("[CardView] Card image component or card type is missing");
+                return;
+            }
+
+            string imageUrl = cardType.ImageUrl;
+            if (string.IsNullOrEmpty(imageUrl))
+            {
+                Debug.LogWarning($"[CardView] No image URL specified for card {cardType.Name}");
+                return;
+            }
+
+            try
+            {
+                // Keep the full filename including extension for WebP files
+                string fileName = Path.GetFileName(imageUrl);
+                Debug.Log($"[CardView] Loading image for {cardType.Name} from: {fileName}");
+
+                // Load sprite from Cards folder
+                Sprite sprite = Resources.Load<Sprite>($"Cards/{fileName}");
+
+                if (sprite != null)
+                {
+                    cardImage.sprite = sprite;
+                    cardImage.preserveAspect = true;
+                    Debug.Log($"[CardView] Successfully loaded image for {cardType.Name}");
+                }
+                else
+                {
+                    Debug.LogError(
+                        $"[CardView] Failed to load sprite for {cardType.Name}. "
+                            + $"Tried path: Resources/Cards/{fileName}"
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[CardView] Error loading card image: {ex.Message}");
+            }
         }
 
         public void PlayDeployAnimation()
@@ -233,9 +311,24 @@ namespace Kardx.UI.Components.Card
             UpdateCardView();
         }
 
+        public void OnPointerClick(PointerEventData eventData)
+        {
+            Debug.Log("OnPointerClick (isDragging: " + isDragging + ")");
+            if (!isDragging)
+            {
+                // Add a small delay to prevent accidental clicks during drag
+                Invoke(nameof(ShowDetail), 0.1f);
+            }
+        }
+
         public void ShowDetail()
         {
-            Debug.Log("[CardView] Showing card detail view");
+            Debug.Log("[CardView] Showing card detail view" + (isDragging ? " (dragging)" : ""));
+            if (isDragging)
+            {
+                Debug.Log("[CardView] is dragging, not showing detail");
+                return; // Don't show detail if we're dragging
+            }
             // Find CardDetailView even if inactive
             cardDetailView = FindObjectOfType<CardDetailView>(true);
 
@@ -261,8 +354,8 @@ namespace Kardx.UI.Components.Card
         {
             if (dragHandler != null)
             {
-                dragHandler.OnDragStarted -= HandleDragStarted;
-                dragHandler.OnDragEnded -= HandleDragEnded;
+                dragHandler.OnDragStarted -= () => isDragging = true;
+                dragHandler.OnDragEnded -= (success) => isDragging = false;
             }
         }
 

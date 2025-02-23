@@ -18,10 +18,10 @@ This project is explained in the following documents:
 
 Other than Unity 6 (v6000.0.38f1), you will need to install these additional dependencies in Unity:
 
-- [Edit with Windsurf](https://github.com/Asuta/com.unity.ide.windsurf) - Install from Git URL: https://github.com/Asuta/com.unity.ide.windsurf.git.windsurf.git
+- [Edit with Windsurf](https://github.com/Asuta/com.unity.ide.windsurf) - Install from Git URL: https://github.com/Asuta/com.unity.ide.windsurf.git.windsurf.git (Windsurf has much better performance comparing to Cursor IDE.)
 - [NewtonSoft JSON](https://github.com/JamesNK/Newtonsoft.Json) - Add from package manager: `com.unity.nuget.newtonsoft-json`
-
-Windsurf has much better performance comparing to Cursor IDE.
+- Art assets are from https://kards.fandom.com/wiki/.
+- C# Code is formatted with Code CSharpier plugin in Windsurf.
 
 ## Implementation
 

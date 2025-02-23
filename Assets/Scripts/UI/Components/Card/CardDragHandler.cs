@@ -14,8 +14,12 @@ namespace Kardx.UI.Components.Card
         [SerializeField]
         private float returnSpeed = 10f;
 
+        [SerializeField]
+        private float minDragDistance = 10f; // Minimum distance to consider it a drag
+
         private Vector3 originalPosition;
         private bool isDragging;
+        private Vector2 dragStartPosition;
         private RectTransform rectTransform;
         private Canvas canvas;
 
@@ -30,13 +34,23 @@ namespace Kardx.UI.Components.Card
 
         public void OnBeginDrag(PointerEventData eventData)
         {
-            isDragging = true;
+            dragStartPosition = eventData.position;
             originalPosition = transform.position;
-            OnDragStarted?.Invoke();
+            // Don't set isDragging true yet - wait until we've moved enough
         }
 
         public void OnDrag(PointerEventData eventData)
         {
+            // Check if we've moved far enough to consider it a drag
+            if (
+                !isDragging
+                && Vector2.Distance(dragStartPosition, eventData.position) > minDragDistance
+            )
+            {
+                isDragging = true;
+                OnDragStarted?.Invoke();
+            }
+
             if (!isDragging)
                 return;
 
@@ -57,7 +71,13 @@ namespace Kardx.UI.Components.Card
 
         public void OnEndDrag(PointerEventData eventData)
         {
-            isDragging = false;
+            // If we never actually started dragging, treat it as a click
+            if (!isDragging)
+            {
+                OnDragEnded?.Invoke(false);
+                return;
+            }
+
             bool wasSuccessful = false;
 
             // Check if dropped on valid target
@@ -79,6 +99,7 @@ namespace Kardx.UI.Components.Card
                 ReturnToOriginalPosition();
             }
 
+            isDragging = false;
             OnDragEnded?.Invoke(wasSuccessful);
         }
 

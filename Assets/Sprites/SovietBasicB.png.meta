@@ -147,7 +147,8 @@ TextureImporter:
     secondaryTextures: []
     spriteCustomMetadata:
       entries: []
-    nameFileIdTable: {}
+    nameFileIdTable:
+      SovietBasicB_0: -7540064123073174036
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

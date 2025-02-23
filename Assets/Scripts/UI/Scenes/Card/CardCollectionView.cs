@@ -2,17 +2,18 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using UnityEngine;
-using UnityEngine.UI;
+using Kardx.Core;
 using Kardx.UI.Components.Card;
 using Newtonsoft.Json;
-using Kardx.Core;
+using UnityEngine;
+using UnityEngine.UI;
 
 namespace Kardx.UI.Scenes.Card
 {
+    using AbilityType = Kardx.Core.Data.Abilities.AbilityType;
     using Card = Kardx.Core.Data.Cards.Card; // Alias for Card
     using CardType = Kardx.Core.Data.Cards.CardType;
-    using AbilityType = Kardx.Core.Data.Abilities.AbilityType;
+
     [System.Serializable]
     public class CardListWrapper
     {
@@ -24,10 +25,14 @@ namespace Kardx.UI.Scenes.Card
     {
         public List<AbilityType> abilities;
     }
+
     public class CardCollectionView : MonoBehaviour
     {
-        [SerializeField] private Transform cardContainer; // Parent object for card UI elements
-        [SerializeField] private GameObject cardPrefab; // Prefab for displaying a single card
+        [SerializeField]
+        private Transform cardContainer; // Parent object for card UI elements
+
+        [SerializeField]
+        private GameObject cardPrefab; // Prefab for displaying a single card
 
         private List<CardType> cards = new();
         private List<AbilityType> abilities = new();
@@ -47,26 +52,35 @@ namespace Kardx.UI.Scenes.Card
                 try
                 {
                     string jsonData = File.ReadAllText(filePath);
-                    var jsonCards = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(jsonData);
-                    
+                    var jsonCards = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(
+                        jsonData
+                    );
+
                     cards = new List<CardType>();
                     foreach (var jsonCard in jsonCards)
                     {
-                        var cardType = ScriptableObject.CreateInstance<CardType>();
+                        var cardType = new CardType();
                         cardType.Initialize(
                             id: jsonCard["id"].ToString(),
                             name: jsonCard["name"].ToString(),
                             description: jsonCard["description"].ToString(),
-                            category: (CardCategory)Enum.Parse(typeof(CardCategory), jsonCard["category"].ToString()),
+                            category: (CardCategory)
+                                Enum.Parse(typeof(CardCategory), jsonCard["category"].ToString()),
                             subtype: jsonCard["subtype"].ToString(),
                             deploymentCost: Convert.ToInt32(jsonCard["deploymentCost"]),
                             operationCost: Convert.ToInt32(jsonCard["operationCost"]),
                             baseDefence: Convert.ToInt32(jsonCard["baseDefence"]),
                             baseAttack: Convert.ToInt32(jsonCard["baseAttack"]),
                             baseCounterAttack: Convert.ToInt32(jsonCard["baseCounterAttack"]),
-                            rarity: (CardRarity)Enum.Parse(typeof(CardRarity), jsonCard["rarity"].ToString()),
+                            rarity: (CardRarity)
+                                Enum.Parse(typeof(CardRarity), jsonCard["rarity"].ToString()),
                             setId: jsonCard["setId"].ToString()
                         );
+                        // Set the imageUrl from the JSON data
+                        if (jsonCard.ContainsKey("imageUrl"))
+                        {
+                            cardType.SetImageUrl(jsonCard["imageUrl"].ToString());
+                        }
                         cards.Add(cardType);
                     }
 
@@ -91,7 +105,9 @@ namespace Kardx.UI.Scenes.Card
             if (File.Exists(filePath))
             {
                 string jsonData = File.ReadAllText(filePath);
-                AbilityListWrapper wrapper = JsonUtility.FromJson<AbilityListWrapper>("{\"abilities\":" + jsonData + "}");
+                AbilityListWrapper wrapper = JsonUtility.FromJson<AbilityListWrapper>(
+                    "{\"abilities\":" + jsonData + "}"
+                );
 
                 abilities = wrapper.abilities;
                 Debug.Log("Loaded " + abilities.Count + " abilities");
@@ -114,18 +130,21 @@ namespace Kardx.UI.Scenes.Card
             {
                 foreach (var cardType in cards ?? Enumerable.Empty<CardType>())
                 {
-                    if (cardType == null) continue;
+                    if (cardType == null)
+                        continue;
 
                     GameObject cardInstance = Instantiate(cardPrefab, cardContainer);
                     var cardComponent = cardInstance.GetComponent<CardView>();
-                    
+
                     if (cardComponent != null)
                     {
                         cardComponent.Initialize(cardType);
                     }
                     else
                     {
-                        Debug.LogError($"[CardCollectionView] CardView component missing on prefab");
+                        Debug.LogError(
+                            $"[CardCollectionView] CardView component missing on prefab"
+                        );
                         Destroy(cardInstance);
                     }
                 }

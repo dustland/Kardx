@@ -12,7 +12,7 @@
     "baseCounterAttack": 1,
     "rarity": "Standard",
     "setId": "base_set",
-    "imageUrl": "https://example.com/card1.webp",
+    "imageUrl": "BasicGermanB.webp",
     "attributes": {
       "health": 5,
       "speed": 1
@@ -32,7 +32,7 @@
     "baseCounterAttack": 0,
     "rarity": "Limited",
     "setId": "base_set",
-    "imageUrl": "https://example.com/card2.webp",
+    "imageUrl": "T_blitzkreig_improved.webp",
     "attributes": {
       "health": 4,
       "range": 3
@@ -52,7 +52,7 @@
     "baseCounterAttack": 2,
     "rarity": "Elite",
     "setId": "base_set",
-    "imageUrl": "https://example.com/card3.webp",
+    "imageUrl": "T_t_80_light_tank.webp",
     "attributes": {
       "health": 8,
       "speed": 2
@@ -72,7 +72,7 @@
     "baseCounterAttack": 0,
     "rarity": "Standard",
     "setId": "base_set",
-    "imageUrl": "https://example.com/card4.webp",
+    "imageUrl": "SovietBasicB.webp",
     "attributes": {
       "health": 4,
       "speed": 1
@@ -92,7 +92,7 @@
     "baseCounterAttack": 1,
     "rarity": "Limited",
     "setId": "base_set",
-    "imageUrl": "https://example.com/card5.webp",
+    "imageUrl": "T_soviet_infantry_x.webp",
     "attributes": {
       "health": 4,
       "speed": 3
@@ -112,7 +112,7 @@
     "baseCounterAttack": 0,
     "rarity": "Elite",
     "setId": "base_set",
-    "imageUrl": "https://example.com/card6.webp",
+    "imageUrl": "T_blitzkreig_improved.webp",
     "attributes": {
       "health": 5,
       "range": 2
@@ -132,7 +132,7 @@
     "baseCounterAttack": 0,
     "rarity": "Standard",
     "setId": "base_set",
-    "imageUrl": "https://example.com/card7.webp",
+    "imageUrl": "BasicGermanB.webp",
     "attributes": {
       "health": 3,
       "speed": 4
@@ -152,7 +152,7 @@
     "baseCounterAttack": 2,
     "rarity": "Limited",
     "setId": "base_set",
-    "imageUrl": "https://example.com/card8.webp",
+    "imageUrl": "T_soviet_infantry_x.webp",
     "attributes": {
       "health": 6,
       "speed": 5
@@ -172,7 +172,7 @@
     "baseCounterAttack": 0,
     "rarity": "Standard",
     "setId": "base_set",
-    "imageUrl": "https://example.com/card9.webp",
+    "imageUrl": "SovietBasicB.webp",
     "attributes": {
       "health": 4,
       "speed": 2
@@ -192,7 +192,7 @@
     "baseCounterAttack": 3,
     "rarity": "Elite",
     "setId": "base_set",
-    "imageUrl": "https://example.com/card10.webp",
+    "imageUrl": "T_t_80_light_tank.webp",
     "attributes": {
       "health": 10,
       "speed": 1
