@@ -8,7 +8,7 @@ namespace Kardx.UI.Components
 {
     using Card = Kardx.Core.Card;
 
-    public class BattlefieldDropZone : MonoBehaviour, IDropHandler
+    public class CardSlot : MonoBehaviour, IDropHandler
     {
         [SerializeField]
         private Image highlightImage;

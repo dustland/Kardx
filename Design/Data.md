@@ -18,39 +18,37 @@ Each card is defined by a static type that serves as a blueprint for all of its 
 public class CardType
 {
     public string Id; // Unique identifier (GUID or slug)
-    public string NameKey; // Localization key for the card name
-    public string DescriptionKey; // Localization key for the card description
-    public string Category; // e.g., Unit, Order, Countermeasure, Headquarters
+    public string Title; // Card title
+    public string Description; // Card description
+    public string Category; // e.g., Unit, Order, Countermeasure, Headquarter
     public string Subtype; // Archetype (e.g., Warrior, Mage)
     public int DeploymentCost; // Resource cost to play the card onto the battlefield
     public int OperationCost; // Resource cost to use the card's abilities or actions
-    public int Health; // Base health of the card
-    public int Attack; // Attack power of the card
-    public int CounterAttack; // Power used for counterattacks
-    public int Rarity; // e.g., Common = 1, Rare = 2, Epic = 3, Legendary = 4
+    public int BaseDefence; // Base defence of the card
+    public int BaseAttack; // Base attack power of the card
+    public int BaseCounterAttack; // Power used for counterattacks
+    public CardRarity Rarity; // e.g., Standard = 1, Limited = 2, Special = 3, Elite = 4
     public string SetId; // Card edition or set identifier
     public string ImageUrl; // Optimized WebP image URL with size metadata
-    public Dictionary<string, int> Attributes; // Additional base attributes (e.g., health, speed)
-    public List<AbilityDefinition> Abilities; // Ability definitions associated with the card
+    public Dictionary<string, int> Attributes; // Additional base attributes (e.g., defence, speed)
+    public List<AbilityType> Abilities; // Ability definitions associated with the card
 }
 ```
 
 ### Card Instance
 
-A card instance represents a live card in the system—whether in a deck, hand, or on the battlefield. In addition to linking back to the static definition, the instance maintains dynamic state such as current level, modifiers, and computed attributes.
+A card instance represents a live card in the system—whether in a deck, hand, or on the battlefield. In addition to linking back to the static definition, the instance maintains dynamic state such as current defence value, modifiers, and computed attributes.
 
 ```cs
 public class Card
 {
     public Guid InstanceId;        // Unique instance identifier
     public CardType CardType;      // Reference to the static card definition
-    public int Level;
-    public int Experience;
-    public string OwnerId;
-    public string ControllerId;
+    public bool FaceDown;         // Whether the card is hidden
     public List<Modifier> Modifiers; // Active temporary modifiers (buffs/debuffs)
     public Dictionary<string, int> DynamicAttributes; // Computed attributes (from buffs, equipment, etc.)
-    public int Health; // Current health of the card
+    public int CurrentDefence;    // Current defence value
+    public string CurrentAbilityId; // Current applied ability
 }
 ```
 
@@ -63,8 +61,8 @@ public class Modifier {
     public string SourceCardId;  // Identifier for the card that applied the modifier
     public int RemainingTurns;   // Number of turns the modifier will last
     public int Value;            // The value of the modifier (e.g., +2 attack)
-    public string Attribute;     // The attribute being modified (e.g., "attack", "defense")
-    public ModifierType Type;    // Type of modifier (e.g., Buff, Debuff)
+    public string Attribute;     // The attribute being modified (e.g., "attack", "defence")
+    public ModifierType Type;    // Type of modifier (e.g., Buff, Debuff, Status)
 
     public bool IsActive() {
         // Determine if the modifier is currently active based on conditions
@@ -84,14 +82,14 @@ public class Modifier {
 
 Card abilities are defined as data, enabling designers to adjust functionality without code changes. Abilities include triggers, costs, visual effects, and preconditions.
 
-### Ability Definition
+### Ability Type
 
 ```cs
-public class AbilityDefinition
+public class AbilityType
 {
     public string Id;          // Unique ability identifier (e.g., "ambush")
     public string Trigger;     // Event that activates the ability (e.g., "onDeployment")
-    public string Category;    // Ability type (e.g., "tactic", "passive")
+    public AbilityCategory Category;    // Ability type (e.g., "tactic", "passive")
     public int Cost;           // Resource cost to activate
     public string Target;      // Targeting scope (e.g., "enemy", "ally", "self")
     public EffectDefinition Effect; // Effect to apply when triggered
@@ -101,7 +99,7 @@ public class AbilityDefinition
 
 public class Condition
 {
-    public string Type;    // Condition type (e.g., "zone", "healthThreshold")
+    public string Type;    // Condition type (e.g., "zone", "defenceThreshold")
     public string Value;   // Condition value (e.g., "forest", "50")
     public string Operator; // Optional comparison operator for numeric conditions
 }
@@ -133,7 +131,7 @@ You can also define custom effect types by extending the `EffectDefinition` clas
 ```cs
 public class EffectDefinition
 {
-    public string Type;         // Effect type (e.g., "damage", "heal", "buff")
+    public EffectCategory Type;         // Effect type (e.g., "damage", "heal", "buff")
     public string Target;       // "single", "area", "self"
     public string Formula;      // Mathematical formula for effect calculation
     public List<EffectAttribute> Attributes; // Parameters used in the formula
@@ -155,7 +153,7 @@ The following is an example of an ambush ability:
 {
   "type": "damage",
   "target": "single",
-  "formula": "base + (caster.magic * multiplier) + (caster.attack * bonusFactor)",
+  "formula": "base + (caster.stealth * multiplier) + (caster.baseAttack * bonusFactor)",
   "attributes": [
     { "name": "base", "value": 5 },
     { "name": "multiplier", "value": 1.5 },
@@ -184,7 +182,7 @@ public class RuleEngine
     public int CalculateEffect(EffectDefinition effect, Card caster)
     {
         // Parse the calculation expression (e.g., using an expression parser)
-        // Evaluate "base + (caster.magic * multiplier) + (caster.attack * bonusFactor)"
+        // Evaluate "base + (caster.stealth * multiplier) + (caster.baseAttack * bonusFactor)"
         // Return the computed numeric result.
     }
 
@@ -200,7 +198,7 @@ public class RuleEngine
         // Return true if the card is permitted to use this ability.
     }
 
-    public void TriggerAbility(AbilityDefinition ability, Card caster, Card target)
+    public void TriggerAbility(AbilityType ability, Card caster, Card target)
     {
         if (ValidateAbilityConditions(ability.Conditions, caster))
         {
@@ -217,13 +215,13 @@ Below is an updated example showing how to define and trigger an ambush ability 
 
 ```cs
 // Define a ambush ability with dynamic scaling
-var ambushAbility = new AbilityDefinition {
+var ambushAbility = new AbilityType {
     Id = "ambush",
-    Trigger = "onDeployment",
+    Trigger = TriggerType.OnDeployment,
     Cost = 2,
     Target = "enemy",
     Effect = new EffectDefinition {
-        Type = "damage",
+        Type = EffectCategory.Damage,
         Formula = "base + (caster.stealth * multiplier)",
         Attributes = new List<EffectAttribute> {
             new EffectAttribute { Name = "base", Value = 3 },
@@ -255,9 +253,9 @@ The board state manages separate game zones for each player and shared game area
 public struct PlayerState {
     public Stack<Card> Deck;          // Private draw pile (random access via shuffle)
     public List<Card> Hand;           // Current playable cards (max 10)
-    public Dictionary<Position, Card> Battlefield; // Played cards with positioning
+    public Card[] Battlefield;        // Fixed size array of played cards (5 slots)
     public Queue<Card> DiscardPile;   // Public graveyard (last-in ordering)
-    public int Credits;          // Credits available for the player to spend
+    public int Credits;               // Credits available for the player to spend
     public Card Headquarter;          // Special card representing the player's headquarter
 }
 
@@ -279,10 +277,9 @@ Key considerations:
 
 1. Separate zones per player (deck/hand/battlefield/discard)
 2. Clear distinction between player-specific and shared zones
-3. Added hand zone with maximum size constraint
+3. Fixed battlefield size of 5 slots per player
 4. Explicit exile zone for removed cards
-5. Positional battlefield with grid coordinates
-6. Transitional limbo zone for cards moving between areas.
+5. Transitional limbo zone for cards moving between areas
 
 The concept of a "Limbo" zone in card games typically refers to a temporary state where cards are in transition between different zones or states. This can be useful for handling complex game mechanics where cards need to be temporarily removed from play but are not yet in their final destination zone.
 
@@ -294,7 +291,7 @@ var board = new BoardState {
         ["P1"] = new PlayerState {
             Deck = new Stack<Card>(p1Deck),
             Hand = new List<Card>(),
-            Battlefield = new Dictionary<Position, Card>(),
+            Battlefield = new Card[] { null, null, null, null, null },
             DiscardPile = new Queue<Card>(),
             Credits = 10,
             Headquarter = p1Headquarter
@@ -309,74 +306,65 @@ var board = new BoardState {
 };
 ```
 
-## Battle System
-
-The battle system is straightforward, with players taking turns to perform actions. Each player can spend credits to move cards, attack, or enhance their cards. The game is won when a player's headquarters card, which is always on the battlefield, is reduced to zero health.
+## Additional Enumerations
 
 ```cs
-public class BattleManager {
-    public BoardState Board { get; private set; }
-    public int TurnNumber { get; private set; }
-    public string CurrentTurnPlayerId { get; private set; }
+public enum CardCategory
+{
+    Unit, // Represents a deployable unit
+    Order, // Trigger a one-time effect and are then discarded
+    Countermeasure, // can be activated to cancel out opponent Orders
+    Headquarter, // Headquarter is a special card that can be deployed on the battlefield and is not a unit
+}
 
-    public void StartBattle(Player player1, Player player2) {
-        // Initializes the board state and sets up the initial conditions for the battle.
-        CurrentTurnPlayerId = player1.Id; // Start with player 1
-        Board.Players[player1.Id].Credits = 10; // Example starting credits
-        Board.Players[player2.Id].Credits = 10; // Example starting credits
-    }
+public enum CardRarity
+{
+    Standard = 1,
+    Limited = 2,
+    Special = 3,
+    Elite = 4,
+}
 
-    public bool DeployCard(Card card) {
-        var playerState = Board.Players[CurrentTurnPlayerId];
-        if (playerState.Credits >= card.CardType.DeploymentCost) {
-            playerState.Credits -= card.CardType.DeploymentCost;
-            playerState.Hand.Remove(card);
-            playerState.Battlefield.Add(new Position(), card); // Add card to battlefield
-            return true;
-        }
-        return false; // Not enough credits
-    }
+public enum ZoneType
+{
+    Deck,
+    Hand,
+    Battlefield,
+    DiscardPile,
+    Exile,
+    Limbo,
+}
 
-    public bool OperateCard(Card card) {
-        var playerState = Board.Players[CurrentTurnPlayerId];
-        if (playerState.Credits >= card.CardType.OperationCost) {
-            playerState.Credits -= card.CardType.OperationCost;
-            // Execute card's ability or action
-            ExecuteCardAbility(card);
-            return true;
-        }
-        return false; // Not enough credits
-    }
+public enum ModifierType
+{
+    Buff,
+    Debuff,
+    Status,
+}
 
-    private void ExecuteCardAbility(Card card) {
-        // Implement logic to execute the card's ability
-    }
+public enum AbilityCategory
+{
+    Tactic,
+    Passive,
+}
 
-    public void EndTurn() {
-        // Add credits for the current player, capped at 9.
-        Board.Players[CurrentTurnPlayerId].Credits = Math.Min(Board.Players[CurrentTurnPlayerId].Credits + 5, 9);
-        // Finalizes the current turn, processing any necessary end-of-turn effects.
-        CurrentTurnPlayerId = GetOpponentId(CurrentTurnPlayerId);
-        TurnNumber++;
-    }
+public enum EffectCategory
+{
+    Damage,
+    Heal,
+    Buff,
+    Debuff,
+    Draw,
+    Discard,
+}
 
-    private void ApplyCardEffects(Card source, Card target) {
-        // Implement logic to apply any effects triggered by moving the card
-    }
-
-    private int CalculateDamage(Card attacker, Card target) {
-        // Implement logic to calculate damage based on card attributes
-        return attacker.AttackPower; // Example calculation
-    }
-
-    private void CheckCardDestruction(Card card) {
-        if (card.Health <= 0) {
-            // Remove the card from the game state and apply any destruction effects.
-        }
-    }
-
-    private string GetOpponentId(string playerId) {
-        // Returns the ID of the opponent player based on the current player's ID.
-    }
+public enum TriggerType
+{
+    OnDeployment,
+    OnDeath,
+    OnTurnStart,
+    OnTurnEnd,
+    OnDamageDealt,
+    OnDamageTaken,
 }
 ```

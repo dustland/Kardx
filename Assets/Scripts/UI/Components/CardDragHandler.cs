@@ -75,7 +75,7 @@ namespace Kardx.UI.Components
 
             foreach (var hit in raycastResults)
             {
-                var dropZone = hit.gameObject.GetComponent<BattlefieldDropZone>();
+                var dropZone = hit.gameObject.GetComponent<CardSlot>();
                 if (dropZone != null)
                 {
                     dropZone.SetHighlight(dropZone.IsValidDropTarget(cardView.Card));
@@ -97,7 +97,7 @@ namespace Kardx.UI.Components
 
             foreach (var hit in raycastResults)
             {
-                var dropZone = hit.gameObject.GetComponent<BattlefieldDropZone>();
+                var dropZone = hit.gameObject.GetComponent<CardSlot>();
                 if (dropZone != null && dropZone.IsValidDropTarget(cardView.Card))
                 {
                     wasSuccessful = true;

@@ -9,9 +9,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 5735508668157805069}
-  - component: {fileID: 6326303621145413280}
+  - component: {fileID: 7750779048410510027}
   m_Layer: 5
-  m_Name: OperatorSlot
+  m_Name: CardSlot
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -36,7 +36,7 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 114.1124, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &6326303621145413280
+--- !u!114 &7750779048410510027
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -49,3 +49,4 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   highlightImage: {fileID: 0}
+  positionIndex: 0
