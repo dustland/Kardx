@@ -12,7 +12,7 @@ namespace Kardx.Core
     {
         private Board board;
         private readonly ILogger logger;
-        private readonly int startingHandSize = 2;
+        private readonly int startingHandSize = 4;
         private readonly int maxTurns = 50;
 
         // Public properties

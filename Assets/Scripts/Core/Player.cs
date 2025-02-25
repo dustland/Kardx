@@ -173,7 +173,11 @@ namespace Kardx.Core
             }
 
             // Spend credits first
-            credits -= card.DeploymentCost;
+            if (!SpendCredits(card.DeploymentCost))
+            {
+                logger?.Log($"[{playerId}] Cannot deploy card {card.Title} - insufficient credits");
+                return false;
+            }
 
             // Move card from hand to battlefield
             hand.Remove(card);

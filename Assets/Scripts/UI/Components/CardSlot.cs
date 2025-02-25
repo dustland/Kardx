@@ -13,7 +13,7 @@ namespace Kardx.UI.Components
         [SerializeField]
         private Image highlightImage;
         [SerializeField]
-        private int positionIndex; // 0-4 for the five positions
+        private int position; // 0-4 for the five positions
 
         private MatchView matchView;
 
@@ -52,7 +52,7 @@ namespace Kardx.UI.Components
 
         public void OnDrop(PointerEventData eventData)
         {
-            Debug.Log($"OnDrop called at position {positionIndex}");
+            Debug.Log($"OnDrop called at position {position}");
             var cardView = eventData.pointerDrag?.GetComponent<CardView>();
             if (cardView == null)
             {
@@ -60,13 +60,13 @@ namespace Kardx.UI.Components
                 return;
             }
 
-            if (matchView == null || !matchView.DeployCard(cardView.Card, positionIndex))
+            if (matchView == null || !matchView.DeployCard(cardView.Card, position))
             {
-                Debug.Log($"Failed to deploy card at position {positionIndex}");
+                Debug.Log($"Failed to deploy card at position {position}");
                 return;
             }
 
-            Debug.Log($"Card deployed successfully at position {positionIndex}");
+            Debug.Log($"Card deployed successfully at position {position}");
             cardView.transform.SetParent(transform);
             cardView.transform.localPosition = Vector3.zero;
             cardView.transform.localScale = Vector3.one;
@@ -84,9 +84,9 @@ namespace Kardx.UI.Components
         }
 
         // For editor setup
-        public void SetPositionIndex(int index)
+        public void SetPosition(int position)
         {
-            positionIndex = Mathf.Clamp(index, 0, 4);
+            this.position = Mathf.Clamp(position, 0, 4);
         }
     }
 }

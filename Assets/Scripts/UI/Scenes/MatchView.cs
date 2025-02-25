@@ -128,6 +128,11 @@ namespace Kardx.UI.Scenes
                 var slot = Instantiate(cardSlotPrefab, battlefieldArea);
                 slot.name = $"CardSlot{i + 1}";
                 battlefieldSlots[i] = slot.transform;
+                var cardSlot = slot.GetComponent<CardSlot>();
+                if (cardSlot != null)
+                {
+                    cardSlot.SetPosition(i);
+                }
             }
 
             // Create opponent's battlefield slots
@@ -136,6 +141,11 @@ namespace Kardx.UI.Scenes
                 var slot = Instantiate(cardSlotPrefab, opponentBattlefieldArea);
                 slot.name = $"OpponentCardSlot{i + 1}";
                 opponentBattlefieldSlots[i] = slot.transform;
+                var cardSlot = slot.GetComponent<CardSlot>();
+                if (cardSlot != null)
+                {
+                    cardSlot.SetPosition(i);
+                }
             }
         }
 
@@ -280,42 +290,74 @@ namespace Kardx.UI.Scenes
                 opponentCreditsText.text = $"Credits: {opponentState.Credits}";
             }
 
-            // Clear existing card UI elements
-            foreach (var cardUI in cardUIElements.Values)
+            // Clear only hand card UI elements, preserving battlefield cards
+            var cardsToPreserve = new HashSet<Card>();
+            foreach (var deployedCard in deployedCards.Values)
             {
-                Destroy(cardUI);
+                if (deployedCard != null && deployedCard.Card != null)
+                {
+                    cardsToPreserve.Add(deployedCard.Card);
+                }
             }
-            cardUIElements.Clear();
+            foreach (var deployedCard in opponentDeployedCards.Values)
+            {
+                if (deployedCard != null && deployedCard.Card != null)
+                {
+                    cardsToPreserve.Add(deployedCard.Card);
+                }
+            }
+
+            // Only destroy cards that aren't on the battlefield
+            foreach (var cardEntry in cardUIElements.ToList())
+            {
+                if (!cardsToPreserve.Contains(cardEntry.Key))
+                {
+                    Destroy(cardEntry.Value);
+                    cardUIElements.Remove(cardEntry.Key);
+                }
+            }
 
             // Update player's hand (bottom)
             var playerHand = playerState.Hand;
             for (int i = 0; i < playerHand.Count; i++)
             {
-                CreateHandCardUI(playerHand[i], handArea, i, true);
+                if (!cardUIElements.ContainsKey(playerHand[i]))
+                {
+                    CreateHandCardUI(playerHand[i], handArea, i, true);
+                }
             }
 
             // Update opponent's hand (top, face down)
             var opponentHand = opponentState.Hand;
             for (int i = 0; i < opponentHand.Count; i++)
             {
-                CreateHandCardUI(opponentHand[i], opponentHandArea, i, false);
+                if (!cardUIElements.ContainsKey(opponentHand[i]))
+                {
+                    CreateHandCardUI(opponentHand[i], opponentHandArea, i, false);
+                }
             }
 
             // Update player's battlefield (bottom)
+            var battlefield = playerState.Battlefield;
             for (int i = 0; i < battlefieldSlots.Length; i++)
             {
                 if (deployedCards.TryGetValue(i, out var cardView))
                 {
                     cardView.transform.SetParent(battlefieldSlots[i]);
+                    cardView.transform.localPosition = Vector3.zero;
+                    cardView.transform.localScale = Vector3.one;
                 }
             }
 
             // Update opponent's battlefield (top)
+            var opponentBattlefield = opponentState.Battlefield;
             for (int i = 0; i < opponentBattlefieldSlots.Length; i++)
             {
                 if (opponentDeployedCards.TryGetValue(i, out var cardView))
                 {
                     cardView.transform.SetParent(opponentBattlefieldSlots[i]);
+                    cardView.transform.localPosition = Vector3.zero;
+                    cardView.transform.localScale = Vector3.one;
                 }
             }
         }

@@ -118,6 +118,7 @@ namespace Kardx.UI.Components
             Debug.Log("OnDrag: raycastResults.Count = " + raycastResults.Count);
             foreach (var hit in raycastResults)
             {
+                Debug.Log("OnDrag: hit.gameObject.name = " + hit.gameObject.name);
                 var slot = hit.gameObject.GetComponent<CardSlot>();
                 if (slot != null)
                 {

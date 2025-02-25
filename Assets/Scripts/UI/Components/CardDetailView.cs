@@ -35,7 +35,7 @@ namespace Kardx.UI.Components
                 }
 
                 // Set up the background panel properties
-                backgroundPanel.color = new Color(0, 0, 0, 0.8f); // Semi-transparent black
+                backgroundPanel.color = new Color(0, 0, 0, 0.95f); // Semi-transparent black
             }
 
             // Ensure the panel blocks raycasts
