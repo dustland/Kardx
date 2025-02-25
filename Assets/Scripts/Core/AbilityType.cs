@@ -10,14 +10,14 @@ namespace Kardx.Core
         private string description;
         private int cost;
         private List<EffectType> effects = new();
-        private List<Condition> conditions = new();
+        private List<string> conditions = new();
 
         public string Id => id;
         public string Name => name;
         public string Description => description;
         public int Cost => cost;
         public IReadOnlyList<EffectType> Effects => effects;
-        public IReadOnlyList<Condition> Conditions => conditions;
+        public IReadOnlyList<string> Conditions => conditions;
 
         public AbilityType(string id, string name, string description, int cost)
         {
@@ -35,7 +35,7 @@ namespace Kardx.Core
             }
         }
 
-        public void AddCondition(Condition condition)
+        public void AddCondition(string condition)
         {
             if (condition != null)
             {
@@ -48,7 +48,7 @@ namespace Kardx.Core
             effects.Remove(effect);
         }
 
-        public void RemoveCondition(Condition condition)
+        public void RemoveCondition(string condition)
         {
             conditions.Remove(condition);
         }
@@ -69,7 +69,7 @@ namespace Kardx.Core
 
             foreach (var condition in conditions)
             {
-                clone.AddCondition(condition.Clone());
+                clone.AddCondition(condition);
             }
 
             return clone;

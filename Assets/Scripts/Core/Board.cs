@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Kardx.Utils.Logging;
+using Kardx.Utils;
 
 namespace Kardx.Core
 {
@@ -11,7 +11,7 @@ namespace Kardx.Core
         private List<GameEffect> activeEffects = new();
         private int turnNumber;
         private string currentPlayerId;
-
+        private ILogger logger;
         // Public properties
         public Player Player => players[0];
         public Player Opponent => players[1];
@@ -20,12 +20,13 @@ namespace Kardx.Core
         public Player CurrentPlayer =>
             currentPlayerId == players[0].Id ? players[0] : players[1];
 
-        public Board(Player player, Player opponent)
+        public Board(Player player, Player opponent, ILogger logger = null)
         {
             players[0] = player;
             players[1] = opponent;
             turnNumber = 1;
             currentPlayerId = player.Id;
+            this.logger = logger;
         }
 
         // Turn management

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Kardx.Core;
-using Kardx.Utils.Logging;
+using Kardx.Utils;
 using Newtonsoft.Json;
 
 namespace Kardx.Core
@@ -36,9 +36,9 @@ namespace Kardx.Core
             this.logger = logger;
         }
 
-        private List<Card> LoadPlayerDeck(string playerId)
+        private List<Card> LoadDeck()
         {
-            return DeckLoader.LoadDeck(playerId);
+            return CardLoader.LoadCards();
         }
 
         public void StartMatch(string player1Id, string player2Id)
@@ -47,11 +47,11 @@ namespace Kardx.Core
                 return;
 
             // Initialize players with their decks
-            var player1 = new Player(player1Id, LoadPlayerDeck(player1Id));
-            var player2 = new Player(player2Id, LoadPlayerDeck(player2Id));
+            var player1 = new Player(player1Id, LoadDeck(), logger);
+            var player2 = new Player(player2Id, LoadDeck(), logger);
 
             // Create new board with initialized players
-            board = new Board(player1, player2);
+            board = new Board(player1, player2, logger);
 
             IsMatchInProgress = true;
 

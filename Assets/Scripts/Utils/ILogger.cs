@@ -1,4 +1,4 @@
-namespace Kardx.Utils.Logging
+namespace Kardx.Utils
 {
     public interface ILogger
     {

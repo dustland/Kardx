@@ -139,6 +139,21 @@ namespace Kardx.Core
         {
             this.imageUrl = url;
         }
+
+        public void AddAbility(AbilityType ability)
+        {
+            abilities.Add(ability);
+        }
+
+        public void RemoveAbility(AbilityType ability)
+        {
+            abilities.Remove(ability);
+        }
+
+        public void ClearAbilities()
+        {
+            abilities.Clear();
+        }
     }
 
     // Helper class for serializing dictionaries

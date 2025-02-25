@@ -35,6 +35,7 @@ namespace Kardx.UI.Components
 
         public void OnBeginDrag(PointerEventData eventData)
         {
+            Debug.Log("OnBeginDrag");
             if (cardView == null || cardView.Card == null)
             {
                 Debug.Log("Cannot drag: card or cardView is null");
@@ -53,6 +54,7 @@ namespace Kardx.UI.Components
             transform.SetParent(canvas.transform);
             canvasGroup.blocksRaycasts = false; // Disable raycast blocking during drag
             OnDragStarted?.Invoke();
+            Debug.Log("OnBeginDrag: cardView.Card.Title = " + cardView.Card.Title);
         }
 
         public void OnDrag(PointerEventData eventData)
@@ -72,13 +74,13 @@ namespace Kardx.UI.Components
             // Highlight potential drop zones
             var raycastResults = new System.Collections.Generic.List<RaycastResult>();
             EventSystem.current.RaycastAll(eventData, raycastResults);
-
+            Debug.Log("OnDrag: raycastResults.Count = " + raycastResults.Count);
             foreach (var hit in raycastResults)
             {
-                var dropZone = hit.gameObject.GetComponent<CardSlot>();
-                if (dropZone != null)
+                var slot = hit.gameObject.GetComponent<CardSlot>();
+                if (slot != null)
                 {
-                    dropZone.SetHighlight(dropZone.IsValidDropTarget(cardView.Card));
+                    slot.SetHighlight(slot.IsValidDropTarget(cardView.Card));
                     break;
                 }
             }

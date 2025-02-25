@@ -1,7 +1,7 @@
 [
   {
     "id": "550e8400-e29b-41d4-a716-446655440000",
-    "name": "Infantry Squad",
+    "title": "Infantry Squad",
     "description": "A basic infantry unit with versatile combat capabilities.",
     "category": "Unit",
     "subtype": "Infantry",
@@ -21,7 +21,7 @@
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440001",
-    "name": "Artillery Battery",
+    "title": "Artillery Battery",
     "description": "A long-range artillery unit capable of devastating attacks.",
     "category": "Unit",
     "subtype": "Artillery",
@@ -41,7 +41,7 @@
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440002",
-    "name": "Tank Division",
+    "title": "Tank Division",
     "description": "A heavily armored unit with high attack and defense.",
     "category": "Unit",
     "subtype": "Armor",
@@ -61,7 +61,7 @@
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440003",
-    "name": "Medic Team",
+    "title": "Medic Team",
     "description": "A support unit that heals allied units.",
     "category": "Unit",
     "subtype": "Support",
@@ -81,7 +81,7 @@
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440004",
-    "name": "Paratroopers",
+    "title": "Paratroopers",
     "description": "A fast-moving infantry unit that can deploy behind enemy lines.",
     "category": "Unit",
     "subtype": "Infantry",
@@ -101,7 +101,7 @@
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440005",
-    "name": "Anti-Tank Gun",
+    "title": "Anti-Tank Gun",
     "description": "A specialized unit designed to counter armored threats.",
     "category": "Unit",
     "subtype": "Artillery",
@@ -121,7 +121,7 @@
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440006",
-    "name": "Recon Plane",
+    "title": "Recon Plane",
     "description": "A reconnaissance unit that provides battlefield intelligence.",
     "category": "Unit",
     "subtype": "Air",
@@ -141,7 +141,7 @@
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440007",
-    "name": "Fighter Squadron",
+    "title": "Fighter Squadron",
     "description": "An air unit specialized in dogfighting and air superiority.",
     "category": "Unit",
     "subtype": "Air",
@@ -161,7 +161,7 @@
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440008",
-    "name": "Supply Convoy",
+    "title": "Supply Convoy",
     "description": "A logistics unit that provides resources to allied units.",
     "category": "Unit",
     "subtype": "Support",
@@ -181,7 +181,7 @@
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440009",
-    "name": "Heavy Tank",
+    "title": "Heavy Tank",
     "description": "A heavily armored unit with devastating firepower.",
     "category": "Unit",
     "subtype": "Armor",

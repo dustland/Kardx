@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Kardx.Utils.Logging
+namespace Kardx.Utils
 {
     public class UnityLogger : ILogger
     {

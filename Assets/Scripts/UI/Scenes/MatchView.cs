@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Kardx.Core;
-using Kardx.Utils.Logging;
+using Kardx.Utils;
 using Kardx.UI.Components;
 using TMPro;
 using UnityEngine;

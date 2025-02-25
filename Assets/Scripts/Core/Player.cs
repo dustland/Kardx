@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Kardx.Utils.Logging;
+using Kardx.Utils;
 
 namespace Kardx.Core
 {
