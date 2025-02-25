@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Kardx.Core;
+using Kardx.Utils;
 using Kardx.UI.Components;
 using Newtonsoft.Json;
 using UnityEngine;
@@ -30,90 +31,48 @@ namespace Kardx.UI.Scenes
         [SerializeField]
         private GameObject cardPrefab; // Prefab for displaying a single card
 
+        [SerializeField]
+        private CardDetailView cardDetailView; // Reference to the CardDetailView
+
         private List<CardType> cards = new();
-        private List<AbilityType> abilities = new();
+
+        private void Awake()
+        {
+            // First try to use the serialized reference
+            if (cardDetailView == null)
+            {
+                // Try to find CardPanel in the scene
+                var cardPanel = GameObject.Find("CardPanel");
+                if (cardPanel != null)
+                {
+                    cardDetailView = cardPanel.GetComponent<CardDetailView>();
+                    Debug.Log("[CardCollectionView] Found CardDetailView on CardPanel");
+                }
+
+                // If still not found, try finding it anywhere in the scene
+                if (cardDetailView == null)
+                {
+                    cardDetailView = FindObjectOfType<CardDetailView>(true);
+                    if (cardDetailView == null)
+                    {
+                        Debug.LogError("[CardCollectionView] CardDetailView not found in scene. Please ensure CardPanel has CardDetailView component.");
+                        return;
+                    }
+                }
+            }
+
+            Debug.Log($"[CardCollectionView] Found CardDetailView on: {cardDetailView.gameObject.name}");
+            CardView.InitializeSharedDetailView(cardDetailView);
+
+            // Make sure the CardPanel is initially inactive
+            cardDetailView.gameObject.SetActive(false);
+        }
 
         private void Start()
         {
-            LoadCards();
-            LoadAbilities();
+            cards = CardLoader.LoadCardTypes();
             DisplayCards();
         }
-
-        private void LoadCards()
-        {
-            string filePath = Path.Combine(Application.streamingAssetsPath, "cards.json");
-            if (File.Exists(filePath))
-            {
-                try
-                {
-                    string jsonData = File.ReadAllText(filePath);
-                    var jsonCards = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(
-                        jsonData
-                    );
-
-                    cards = new List<CardType>();
-                    foreach (var jsonCard in jsonCards)
-                    {
-                        var cardType = new CardType();
-                        cardType.Initialize(
-                            id: jsonCard["id"].ToString(),
-                            title: jsonCard["title"].ToString(),
-                            description: jsonCard["description"].ToString(),
-                            category: (CardCategory)
-                                Enum.Parse(typeof(CardCategory), jsonCard["category"].ToString()),
-                            subtype: jsonCard["subtype"].ToString(),
-                            deploymentCost: Convert.ToInt32(jsonCard["deploymentCost"]),
-                            operationCost: Convert.ToInt32(jsonCard["operationCost"]),
-                            baseDefence: Convert.ToInt32(jsonCard["baseDefence"]),
-                            baseAttack: Convert.ToInt32(jsonCard["baseAttack"]),
-                            baseCounterAttack: Convert.ToInt32(jsonCard["baseCounterAttack"]),
-                            rarity: (CardRarity)
-                                Enum.Parse(typeof(CardRarity), jsonCard["rarity"].ToString()),
-                            setId: jsonCard["setId"].ToString()
-                        );
-                        // Set the imageUrl from the JSON data
-                        if (jsonCard.ContainsKey("imageUrl"))
-                        {
-                            cardType.SetImageUrl(jsonCard["imageUrl"].ToString());
-                        }
-                        cards.Add(cardType);
-                    }
-
-                    Debug.Log($"Successfully loaded {cards.Count} cards");
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogError($"Error loading cards: {ex.Message}\n{ex.StackTrace}");
-                    cards = new List<CardType>();
-                }
-            }
-            else
-            {
-                Debug.LogError($"Cards JSON file not found at path: {filePath}");
-                cards = new List<CardType>();
-            }
-        }
-
-        private void LoadAbilities()
-        {
-            string filePath = Path.Combine(Application.streamingAssetsPath, "abilities.json");
-            if (File.Exists(filePath))
-            {
-                string jsonData = File.ReadAllText(filePath);
-                AbilityListWrapper wrapper = JsonUtility.FromJson<AbilityListWrapper>(
-                    "{\"abilities\":" + jsonData + "}"
-                );
-
-                abilities = wrapper.abilities;
-                Debug.Log("Loaded " + abilities.Count + " abilities");
-            }
-            else
-            {
-                Debug.LogError("Abilities JSON file not found!");
-            }
-        }
-
         private void DisplayCards()
         {
             if (cardContainer == null || cardPrefab == null)

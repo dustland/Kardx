@@ -20,9 +20,16 @@ namespace Kardx.UI.Components
         [SerializeField]
         private CardType cardType;
 
-        [Header("UI Elements")]
+        [Header("Core Components")]
         [SerializeField]
-        private Image cardImage;
+        private Image backgroundImage; // The main card background/frame
+
+        [SerializeField]
+        private Transform contentRoot; // Parent for all card content
+
+        [Header("Content Elements")]
+        [SerializeField]
+        private Image artworkImage; // The card's artwork
 
         [SerializeField]
         private TextMeshProUGUI nameText;
@@ -44,29 +51,51 @@ namespace Kardx.UI.Components
 
         [SerializeField]
         private TextMeshProUGUI abilityText;
-
         [SerializeField]
         private TextMeshProUGUI abilityDescriptionText;
-
+        [Header("Effects")]
         [SerializeField]
         private GameObject highlightEffect;
-
-        [Header("Components")]
-        [SerializeField]
         private CardDragHandler dragHandler;
-
-        [Header("Animation")]
-        [SerializeField]
-        private Animator animator;
-
+        private CanvasGroup canvasGroup;
         private bool isDraggable = true;
-        private bool isDragging = false; // Track if we're currently dragging
+        private bool isDragging = false;
+
+        private static CardDetailView sharedDetailView;
+
+        public static void InitializeSharedDetailView(CardDetailView detailView)
+        {
+            sharedDetailView = detailView;
+            Debug.Log("[CardView] Initialized shared CardDetailView reference");
+        }
 
         public Card Card => card;
         public CardType CardType => cardType;
 
         private void Awake()
         {
+            // Ensure we have the basic required components
+            if (GetComponent<RectTransform>() == null)
+            {
+                gameObject.AddComponent<RectTransform>();
+            }
+
+            // The main Image component should be on this GameObject
+            backgroundImage = GetComponent<Image>();
+            if (backgroundImage == null)
+            {
+                backgroundImage = gameObject.AddComponent<Image>();
+            }
+            backgroundImage.raycastTarget = true;
+
+            // Get or add CanvasGroup for drag opacity
+            canvasGroup = GetComponent<CanvasGroup>();
+            if (canvasGroup == null)
+            {
+                canvasGroup = gameObject.AddComponent<CanvasGroup>();
+            }
+
+            // Get drag handler
             dragHandler = GetComponent<CardDragHandler>();
             if (dragHandler != null)
             {
@@ -74,20 +103,33 @@ namespace Kardx.UI.Components
                 dragHandler.OnDragEnded += (success) =>
                 {
                     isDragging = false;
-                    // Small delay to ensure click doesn't fire immediately after drag
                     if (success)
                     {
                         CancelInvoke(nameof(ShowDetail));
                     }
                 };
             }
+
+            Debug.Log($"[CardView] Initialized {gameObject.name} - Image: {backgroundImage != null}, " +
+                     $"RaycastTarget: {backgroundImage.raycastTarget}, " +
+                     $"CanvasGroup: {canvasGroup != null}, " +
+                     $"DragHandler: {dragHandler != null}");
         }
 
-        private void Start()
+        public void OnPointerClick(PointerEventData eventData)
         {
-            if (dragHandler == null)
+            Debug.Log($"[CardView] OnPointerClick on {gameObject.name} (isDragging: {isDragging}, EventCamera: {eventData.enterEventCamera?.name}, PointerPress: {eventData.pointerPress?.name})");
+
+            // Only handle the click if this GameObject is the actual target
+            if (eventData.pointerPress != gameObject)
             {
-                dragHandler = GetComponent<CardDragHandler>();
+                Debug.Log("[CardView] Ignoring click as it's not directly on this card");
+                return;
+            }
+
+            if (!isDragging)
+            {
+                ShowDetail();
             }
         }
 
@@ -183,7 +225,7 @@ namespace Kardx.UI.Components
 
         private void LoadCardImage()
         {
-            if (cardImage == null || cardType == null)
+            if (artworkImage == null || cardType == null)
             {
                 Debug.LogWarning("[CardView] Card image component or card type is missing");
                 return;
@@ -207,8 +249,8 @@ namespace Kardx.UI.Components
 
                 if (sprite != null)
                 {
-                    cardImage.sprite = sprite;
-                    cardImage.preserveAspect = true;
+                    artworkImage.sprite = sprite;
+                    artworkImage.preserveAspect = true;
                     Debug.Log($"[CardView] Successfully loaded image for {cardType.Title}");
                 }
                 else
@@ -219,30 +261,6 @@ namespace Kardx.UI.Components
             catch (Exception e)
             {
                 Debug.LogError($"[CardView] Error loading image for {cardType.Title}: {e.Message}");
-            }
-        }
-
-        public void PlayDeployAnimation()
-        {
-            if (animator != null)
-            {
-                animator.SetTrigger("Deploy");
-            }
-        }
-
-        public void PlayAttackAnimation()
-        {
-            if (animator != null)
-            {
-                animator.SetTrigger("Attack");
-            }
-        }
-
-        public void PlayDamageAnimation()
-        {
-            if (animator != null)
-            {
-                animator.SetTrigger("TakeDamage");
             }
         }
 
@@ -279,43 +297,39 @@ namespace Kardx.UI.Components
             UpdateCardView();
         }
 
-        public void OnPointerClick(PointerEventData eventData)
-        {
-            Debug.Log("OnPointerClick (isDragging: " + isDragging + ")");
-            if (!isDragging)
-            {
-                // Add a small delay to prevent accidental clicks during drag
-                Invoke(nameof(ShowDetail), 0.1f);
-            }
-        }
-
         public void ShowDetail()
         {
-            Debug.Log("[CardView] Showing card detail view" + (isDragging ? " (dragging)" : ""));
+            Debug.Log("[CardView] Starting ShowDetail method");
             if (isDragging)
             {
                 Debug.Log("[CardView] is dragging, not showing detail");
-                return; // Don't show detail if we're dragging
+                return;
             }
-            // Find CardDetailView even if inactive
-            var cardDetailView = FindObjectOfType<CardDetailView>(true);
 
-            if (cardDetailView != null)
+            Debug.Log($"[CardView] SharedDetailView is {(sharedDetailView != null ? "not null" : "null")}");
+            if (sharedDetailView != null)
             {
-                Debug.Log("[CardView] Found card detail view");
+                Debug.Log("[CardView] Using shared card detail view");
                 if (card != null)
                 {
-                    cardDetailView.Show(card);
+                    Debug.Log($"[CardView] Showing card: {card.Title}");
+                    sharedDetailView.Show(card);
                 }
                 else if (cardType != null)
                 {
-                    cardDetailView.Show(cardType);
+                    Debug.Log($"[CardView] Showing cardType: {cardType.Title}");
+                    sharedDetailView.Show(cardType);
+                }
+                else
+                {
+                    Debug.LogWarning("[CardView] Both card and cardType are null");
                 }
             }
             else
             {
-                Debug.LogWarning("[CardView] No CardDetailView found in scene");
+                Debug.LogWarning("[CardView] No shared CardDetailView has been initialized. Call CardView.InitializeSharedDetailView first.");
             }
+            Debug.Log("[CardView] ShowDetail method completed");
         }
 
         private void OnDestroy()
@@ -325,6 +339,15 @@ namespace Kardx.UI.Components
                 dragHandler.OnDragStarted -= () => isDragging = true;
                 dragHandler.OnDragEnded -= (success) => isDragging = false;
             }
+        }
+
+        // Add this method to test if the GameObject is properly set up for UI interaction
+        private void OnEnable()
+        {
+            Debug.Log($"[CardView] Card enabled: {gameObject.name}. " +
+                     $"Active in hierarchy: {gameObject.activeInHierarchy}, " +
+                     $"Layer: {gameObject.layer}, " +
+                     $"Canvas: {GetComponentInParent<Canvas>()?.name ?? "None"}");
         }
     }
 }

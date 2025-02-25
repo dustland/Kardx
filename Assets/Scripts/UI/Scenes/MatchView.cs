@@ -75,8 +75,42 @@ namespace Kardx.UI.Scenes
         private Dictionary<int, CardView> deployedCards = new Dictionary<int, CardView>();
         private Dictionary<int, CardView> opponentDeployedCards = new Dictionary<int, CardView>();
 
+        [SerializeField]
+        private CardDetailView cardDetailView; // Reference to the CardDetailView
+
+        private List<CardType> cards = new();
+
         private void Awake()
         {
+            // First try to use the serialized reference
+            if (cardDetailView == null)
+            {
+                // Try to find CardPanel in the scene
+                var cardPanel = GameObject.Find("CardPanel");
+                if (cardPanel != null)
+                {
+                    cardDetailView = cardPanel.GetComponent<CardDetailView>();
+                    Debug.Log("[CardCollectionView] Found CardDetailView on CardPanel");
+                }
+
+                // If still not found, try finding it anywhere in the scene
+                if (cardDetailView == null)
+                {
+                    cardDetailView = FindObjectOfType<CardDetailView>(true);
+                    if (cardDetailView == null)
+                    {
+                        Debug.LogError("[CardCollectionView] CardDetailView not found in scene. Please ensure CardPanel has CardDetailView component.");
+                        return;
+                    }
+                }
+            }
+
+            Debug.Log($"[CardCollectionView] Found CardDetailView on: {cardDetailView.gameObject.name}");
+            CardView.InitializeSharedDetailView(cardDetailView);
+
+            // Make sure the CardPanel is initially inactive
+            cardDetailView.gameObject.SetActive(false);
+
             InitializeBattlefieldSlots();
         }
 
@@ -302,25 +336,52 @@ namespace Kardx.UI.Scenes
         private GameObject CreateCardUI(Card card, Transform parent, bool faceUp)
         {
             if (cardPrefab == null)
+            {
+                Debug.LogError("[MatchView] Card prefab is null");
                 return null;
+            }
 
             var cardGO = Instantiate(cardPrefab, parent);
-            var cardView = cardGO.GetComponent<CardView>();
-            if (cardView != null)
-            {
-                cardView.Initialize(card);
-                cardView.SetDraggable(faceUp);
+            Debug.Log($"[MatchView] Created card UI: {cardGO.name}, Parent: {parent.name}");
 
-                // For face down cards, hide the card details and show card back
-                if (!faceUp)
-                {
-                    var image = cardGO.GetComponent<Image>();
-                    if (image != null && cardBackSprite != null)
-                    {
-                        image.sprite = cardBackSprite;
-                    }
-                }
+            var cardView = cardGO.GetComponent<CardView>();
+            if (cardView == null)
+            {
+                Debug.LogError($"[MatchView] CardView component missing on prefab: {cardGO.name}");
+                return cardGO;
             }
+
+            // Ensure the card has required UI components
+            var rectTransform = cardGO.GetComponent<RectTransform>();
+            if (rectTransform == null)
+            {
+                Debug.LogError($"[MatchView] RectTransform missing on card: {cardGO.name}");
+                rectTransform = cardGO.AddComponent<RectTransform>();
+            }
+
+            var image = cardGO.GetComponent<Image>();
+            if (image == null)
+            {
+                Debug.LogError($"[MatchView] Image component missing on card: {cardGO.name}");
+                image = cardGO.AddComponent<Image>();
+            }
+            image.raycastTarget = true;
+
+            cardView.Initialize(card);
+            cardView.SetDraggable(faceUp);
+
+            // For face down cards, hide the card details and show card back
+            if (!faceUp && image != null && cardBackSprite != null)
+            {
+                image.sprite = cardBackSprite;
+            }
+
+            Debug.Log($"[MatchView] Card UI setup complete - Name: {cardGO.name}, " +
+                     $"Has CardView: {cardView != null}, " +
+                     $"Has Image: {image != null}, " +
+                     $"RaycastTarget: {image?.raycastTarget ?? false}, " +
+                     $"Parent: {parent.name}, " +
+                     $"Canvas: {cardGO.GetComponentInParent<Canvas>()?.name ?? "None"}");
 
             cardUIElements[card] = cardGO;
             return cardGO;
