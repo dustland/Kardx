@@ -136,19 +136,6 @@ namespace Kardx.Utils
             }
         }
 
-        public static List<Card> LoadCards()
-        {
-            var cards = new List<Card>();
-            var cardTypes = LoadCardTypes();
-
-            foreach (var cardType in cardTypes)
-            {
-                cards.Add(new Card(cardType));
-            }
-
-            return cards;
-        }
-
         private static List<CardType> CreateTestCardTypes()
         {
             var cardTypes = new List<CardType>();

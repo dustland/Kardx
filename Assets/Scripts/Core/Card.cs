@@ -9,6 +9,7 @@ namespace Kardx.Core
         private Guid instanceId; // Unique instance identifier
         private CardType cardType; // Reference to static card definition
         private bool faceDown; // Whether the card is hidden
+        private Faction ownerFaction; // The faction that owns this card
         private List<Modifier> modifiers = new(); // Active temporary modifiers
         private Dictionary<string, int> dynamicAttributes = new(); // Computed attributes
         private int currentDefence; // Current defence value
@@ -20,6 +21,7 @@ namespace Kardx.Core
         public AbilityType CurrentAbility =>
             cardType.Abilities.FirstOrDefault(a => a.Id == currentAbilityId);
         public bool FaceDown => faceDown;
+        public Faction OwnerFaction => ownerFaction;
         public IReadOnlyList<Modifier> Modifiers => modifiers;
         public IReadOnlyDictionary<string, int> DynamicAttributes => dynamicAttributes;
 
@@ -43,13 +45,26 @@ namespace Kardx.Core
         public string Description => cardType.Description;
 
         // Constructor
-        public Card(CardType cardType)
+        public Card(CardType cardType, Faction ownerFaction = Faction.Neutral)
         {
-            this.instanceId = Guid.NewGuid();
             this.cardType = cardType;
+            this.instanceId = Guid.NewGuid();
             this.currentDefence = cardType.BaseDefence;
+            this.faceDown = false; // Default to face up
+            this.ownerFaction = ownerFaction;
             this.currentAbilityId =
-                cardType.Abilities.Count > 0 ? cardType.Abilities[0].Id : string.Empty; // Check if Abilities is not empty
+                cardType.Abilities.Count > 0 ? cardType.Abilities[0].Id : string.Empty;
+        }
+
+        // Methods to control face-down state
+        public void SetFaceDown(bool isFaceDown)
+        {
+            this.faceDown = isFaceDown;
+        }
+
+        public void Flip()
+        {
+            this.faceDown = !this.faceDown;
         }
 
         // Modifier management

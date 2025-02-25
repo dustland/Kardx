@@ -8,6 +8,16 @@ namespace Kardx.Core
         Headquarter, // Headquarter is a special card that can be deployed on the battlefield and is not a unit
     }
 
+    public enum Faction
+    {
+        UnitedStates,    // American forces
+        SovietUnion,     // Soviet forces
+        BritishEmpire,   // British forces
+        ThirdReich,      // German forces
+        Empire,          // Japanese forces
+        Neutral          // For special cards or non-aligned cards
+    }
+
     public enum CardRarity
     {
         Standard = 1,

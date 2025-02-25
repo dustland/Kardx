@@ -36,19 +36,28 @@ namespace Kardx.Core
             this.logger = logger;
         }
 
-        private List<Card> LoadDeck()
+        private List<Card> LoadDeck(Faction ownerFaction)
         {
-            return CardLoader.LoadCards();
+            var cardTypes = CardLoader.LoadCardTypes();
+            var deck = new List<Card>();
+
+            foreach (var cardType in cardTypes)
+            {
+                // TODO: Add deck building rules here (e.g., card limits, faction restrictions)
+                deck.Add(new Card(cardType, ownerFaction));
+            }
+
+            return deck;
         }
 
-        public void StartMatch(string player1Id, string player2Id)
+        public void StartMatch(string player1Id, string player2Id, Faction player1Faction = Faction.SovietUnion, Faction player2Faction = Faction.UnitedStates)
         {
             if (IsMatchInProgress)
                 return;
 
-            // Initialize players with their decks
-            var player1 = new Player(player1Id, LoadDeck(), logger);
-            var player2 = new Player(player2Id, LoadDeck(), logger);
+            // Initialize players with their decks and factions
+            var player1 = new Player(player1Id, LoadDeck(player1Faction), player1Faction, logger);
+            var player2 = new Player(player2Id, LoadDeck(player2Faction), player2Faction, logger);
 
             // Create new board with initialized players
             board = new Board(player1, player2, logger);
@@ -58,13 +67,13 @@ namespace Kardx.Core
             // Draw starting hands
             for (int i = 0; i < startingHandSize; i++)
             {
-                var drawnCard = board.Player.DrawCard();
+                var drawnCard = board.Player.DrawCard(false);
                 if (drawnCard != null)
                 {
                     NotifyCardDrawn(drawnCard);
                 }
 
-                drawnCard = board.Opponent.DrawCard();
+                drawnCard = board.Opponent.DrawCard(true);
                 if (drawnCard != null)
                 {
                     NotifyCardDrawn(drawnCard);
@@ -98,7 +107,7 @@ namespace Kardx.Core
 
             // Get current player and start their turn
             var currentPlayer = GetCurrentPlayer();
-            var drawnCard = currentPlayer.DrawCard();
+            var drawnCard = currentPlayer.DrawCard(currentPlayer == board.Opponent);
             if (drawnCard != null)
             {
                 NotifyCardDrawn(drawnCard);

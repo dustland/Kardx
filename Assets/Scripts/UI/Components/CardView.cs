@@ -6,6 +6,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using Kardx.Core;
+using System.Collections.Generic;
 
 namespace Kardx.UI.Components
 {
@@ -23,9 +24,6 @@ namespace Kardx.UI.Components
         [Header("Core Components")]
         [SerializeField]
         private Image backgroundImage; // The main card background/frame
-
-        [SerializeField]
-        private Transform contentRoot; // Parent for all card content
 
         [Header("Content Elements")]
         [SerializeField]
@@ -53,6 +51,21 @@ namespace Kardx.UI.Components
         private TextMeshProUGUI abilityText;
         [SerializeField]
         private TextMeshProUGUI abilityDescriptionText;
+
+        [Header("Card Back")]
+        [SerializeField]
+        private Image cardBackOverlay; // Overlay image for face down state
+
+        private static readonly Dictionary<Faction, string> FactionCardBacks = new()
+        {
+            { Faction.UnitedStates, "CardBacks/BasicGermanB1" },
+            { Faction.SovietUnion, "CardBacks/SovietBasicB1" },
+            { Faction.BritishEmpire, "CardBacks/british_back" },
+            { Faction.ThirdReich, "CardBacks/german_back" },
+            { Faction.Empire, "CardBacks/japan_back" },
+            { Faction.Neutral, "CardBacks/neutral_back" }
+        };
+
         [Header("Effects")]
         [SerializeField]
         private GameObject highlightEffect;
@@ -110,6 +123,12 @@ namespace Kardx.UI.Components
                 };
             }
 
+            // Ensure card back overlay is initially inactive
+            if (cardBackOverlay != null)
+            {
+                cardBackOverlay.gameObject.SetActive(false);
+            }
+
             Debug.Log($"[CardView] Initialized {gameObject.name} - Image: {backgroundImage != null}, " +
                      $"RaycastTarget: {backgroundImage.raycastTarget}, " +
                      $"CanvasGroup: {canvasGroup != null}, " +
@@ -141,6 +160,19 @@ namespace Kardx.UI.Components
                 {
                     Debug.LogWarning("[CardView] No card data available for update");
                     return;
+                }
+
+                // Check if card is face down first
+                if (card != null && card.FaceDown)
+                {
+                    ShowCardBack();
+                    return;
+                }
+
+                // Hide card back overlay when face up
+                if (cardBackOverlay != null)
+                {
+                    cardBackOverlay.gameObject.SetActive(false);
                 }
 
                 // Get the active card data source (either Card or CardType)
@@ -315,8 +347,16 @@ namespace Kardx.UI.Components
                 Debug.Log("[CardView] Using shared card detail view");
                 if (card != null)
                 {
-                    Debug.Log($"[CardView] Showing card: {card.Title}");
-                    sharedDetailView.Show(card);
+                    if (card.FaceDown)
+                    {
+                        Debug.Log($"[CardView] The card {card.Title} is face down, not showing detail");
+                        return;
+                    }
+                    else
+                    {
+                        Debug.Log($"[CardView] Showing card: {card.Title}");
+                        sharedDetailView.Show(card);
+                    }
                 }
                 else if (cardType != null)
                 {
@@ -333,6 +373,33 @@ namespace Kardx.UI.Components
                 Debug.LogWarning("[CardView] No shared CardDetailView has been initialized. Call CardView.InitializeSharedDetailView first.");
             }
             Debug.Log("[CardView] ShowDetail method completed");
+        }
+
+        private void ShowCardBack()
+        {
+            if (cardBackOverlay != null && card != null)
+            {
+                // Load the appropriate card back sprite based on card's owner faction
+                string cardBackPath = FactionCardBacks.GetValueOrDefault(card.OwnerFaction, FactionCardBacks[Faction.Neutral]);
+                Sprite cardBackSprite = Resources.Load<Sprite>(cardBackPath);
+
+                if (cardBackSprite != null)
+                {
+                    cardBackOverlay.sprite = cardBackSprite;
+                    cardBackOverlay.gameObject.SetActive(true);
+                }
+                else
+                {
+                    Debug.LogWarning($"[CardView] Failed to load card back sprite for faction {card.OwnerFaction} at path: {cardBackPath}");
+                    // Load neutral back as fallback
+                    cardBackOverlay.sprite = Resources.Load<Sprite>(FactionCardBacks[Faction.Neutral]);
+                    cardBackOverlay.gameObject.SetActive(true);
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[CardView] Missing card back overlay image component or card is null");
+            }
         }
 
         private void OnDestroy()

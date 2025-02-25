@@ -20,6 +20,7 @@ namespace Kardx.Core
         private string playerId;
         private ILogger logger;
         private int credits;
+        private Faction faction;
 
         // Card collections
         private readonly List<Card> hand = new();
@@ -33,17 +34,19 @@ namespace Kardx.Core
         /// </summary>
         /// <param name="playerId">The player's ID.</param>
         /// <param name="initialDeck">The player's initial deck of cards.</param>
+        /// <param name="faction">The player's faction.</param>
         /// <param name="logger">The logger to use for logging messages.</param>
-        public Player(string playerId, List<Card> initialDeck, ILogger logger = null)
+        public Player(string playerId, List<Card> initialDeck, Faction faction = Faction.Neutral, ILogger logger = null)
         {
-            Initialize(playerId, initialDeck, logger);
+            Initialize(playerId, initialDeck, faction, logger);
         }
 
-        public void Initialize(string playerId, List<Card> initialDeck, ILogger logger = null)
+        public void Initialize(string playerId, List<Card> initialDeck, Faction faction = Faction.Neutral, ILogger logger = null)
         {
             this.playerId = playerId;
             this.logger = logger;
             this.credits = MAX_CREDITS;
+            this.faction = faction;
 
             // Initialize deck with initial cards
             foreach (var card in initialDeck)
@@ -57,6 +60,11 @@ namespace Kardx.Core
         /// Gets the player's ID.
         /// </summary>
         public string Id => playerId;
+
+        /// <summary>
+        /// Gets the player's faction.
+        /// </summary>
+        public Faction Faction => faction;
 
         /// <summary>
         /// Gets the player's hand of cards.
@@ -92,8 +100,9 @@ namespace Kardx.Core
         /// <summary>
         /// Draws a card from the deck and adds it to the player's hand.
         /// </summary>
+        /// <param name="faceDown">Whether the card should be drawn face-down.</param>
         /// <returns>The drawn card, or null if no cards could be drawn.</returns>
-        public Card DrawCard()
+        public Card DrawCard(bool faceDown = false)
         {
             if (hand.Count >= MAX_HAND_SIZE)
             {
@@ -110,6 +119,7 @@ namespace Kardx.Core
             }
 
             var card = deck.Pop();
+            card.SetFaceDown(faceDown);
             hand.Add(card);
             logger?.Log($"[{playerId}] Drew card: {card.Title}");
             return card;
@@ -179,8 +189,9 @@ namespace Kardx.Core
                 return false;
             }
 
-            // Move card from hand to battlefield
+            // Move card from hand to battlefield and make it face up
             hand.Remove(card);
+            card.SetFaceDown(false); // Card becomes visible when deployed
             battlefield[position] = card;
 
             logger?.Log($"[{playerId}] Deployed card {card.Title} to battlefield slot {position}");
