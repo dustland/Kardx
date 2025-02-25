@@ -321,6 +321,8 @@ Card definitions are stored in a structured format, ensuring consistency and fac
 }
 ```
 
+In the future, it will be essential to persist gameplay history to enhance player experience and analytics. This will allow tracking of player progress, achievements, and provide valuable insights for game balancing and improvements.
+
 ## Best Practices
 
 1. **Data Immutability:**
