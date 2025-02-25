@@ -14,6 +14,7 @@ namespace Kardx.UI.Components
         private Canvas canvas;
         private CardView cardView;
         private CanvasGroup canvasGroup;
+        private CardSlot lastHighlightedSlot; // Track the last highlighted slot
 
         public event Action OnDragStarted;
         public event Action<bool> OnDragEnded;
@@ -112,18 +113,30 @@ namespace Kardx.UI.Components
             );
             transform.position = canvas.transform.TransformPoint(pos);
 
+            // Clear previous highlight if we had one
+            if (lastHighlightedSlot != null)
+            {
+                lastHighlightedSlot.SetHighlight(false);
+                lastHighlightedSlot = null;
+            }
+
             // Highlight potential drop zones
             var raycastResults = new System.Collections.Generic.List<RaycastResult>();
             EventSystem.current.RaycastAll(eventData, raycastResults);
-            Debug.Log("OnDrag: raycastResults.Count = " + raycastResults.Count);
+
+            // Check all hits for a valid card slot
             foreach (var hit in raycastResults)
             {
-                Debug.Log("OnDrag: hit.gameObject.name = " + hit.gameObject.name);
                 var slot = hit.gameObject.GetComponent<CardSlot>();
                 if (slot != null)
                 {
-                    slot.SetHighlight(slot.IsValidDropTarget(cardView.Card));
-                    break;
+                    bool isValid = slot.IsValidDropTarget(cardView.Card);
+                    slot.SetHighlight(isValid);
+                    if (isValid)
+                    {
+                        lastHighlightedSlot = slot;
+                        break; // Break only after finding a valid slot
+                    }
                 }
             }
         }
@@ -132,6 +145,13 @@ namespace Kardx.UI.Components
         {
             if (originalParent == null)
                 return;
+
+            // Clear any remaining highlight
+            if (lastHighlightedSlot != null)
+            {
+                lastHighlightedSlot.SetHighlight(false);
+                lastHighlightedSlot = null;
+            }
 
             canvasGroup.blocksRaycasts = true;
 
