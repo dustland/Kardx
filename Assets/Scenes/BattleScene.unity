@@ -696,6 +696,18 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 4210494796478505206, guid: 618d06de69e214ceea2075debe4c55c6, type: 3}
+      propertyPath: m_Color.b
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4210494796478505206, guid: 618d06de69e214ceea2075debe4c55c6, type: 3}
+      propertyPath: m_Color.g
+      value: 0.172956
+      objectReference: {fileID: 0}
+    - target: {fileID: 4210494796478505206, guid: 618d06de69e214ceea2075debe4c55c6, type: 3}
+      propertyPath: m_Color.r
+      value: 0.23584908
+      objectReference: {fileID: 0}
     - target: {fileID: 6527893478445647135, guid: 618d06de69e214ceea2075debe4c55c6, type: 3}
       propertyPath: m_Name
       value: CardPanel

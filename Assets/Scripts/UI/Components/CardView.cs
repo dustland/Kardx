@@ -225,13 +225,14 @@ namespace Kardx.UI.Components
 
         private void LoadCardImage()
         {
-            if (artworkImage == null || cardType == null)
+            if (card == null && cardType == null)
             {
                 Debug.LogWarning("[CardView] Card image component or card type is missing");
                 return;
             }
 
-            string imageUrl = cardType.ImageUrl;
+            // Use the card's image URL if available, otherwise use the card type's image URL
+            string imageUrl = card != null ? card.ImageUrl : cardType.ImageUrl;
             if (string.IsNullOrEmpty(imageUrl))
             {
                 Debug.LogWarning($"[CardView] No image URL specified for card {cardType.Title}");
@@ -242,7 +243,7 @@ namespace Kardx.UI.Components
             {
                 // Remove file extension as Unity adds its own
                 string fileName = Path.GetFileNameWithoutExtension(imageUrl);
-                Debug.Log($"[CardView] Loading image for {cardType.Title} from: Cards/{fileName}");
+                Debug.Log($"[CardView] Loading image for {imageUrl}");
 
                 // Load sprite from Cards folder
                 Sprite sprite = Resources.Load<Sprite>($"Cards/{fileName}");
@@ -251,16 +252,16 @@ namespace Kardx.UI.Components
                 {
                     artworkImage.sprite = sprite;
                     artworkImage.preserveAspect = true;
-                    Debug.Log($"[CardView] Successfully loaded image for {cardType.Title}");
+                    Debug.Log($"[CardView] Successfully loaded image for {imageUrl}");
                 }
                 else
                 {
-                    Debug.LogError($"[CardView] Failed to load image for {cardType.Title} from Cards/{fileName}");
+                    Debug.LogError($"[CardView] Failed to load image from Cards/{fileName}");
                 }
             }
             catch (Exception e)
             {
-                Debug.LogError($"[CardView] Error loading image for {cardType.Title}: {e.Message}");
+                Debug.LogError($"[CardView] Error loading image for {imageUrl}: {e.Message}");
             }
         }
 

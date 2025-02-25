@@ -51,7 +51,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   highlightImage: {fileID: 0}
-  positionIndex: 0
+  position: 0
 --- !u!222 &6456407936292904980
 CanvasRenderer:
   m_ObjectHideFlags: 0
