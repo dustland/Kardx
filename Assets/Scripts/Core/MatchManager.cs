@@ -123,15 +123,24 @@ namespace Kardx.Core
         public bool CanDeployCard(Card card)
         {
             if (!IsMatchInProgress || card == null)
+            {
+                logger?.LogError("[MatchManager] Cannot deploy card: card is null");
                 return false;
+            }
 
             var currentPlayer = GetCurrentPlayer();
             if (currentPlayer == null)
+            {
+                logger?.LogError("[MatchManager] Cannot deploy card: current player is null");
                 return false;
+            }
+
+            // Count non-null slots in the battlefield instead of using Count
+            var occupiedSlots = currentPlayer.Battlefield.Count(c => c != null);
 
             return currentPlayer.Hand.Contains(card)
                 && currentPlayer.Credits >= card.DeploymentCost
-                && currentPlayer.Battlefield.Count < Player.BATTLEFIELD_SLOT_COUNT;
+                && occupiedSlots < Player.BATTLEFIELD_SLOT_COUNT;
         }
 
         public bool DeployCard(Card card, int position)

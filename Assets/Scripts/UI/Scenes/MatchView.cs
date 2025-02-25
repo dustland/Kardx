@@ -173,6 +173,7 @@ namespace Kardx.UI.Scenes
 
         private void HandleCardDrawn(Card card)
         {
+            Debug.Log("[MatchView] HandleCardDrawn: " + card.Title);
             UpdateUI(); // Refresh the entire UI
         }
 
@@ -185,7 +186,10 @@ namespace Kardx.UI.Scenes
         public bool CanDeployCard(Card card)
         {
             if (matchManager == null)
+            {
+                Debug.LogError("[MatchView] MatchManager is null");
                 return false;
+            }
 
             // Check game rules via match manager
             return matchManager.CanDeployCard(card);
@@ -335,6 +339,7 @@ namespace Kardx.UI.Scenes
 
         private GameObject CreateCardUI(Card card, Transform parent, bool faceUp)
         {
+            Debug.Log("[MatchView] Creating card UI: " + card.Title);
             if (cardPrefab == null)
             {
                 Debug.LogError("[MatchView] Card prefab is null");
@@ -350,6 +355,9 @@ namespace Kardx.UI.Scenes
                 Debug.LogError($"[MatchView] CardView component missing on prefab: {cardGO.name}");
                 return cardGO;
             }
+
+            // Initialize card data first, before any other setup
+            cardView.Initialize(card);
 
             // Ensure the card has required UI components
             var rectTransform = cardGO.GetComponent<RectTransform>();
@@ -367,7 +375,7 @@ namespace Kardx.UI.Scenes
             }
             image.raycastTarget = true;
 
-            cardView.Initialize(card);
+            // Set draggable state after initialization
             cardView.SetDraggable(faceUp);
 
             // For face down cards, hide the card details and show card back

@@ -20,9 +20,28 @@ namespace Kardx.UI.Components
 
         private void Awake()
         {
-            canvas = GetComponentInParent<Canvas>();
+            // Find Canvas by searching up through all parents
+            canvas = GetComponentInParent<Canvas>(true);
+            if (canvas == null)
+            {
+                Debug.LogError("[CardDragHandler] No Canvas found in parents. Card dragging won't work.");
+            }
+
+            // Find MatchView at the root Canvas level
+            var matchView = canvas?.GetComponent<MatchView>();
+            if (matchView == null)
+            {
+                Debug.LogError("[CardDragHandler] No MatchView found on Canvas. Card dragging won't work.");
+            }
+
             cardView = GetComponent<CardView>();
             canvasGroup = GetComponent<CanvasGroup>();
+
+            // Only check if we have the CardView component
+            if (cardView == null)
+            {
+                Debug.LogError("[CardDragHandler] CardView component is missing");
+            }
 
             // Ensure we have a CanvasGroup
             if (canvasGroup == null)
@@ -31,21 +50,43 @@ namespace Kardx.UI.Components
             }
             // Make sure it blocks raycasts by default
             canvasGroup.blocksRaycasts = true;
+
+            Debug.Log($"[CardDragHandler] Initialized - Canvas: {canvas?.name ?? "null"}, MatchView: {matchView?.name ?? "null"}");
         }
 
         public void OnBeginDrag(PointerEventData eventData)
         {
-            Debug.Log("OnBeginDrag");
-            if (cardView == null || cardView.Card == null)
+            Debug.Log("[CardDragHandler] OnBeginDrag");
+
+            if (canvas == null)
             {
-                Debug.Log("Cannot drag: card or cardView is null");
+                Debug.LogError("[CardDragHandler] Cannot drag: No Canvas reference");
                 return;
             }
 
-            var matchView = canvas.GetComponentInParent<MatchView>();
-            if (matchView == null || !matchView.CanDeployCard(cardView.Card))
+            var matchView = canvas.GetComponent<MatchView>();
+            if (matchView == null)
             {
-                Debug.Log("Cannot drag: invalid match view or cannot deploy card");
+                Debug.LogError("[CardDragHandler] Cannot drag: No MatchView found on Canvas");
+                return;
+            }
+
+            // Check card status when we actually need to drag
+            if (cardView == null)
+            {
+                Debug.LogError("[CardDragHandler] Cannot drag: CardView component is missing");
+                return;
+            }
+
+            if (cardView.Card == null)
+            {
+                Debug.LogError("[CardDragHandler] Cannot drag: No card data available");
+                return;
+            }
+
+            if (!matchView.CanDeployCard(cardView.Card))
+            {
+                Debug.Log("[CardDragHandler] Cannot drag: cannot deploy card");
                 return;
             }
 
@@ -54,7 +95,7 @@ namespace Kardx.UI.Components
             transform.SetParent(canvas.transform);
             canvasGroup.blocksRaycasts = false; // Disable raycast blocking during drag
             OnDragStarted?.Invoke();
-            Debug.Log("OnBeginDrag: cardView.Card.Title = " + cardView.Card.Title);
+            Debug.Log($"[CardDragHandler] Started dragging card: {cardView.Card.Title}");
         }
 
         public void OnDrag(PointerEventData eventData)

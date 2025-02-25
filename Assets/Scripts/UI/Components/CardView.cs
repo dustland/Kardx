@@ -283,6 +283,7 @@ namespace Kardx.UI.Components
 
         public void Initialize(Card card)
         {
+            Debug.Log("[CardView] Initializing card: " + card.Title);
             this.card = card;
             this.cardType = null;
             SetDraggable(true);
@@ -291,6 +292,7 @@ namespace Kardx.UI.Components
 
         public void Initialize(CardType cardType)
         {
+            Debug.Log("[CardView] Initializing cardType: " + cardType.Title);
             this.card = null;
             this.cardType = cardType;
             SetDraggable(false); // CardType view should not be draggable
