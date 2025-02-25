@@ -21,13 +21,13 @@ namespace Kardx.UI.Scenes
         private Transform handArea;
 
         [SerializeField]
-        private Transform[] battlefieldSlots = new Transform[5]; // 5 fixed positions
+        private Transform battlefieldArea; // Area for player's battlefield with HorizontalLayoutGroup
+
+        [SerializeField]
+        private Transform opponentBattlefieldArea; // Area for opponent's battlefield with HorizontalLayoutGroup
 
         [SerializeField]
         private Transform opponentHandArea;
-
-        [SerializeField]
-        private Transform[] opponentBattlefieldSlots = new Transform[5]; // 5 fixed positions for opponent
 
         [SerializeField]
         private Transform discardArea;
@@ -42,6 +42,9 @@ namespace Kardx.UI.Scenes
         private Transform opponentHeadquarter;
 
         [Header("UI Elements")]
+        [SerializeField]
+        private GameObject cardSlotPrefab; // Prefab for card slot
+
         [SerializeField]
         private GameObject cardPrefab;
 
@@ -60,15 +63,47 @@ namespace Kardx.UI.Scenes
 
         [Header("Layout Settings")]
         [SerializeField]
-        private float cardSpacing = 1.2f;
+        private float handCurveHeight = 0.5f;
 
         [SerializeField]
-        private float handCurveHeight = 0.5f;
+        private float cardSpacing = 1.2f;
 
         // Non-serialized fields
         private Dictionary<Card, GameObject> cardUIElements = new();
+        private Transform[] battlefieldSlots = new Transform[Player.BATTLEFIELD_SLOT_COUNT];
+        private Transform[] opponentBattlefieldSlots = new Transform[Player.BATTLEFIELD_SLOT_COUNT];
         private Dictionary<int, CardView> deployedCards = new Dictionary<int, CardView>();
         private Dictionary<int, CardView> opponentDeployedCards = new Dictionary<int, CardView>();
+
+        private void Awake()
+        {
+            InitializeBattlefieldSlots();
+        }
+
+        private void InitializeBattlefieldSlots()
+        {
+            if (battlefieldArea == null || opponentBattlefieldArea == null || cardSlotPrefab == null)
+            {
+                Debug.LogError("[MatchView] Missing required components for battlefield initialization");
+                return;
+            }
+
+            // Create player's battlefield slots
+            for (int i = 0; i < Player.BATTLEFIELD_SLOT_COUNT; i++)
+            {
+                var slot = Instantiate(cardSlotPrefab, battlefieldArea);
+                slot.name = $"CardSlot{i + 1}";
+                battlefieldSlots[i] = slot.transform;
+            }
+
+            // Create opponent's battlefield slots
+            for (int i = 0; i < Player.BATTLEFIELD_SLOT_COUNT; i++)
+            {
+                var slot = Instantiate(cardSlotPrefab, opponentBattlefieldArea);
+                slot.name = $"OpponentCardSlot{i + 1}";
+                opponentBattlefieldSlots[i] = slot.transform;
+            }
+        }
 
         private void Start()
         {
