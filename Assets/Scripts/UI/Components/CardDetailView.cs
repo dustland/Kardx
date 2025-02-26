@@ -21,7 +21,9 @@ namespace Kardx.UI.Components
             if (cardView == null)
             {
                 cardView = GetComponentInChildren<CardView>();
-                Debug.Log($"[CardDetailView] Found CardView: {(cardView != null ? cardView.name : "null")}");
+                Debug.Log(
+                    $"[CardDetailView] Found CardView: {(cardView != null ? cardView.name : "null")}"
+                );
             }
 
             // Use the Image component on this GameObject
@@ -30,7 +32,9 @@ namespace Kardx.UI.Components
                 backgroundPanel = GetComponent<Image>();
                 if (backgroundPanel == null)
                 {
-                    Debug.LogError("[CardDetailView] No Image component found on CardPanel. Please add one.");
+                    Debug.LogError(
+                        "[CardDetailView] No Image component found on CardPanel. Please add one."
+                    );
                     return;
                 }
 
@@ -66,7 +70,9 @@ namespace Kardx.UI.Components
             }
 
             gameObject.SetActive(true);
-            Debug.Log($"[CardDetailView] Panel activated: {gameObject.activeInHierarchy}, Parent active: {transform.parent?.gameObject.activeInHierarchy}");
+            Debug.Log(
+                $"[CardDetailView] Panel activated: {gameObject.activeInHierarchy}, Parent active: {transform.parent?.gameObject.activeInHierarchy}"
+            );
         }
 
         public void Show(Card card)
@@ -82,7 +88,9 @@ namespace Kardx.UI.Components
             }
 
             gameObject.SetActive(true);
-            Debug.Log($"[CardDetailView] Panel activated: {gameObject.activeInHierarchy}, Parent active: {transform.parent?.gameObject.activeInHierarchy}");
+            Debug.Log(
+                $"[CardDetailView] Panel activated: {gameObject.activeInHierarchy}, Parent active: {transform.parent?.gameObject.activeInHierarchy}"
+            );
         }
 
         public void Hide()

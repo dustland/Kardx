@@ -14,7 +14,7 @@ namespace Kardx.Core
         public const int BATTLEFIELD_SLOT_COUNT = 5;
         private const int MAX_HAND_SIZE = 10;
         private const int MAX_CREDITS = 9;
-        private const int CREDITS_PER_TURN = 1;
+        public const int CREDITS_PER_TURN = 1;
 
         // Core state
         private string playerId;
@@ -36,12 +36,22 @@ namespace Kardx.Core
         /// <param name="initialDeck">The player's initial deck of cards.</param>
         /// <param name="faction">The player's faction.</param>
         /// <param name="logger">The logger to use for logging messages.</param>
-        public Player(string playerId, List<Card> initialDeck, Faction faction = Faction.Neutral, ILogger logger = null)
+        public Player(
+            string playerId,
+            List<Card> initialDeck,
+            Faction faction = Faction.Neutral,
+            ILogger logger = null
+        )
         {
             Initialize(playerId, initialDeck, faction, logger);
         }
 
-        public void Initialize(string playerId, List<Card> initialDeck, Faction faction = Faction.Neutral, ILogger logger = null)
+        public void Initialize(
+            string playerId,
+            List<Card> initialDeck,
+            Faction faction = Faction.Neutral,
+            ILogger logger = null
+        )
         {
             this.playerId = playerId;
             this.logger = logger;
@@ -178,7 +188,9 @@ namespace Kardx.Core
 
             if (battlefield[position] != null)
             {
-                logger?.Log($"[{playerId}] Cannot deploy card {card.Title} - slot {position} is already occupied");
+                logger?.Log(
+                    $"[{playerId}] Cannot deploy card {card.Title} - slot {position} is already occupied"
+                );
                 return false;
             }
 
@@ -214,13 +226,17 @@ namespace Kardx.Core
             int slotIndex = Array.FindIndex(battlefield, slot => slot == card);
             if (slotIndex == -1)
             {
-                logger?.Log($"[{playerId}] Failed to remove card {card.Title} from battlefield - not found");
+                logger?.Log(
+                    $"[{playerId}] Failed to remove card {card.Title} from battlefield - not found"
+                );
                 return false;
             }
 
             battlefield[slotIndex] = null;
             discardPile.Enqueue(card); // Add to discard pile when removed
-            logger?.Log($"[{playerId}] Removed card {card.Title} from battlefield slot {slotIndex}");
+            logger?.Log(
+                $"[{playerId}] Removed card {card.Title} from battlefield slot {slotIndex}"
+            );
             return true;
         }
 
@@ -250,7 +266,7 @@ namespace Kardx.Core
         }
 
         /// <summary>
-        /// Adds credits to the player's current credits.
+        /// Adds credits to the player's account.
         /// </summary>
         /// <param name="amount">The amount of credits to add.</param>
         public void AddCredits(int amount)
@@ -263,15 +279,6 @@ namespace Kardx.Core
 
             credits = Math.Min(credits + amount, MAX_CREDITS);
             logger?.Log($"[{playerId}] Added {amount} credits. Current: {credits}");
-        }
-
-        /// <summary>
-        /// Starts a new turn for the player.
-        /// </summary>
-        public void StartTurn(int turnNumber)
-        {
-            AddCredits(CREDITS_PER_TURN * turnNumber);
-            DrawCard();
         }
     }
 }

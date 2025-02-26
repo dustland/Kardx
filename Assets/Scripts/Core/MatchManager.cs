@@ -1,12 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
-using Kardx.Core;
-using Kardx.Core.Strategy;
+using Kardx.Core.Planning;
 using Kardx.Utils;
-using Newtonsoft.Json;
 
 namespace Kardx.Core
 {
@@ -15,13 +11,12 @@ namespace Kardx.Core
     /// </summary>
     public class MatchManager
     {
-        private readonly ILogger logger;
+        private Kardx.Utils.ILogger logger;
         private Board board;
-        private StrategyController strategyController;
-        private StrategySource strategySource;
-        private string aiPersonality;
-        private readonly int startingHandSize = 4;
-        private readonly int maxTurns = 50;
+        private StrategyPlanner strategyPlanner;
+        private int startingHandSize = 4;
+        private int maxTurns = 50;
+        private const int CREDITS_PER_TURN = 1;
 
         // Public properties
         public bool IsMatchInProgress { get; private set; }
@@ -29,236 +24,172 @@ namespace Kardx.Core
         public int TurnNumber => board.TurnNumber;
         public Player Player => board.Player;
         public Player Opponent => board.Opponent;
+        public Board Board => board;
 
         // Essential events for UI updates
         public event Action<Card, int> OnCardDeployed;
         public event Action<Card> OnCardDrawn;
         public event Action<Card> OnCardDiscarded;
-        public event Action<Kardx.Core.Strategy.Strategy> OnStrategyDetermined;
-        public event Action<StrategyAction> OnStrategyActionExecuting;
-        public event Action<StrategyAction> OnStrategyActionExecuted;
+        public event Action<Strategy> OnStrategyDetermined;
+        public event Action<Decision> OnDecisionExecuting;
+        public event Action<Decision> OnDecisionExecuted;
         public event EventHandler<Player> OnTurnStarted;
         public event EventHandler<Player> OnTurnEnded;
         public event Action<string> OnMatchStarted;
         public event Action<string> OnMatchEnded;
 
+        // Event for signaling when AI needs to process its turn
+        public event Action<Board, StrategyPlanner, Action> OnProcessAITurn;
+
         /// <summary>
         /// Creates a new instance of the MatchManager class.
         /// </summary>
         /// <param name="logger">Optional logger for debugging.</param>
-        public MatchManager(ILogger logger = null)
+        public MatchManager(Kardx.Utils.ILogger logger = null)
         {
-            this.logger = logger;
-            this.strategySource = StrategySource.Dummy;
-            this.aiPersonality = "balanced";
+            // Use the SimpleLogger if no logger is provided
+            this.logger = logger ?? new SimpleLogger("MatchManager");
         }
 
         /// <summary>
-        /// Starts a new match with the specified players.
+        /// Starts a new match with default players.
         /// </summary>
-        /// <param name="player1">The first player.</param>
-        /// <param name="player2">The second player.</param>
-        public void StartMatch(Player player1, Player player2)
+        public void StartMatch()
         {
-            if (player1 == null)
-                throw new ArgumentNullException(nameof(player1));
-
-            if (player2 == null)
-                throw new ArgumentNullException(nameof(player2));
+            var player1 = new Player(
+                "Player 1",
+                LoadDeck(Faction.UnitedStates),
+                Faction.UnitedStates
+            );
+            var player2 = new Player(
+                "Player 2",
+                LoadDeck(Faction.SovietUnion),
+                Faction.SovietUnion
+            );
 
             // Create a new board
             board = new Board(player1, player2);
 
-            // Create the strategy controller for the opponent (player2)
-            CreateStrategyController(player2);
+            // Create the strategy planner for the opponent (player2)
+            strategyPlanner = new StrategyPlanner(StrategySource.Dummy, player2, logger);
 
-            // Subscribe to strategy controller events
-            SubscribeToStrategyEvents();
+            // Subscribe to strategy planner events
+            if (strategyPlanner != null)
+            {
+                strategyPlanner.OnStrategyDetermined += (strategy) =>
+                    OnStrategyDetermined?.Invoke(strategy);
+
+                strategyPlanner.OnDecisionExecuting += (decision) =>
+                    OnDecisionExecuting?.Invoke(decision);
+
+                strategyPlanner.OnDecisionExecuted += (decision) =>
+                    OnDecisionExecuted?.Invoke(decision);
+            }
 
             logger?.Log($"[MatchManager] Match started between {player1.Id} and {player2.Id}");
+            IsMatchInProgress = true;
+            OnMatchStarted?.Invoke($"Match started between {player1.Id} and {player2.Id}");
 
             // Start the first turn
-            StartTurn(board.CurrentPlayer);
-        }
-
-        /// <summary>
-        /// Creates the strategy controller for the opponent.
-        /// </summary>
-        /// <param name="opponent">The opponent player.</param>
-        private void CreateStrategyController(Player opponent)
-        {
-            // Create the strategy controller based on the selected strategy source
-            switch (strategySource)
-            {
-                case StrategySource.AI:
-                    strategyController = new StrategyController(strategySource, opponent, aiPersonality, logger);
-                    break;
-                case StrategySource.Dummy:
-                    strategyController = new StrategyController(strategySource, opponent, logger);
-                    break;
-                case StrategySource.Remote:
-                    strategyController = new StrategyController(strategySource, opponent, logger);
-                    break;
-                default:
-                    throw new ArgumentException($"Unsupported strategy source: {strategySource}");
-            }
-        }
-
-        /// <summary>
-        /// Subscribes to the strategy controller events.
-        /// </summary>
-        private void SubscribeToStrategyEvents()
-        {
-            if (strategyController == null)
-                return;
-
-            strategyController.OnStrategyDetermined += (sender, strategy) =>
-                OnStrategyDetermined?.Invoke(strategy);
-
-            strategyController.OnStrategyActionExecuting += (sender, action) =>
-                OnStrategyActionExecuting?.Invoke(action);
-
-            strategyController.OnStrategyActionExecuted += (sender, action) =>
-                OnStrategyActionExecuted?.Invoke(action);
-        }
-
-        /// <summary>
-        /// Sets the strategy source to use for the opponent.
-        /// </summary>
-        /// <param name="source">The strategy source to use.</param>
-        public void SetStrategySource(StrategySource source)
-        {
-            strategySource = source;
-
-            // If a match is already in progress, update the strategy controller
-            if (board != null && strategyController != null)
-            {
-                strategyController.ChangeStrategySource(source);
-            }
-        }
-
-        /// <summary>
-        /// This method is kept for backward compatibility but does nothing since the dummy strategy type is no longer used.
-        /// </summary>
-        /// <param name="type">The dummy strategy type (ignored).</param>
-        public void SetDummyStrategyType(StrategyType type)
-        {
-            logger?.Log("[MatchManager] Dummy strategy type is no longer used. The DummyStrategyProvider now uses a single simple strategy.");
-
-            // If a match is already in progress and using a dummy strategy, call the no-op method on the controller for consistency
-            if (board != null && strategyController != null && strategySource == StrategySource.Dummy)
-            {
-                strategyController.ChangeDummyStrategyType(type);
-            }
-        }
-
-        /// <summary>
-        /// Sets the AI personality to use for the opponent.
-        /// </summary>
-        /// <param name="personality">The AI personality to use.</param>
-        public void SetAIPersonality(string personality)
-        {
-            if (string.IsNullOrEmpty(personality))
-                throw new ArgumentException("Personality cannot be null or empty", nameof(personality));
-
-            aiPersonality = personality;
-
-            // If a match is already in progress and using an AI strategy, update the strategy controller
-            if (board != null && strategyController != null && strategySource == StrategySource.AI)
-            {
-                strategyController.ChangeAIPersonality(personality);
-            }
-        }
-
-        /// <summary>
-        /// Starts a new turn for the specified player.
-        /// </summary>
-        /// <param name="player">The player whose turn is starting.</param>
-        private void StartTurn(Player player)
-        {
-            if (player == null)
-                throw new ArgumentNullException(nameof(player));
-
-            logger?.Log($"[MatchManager] Starting turn for player {player.Id}");
-
-            // Notify listeners
-            OnTurnStarted?.Invoke(this, player);
-
-            // If it's the opponent's turn, process it automatically
-            if (player.Id == board.Player2.Id)
-            {
-                ProcessOpponentTurnAsync().ContinueWith(t =>
-                {
-                    if (t.IsFaulted)
-                    {
-                        logger?.LogError($"[MatchManager] Error processing opponent turn: {t.Exception}");
-                    }
-                });
-            }
-        }
-
-        /// <summary>
-        /// Ends the current turn and starts the next player's turn.
-        /// </summary>
-        public void EndTurn()
-        {
             if (board == null)
                 throw new InvalidOperationException("Match not started");
 
             var currentPlayer = board.CurrentPlayer;
+            logger?.Log($"[MatchManager] Starting first turn for player {currentPlayer.Id}");
+
+            // Initialize the player for the first turn
+            // Add credits based on the turn number
+            int creditsToAdd = CREDITS_PER_TURN * board.TurnNumber;
+            currentPlayer.AddCredits(creditsToAdd);
+            logger?.Log(
+                $"[MatchManager] Added {creditsToAdd} credits to player {currentPlayer.Id}"
+            );
+
+            // Draw a card for the player
+            Card drawnCard = currentPlayer.DrawCard();
+            if (drawnCard != null)
+            {
+                OnCardDrawn?.Invoke(drawnCard);
+                logger?.Log($"[{CurrentPlayerId}] Card drawn: {drawnCard.Title}");
+            }
+
+            // Notify listeners that a new turn is starting
+            OnTurnStarted?.Invoke(this, currentPlayer);
+
+            // If it's the opponent's turn, process it automatically
+            if (currentPlayer.Id == board.Player2.Id)
+            {
+                ProcessOpponentTurn();
+            }
+        }
+
+        /// <summary>
+        /// Advances to the next turn in the game.
+        /// </summary>
+        public void NextTurn()
+        {
+            if (board == null)
+                throw new InvalidOperationException("Match not started");
+
+            // End the current turn
+            var currentPlayer = board.CurrentPlayer;
             logger?.Log($"[MatchManager] Ending turn for player {currentPlayer.Id}");
 
-            // Notify listeners
+            // Process end of turn effects
+            board.ProcessEndOfTurnEffects();
+
+            // Notify listeners that the turn is ending
             OnTurnEnded?.Invoke(this, currentPlayer);
 
-            // Switch to the next player
-            board.EndTurn();
-
             // Start the next turn
-            StartTurn(board.CurrentPlayer);
+            // Switch to the next player
+            board.SwitchCurrentPlayer();
+            board.IncrementTurnNumber();
+
+            var nextPlayer = board.CurrentPlayer;
+            logger?.Log(
+                $"[MatchManager] Starting turn {board.TurnNumber} for player {nextPlayer.Id}"
+            );
+
+            // Initialize the player for the new turn
+            // Add credits based on the turn number
+            int creditsToAdd = CREDITS_PER_TURN * board.TurnNumber;
+            nextPlayer.AddCredits(creditsToAdd);
+            logger?.Log($"[MatchManager] Added {creditsToAdd} credits to player {nextPlayer.Id}");
+
+            // Draw a card for the player
+            Card drawnCard = nextPlayer.DrawCard();
+            if (drawnCard != null)
+            {
+                OnCardDrawn?.Invoke(drawnCard);
+                logger?.Log($"[{CurrentPlayerId}] Card drawn: {drawnCard.Title}");
+            }
+
+            // Process start of turn effects
+            board.ProcessStartOfTurnEffects();
+
+            // Notify listeners that a new turn is starting
+            OnTurnStarted?.Invoke(this, nextPlayer);
+
+            // If it's the opponent's turn, process it automatically
+            if (nextPlayer.Id == board.Player2.Id)
+            {
+                ProcessOpponentTurn();
+            }
         }
 
         /// <summary>
         /// Processes the opponent's turn automatically.
         /// </summary>
-        /// <returns>A task representing the asynchronous operation.</returns>
-        private async Task ProcessOpponentTurnAsync()
+        private void ProcessOpponentTurn()
         {
             if (board == null)
                 throw new InvalidOperationException("Match not started");
 
-            if (strategyController == null)
-                throw new InvalidOperationException("Strategy controller not initialized");
+            logger?.Log("Processing opponent turn");
 
-            logger?.Log("[MatchManager] Processing opponent turn");
-
-            try
-            {
-                // Get the next strategy from the strategy controller
-                Kardx.Core.Strategy.Strategy strategy = await strategyController.GetNextStrategyAsync(board);
-
-                // Notify listeners that a strategy has been determined
-                OnStrategyDetermined?.Invoke(strategy);
-
-                // Execute the strategy
-                await strategyController.ExecuteStrategyAsync(strategy, board);
-            }
-            catch (Exception ex)
-            {
-                logger?.LogError($"[MatchManager] Error processing opponent turn: {ex.Message}");
-
-                // End the turn if an error occurs
-                EndTurn();
-            }
-        }
-
-        /// <summary>
-        /// Gets the current board state.
-        /// </summary>
-        /// <returns>The current board state.</returns>
-        public Board GetBoard()
-        {
-            return board;
+            // Trigger the event for the UI layer to handle AI processing
+            OnProcessAITurn?.Invoke(board, strategyPlanner, NextTurn);
         }
 
         private List<Card> LoadDeck(Faction ownerFaction)
@@ -296,7 +227,7 @@ namespace Kardx.Core
                 return false;
             }
 
-            var currentPlayer = GetCurrentPlayer();
+            var currentPlayer = board.CurrentPlayer;
             if (currentPlayer == null)
             {
                 logger?.LogError("[MatchManager] Cannot deploy card: current player is null");
@@ -316,39 +247,17 @@ namespace Kardx.Core
             if (!CanDeployCard(card))
                 return false;
 
-            var currentPlayer = GetCurrentPlayer();
+            var currentPlayer = board.CurrentPlayer;
 
             // Try to deploy the card
             if (!currentPlayer.DeployCard(card, position))
                 return false;
 
             // Notify listeners
-            NotifyCardDeployed(card, position);
-
-            return true;
-        }
-
-        private Player GetCurrentPlayer()
-        {
-            return board.CurrentPlayer;
-        }
-
-        private void NotifyCardDeployed(Card card, int position)
-        {
             OnCardDeployed?.Invoke(card, position);
             logger?.Log($"[{CurrentPlayerId}] Card deployed: {card.Title} at position {position}");
-        }
 
-        private void NotifyCardDrawn(Card card)
-        {
-            OnCardDrawn?.Invoke(card);
-            logger?.Log($"[{CurrentPlayerId}] Card drawn: {card.Title}");
-        }
-
-        private void NotifyCardDiscarded(Card card)
-        {
-            OnCardDiscarded?.Invoke(card);
-            logger?.Log($"[{CurrentPlayerId}] Card discarded: {card.Title}");
+            return true;
         }
     }
 }

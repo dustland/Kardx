@@ -1,12 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Kardx.Core;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
-using Kardx.Core;
-using System.Collections.Generic;
 
 namespace Kardx.UI.Components
 {
@@ -49,6 +49,7 @@ namespace Kardx.UI.Components
 
         [SerializeField]
         private TextMeshProUGUI abilityText;
+
         [SerializeField]
         private TextMeshProUGUI abilityDescriptionText;
 
@@ -63,7 +64,7 @@ namespace Kardx.UI.Components
             { Faction.BritishEmpire, "CardBacks/british_back" },
             { Faction.ThirdReich, "CardBacks/german_back" },
             { Faction.Empire, "CardBacks/japan_back" },
-            { Faction.Neutral, "CardBacks/neutral_back" }
+            { Faction.Neutral, "CardBacks/neutral_back" },
         };
 
         [Header("Effects")]
@@ -129,15 +130,19 @@ namespace Kardx.UI.Components
                 cardBackOverlay.gameObject.SetActive(false);
             }
 
-            Debug.Log($"[CardView] Initialized {gameObject.name} - Image: {backgroundImage != null}, " +
-                     $"RaycastTarget: {backgroundImage.raycastTarget}, " +
-                     $"CanvasGroup: {canvasGroup != null}, " +
-                     $"DragHandler: {dragHandler != null}");
+            Debug.Log(
+                $"[CardView] Initialized {gameObject.name} - Image: {backgroundImage != null}, "
+                    + $"RaycastTarget: {backgroundImage.raycastTarget}, "
+                    + $"CanvasGroup: {canvasGroup != null}, "
+                    + $"DragHandler: {dragHandler != null}"
+            );
         }
 
         public void OnPointerClick(PointerEventData eventData)
         {
-            Debug.Log($"[CardView] OnPointerClick on {gameObject.name} (isDragging: {isDragging}, EventCamera: {eventData.enterEventCamera?.name}, PointerPress: {eventData.pointerPress?.name})");
+            Debug.Log(
+                $"[CardView] OnPointerClick on {gameObject.name} (isDragging: {isDragging}, EventCamera: {eventData.enterEventCamera?.name}, PointerPress: {eventData.pointerPress?.name})"
+            );
 
             // Only handle the click if this GameObject is the actual target
             if (eventData.pointerPress != gameObject)
@@ -341,7 +346,9 @@ namespace Kardx.UI.Components
                 return;
             }
 
-            Debug.Log($"[CardView] SharedDetailView is {(sharedDetailView != null ? "not null" : "null")}");
+            Debug.Log(
+                $"[CardView] SharedDetailView is {(sharedDetailView != null ? "not null" : "null")}"
+            );
             if (sharedDetailView != null)
             {
                 Debug.Log("[CardView] Using shared card detail view");
@@ -349,7 +356,9 @@ namespace Kardx.UI.Components
                 {
                     if (card.FaceDown)
                     {
-                        Debug.Log($"[CardView] The card {card.Title} is face down, not showing detail");
+                        Debug.Log(
+                            $"[CardView] The card {card.Title} is face down, not showing detail"
+                        );
                         return;
                     }
                     else
@@ -370,7 +379,9 @@ namespace Kardx.UI.Components
             }
             else
             {
-                Debug.LogWarning("[CardView] No shared CardDetailView has been initialized. Call CardView.InitializeSharedDetailView first.");
+                Debug.LogWarning(
+                    "[CardView] No shared CardDetailView has been initialized. Call CardView.InitializeSharedDetailView first."
+                );
             }
             Debug.Log("[CardView] ShowDetail method completed");
         }
@@ -380,7 +391,10 @@ namespace Kardx.UI.Components
             if (cardBackOverlay != null && card != null)
             {
                 // Load the appropriate card back sprite based on card's owner faction
-                string cardBackPath = FactionCardBacks.GetValueOrDefault(card.OwnerFaction, FactionCardBacks[Faction.Neutral]);
+                string cardBackPath = FactionCardBacks.GetValueOrDefault(
+                    card.OwnerFaction,
+                    FactionCardBacks[Faction.Neutral]
+                );
                 Sprite cardBackSprite = Resources.Load<Sprite>(cardBackPath);
 
                 if (cardBackSprite != null)
@@ -390,15 +404,21 @@ namespace Kardx.UI.Components
                 }
                 else
                 {
-                    Debug.LogWarning($"[CardView] Failed to load card back sprite for faction {card.OwnerFaction} at path: {cardBackPath}");
+                    Debug.LogWarning(
+                        $"[CardView] Failed to load card back sprite for faction {card.OwnerFaction} at path: {cardBackPath}"
+                    );
                     // Load neutral back as fallback
-                    cardBackOverlay.sprite = Resources.Load<Sprite>(FactionCardBacks[Faction.Neutral]);
+                    cardBackOverlay.sprite = Resources.Load<Sprite>(
+                        FactionCardBacks[Faction.Neutral]
+                    );
                     cardBackOverlay.gameObject.SetActive(true);
                 }
             }
             else
             {
-                Debug.LogWarning("[CardView] Missing card back overlay image component or card is null");
+                Debug.LogWarning(
+                    "[CardView] Missing card back overlay image component or card is null"
+                );
             }
         }
 
@@ -414,10 +434,12 @@ namespace Kardx.UI.Components
         // Add this method to test if the GameObject is properly set up for UI interaction
         private void OnEnable()
         {
-            Debug.Log($"[CardView] Card enabled: {gameObject.name}. " +
-                     $"Active in hierarchy: {gameObject.activeInHierarchy}, " +
-                     $"Layer: {gameObject.layer}, " +
-                     $"Canvas: {GetComponentInParent<Canvas>()?.name ?? "None"}");
+            Debug.Log(
+                $"[CardView] Card enabled: {gameObject.name}. "
+                    + $"Active in hierarchy: {gameObject.activeInHierarchy}, "
+                    + $"Layer: {gameObject.layer}, "
+                    + $"Canvas: {GetComponentInParent<Canvas>()?.name ?? "None"}"
+            );
         }
     }
 }

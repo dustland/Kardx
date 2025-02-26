@@ -10,12 +10,12 @@ namespace Kardx.Core
 
     public enum Faction
     {
-        UnitedStates,    // American forces
-        SovietUnion,     // Soviet forces
-        BritishEmpire,   // British forces
-        ThirdReich,      // German forces
-        Empire,          // Japanese forces
-        Neutral          // For special cards or non-aligned cards
+        UnitedStates, // American forces
+        SovietUnion, // Soviet forces
+        BritishEmpire, // British forces
+        ThirdReich, // German forces
+        Empire, // Japanese forces
+        Neutral, // For special cards or non-aligned cards
     }
 
     public enum CardRarity

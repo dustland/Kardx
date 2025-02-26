@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Kardx.Core;
-using Kardx.Utils;
 using Kardx.UI.Components;
+using Kardx.Utils;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.UI;
@@ -55,13 +55,17 @@ namespace Kardx.UI.Scenes
                     cardDetailView = FindObjectOfType<CardDetailView>(true);
                     if (cardDetailView == null)
                     {
-                        Debug.LogError("[CardCollectionView] CardDetailView not found in scene. Please ensure CardPanel has CardDetailView component.");
+                        Debug.LogError(
+                            "[CardCollectionView] CardDetailView not found in scene. Please ensure CardPanel has CardDetailView component."
+                        );
                         return;
                     }
                 }
             }
 
-            Debug.Log($"[CardCollectionView] Found CardDetailView on: {cardDetailView.gameObject.name}");
+            Debug.Log(
+                $"[CardCollectionView] Found CardDetailView on: {cardDetailView.gameObject.name}"
+            );
             CardView.InitializeSharedDetailView(cardDetailView);
 
             // Make sure the CardPanel is initially inactive
@@ -73,6 +77,7 @@ namespace Kardx.UI.Scenes
             cards = CardLoader.LoadCardTypes();
             DisplayCards();
         }
+
         private void DisplayCards()
         {
             if (cardContainer == null || cardPrefab == null)

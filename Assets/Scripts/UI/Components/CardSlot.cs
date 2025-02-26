@@ -1,8 +1,8 @@
 using Kardx.UI.Components;
+using Kardx.UI.Scenes;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
-using Kardx.UI.Scenes;
 
 namespace Kardx.UI.Components
 {
@@ -12,6 +12,7 @@ namespace Kardx.UI.Components
     {
         [SerializeField]
         private Image highlightImage;
+
         [SerializeField]
         private int position; // 0-4 for the five positions
 

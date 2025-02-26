@@ -25,14 +25,18 @@ namespace Kardx.UI.Components
             canvas = GetComponentInParent<Canvas>(true);
             if (canvas == null)
             {
-                Debug.LogError("[CardDragHandler] No Canvas found in parents. Card dragging won't work.");
+                Debug.LogError(
+                    "[CardDragHandler] No Canvas found in parents. Card dragging won't work."
+                );
             }
 
             // Find MatchView at the root Canvas level
             var matchView = canvas?.GetComponent<MatchView>();
             if (matchView == null)
             {
-                Debug.LogError("[CardDragHandler] No MatchView found on Canvas. Card dragging won't work.");
+                Debug.LogError(
+                    "[CardDragHandler] No MatchView found on Canvas. Card dragging won't work."
+                );
             }
 
             cardView = GetComponent<CardView>();
@@ -52,7 +56,9 @@ namespace Kardx.UI.Components
             // Make sure it blocks raycasts by default
             canvasGroup.blocksRaycasts = true;
 
-            Debug.Log($"[CardDragHandler] Initialized - Canvas: {canvas?.name ?? "null"}, MatchView: {matchView?.name ?? "null"}");
+            Debug.Log(
+                $"[CardDragHandler] Initialized - Canvas: {canvas?.name ?? "null"}, MatchView: {matchView?.name ?? "null"}"
+            );
         }
 
         public void OnBeginDrag(PointerEventData eventData)

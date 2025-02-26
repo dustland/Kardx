@@ -1,6 +1,3 @@
 using UnityEngine;
 
-public class HomeView
-{
-    
-}
+public class HomeView { }

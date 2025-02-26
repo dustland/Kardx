@@ -1,8 +1,11 @@
+using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Kardx.Core;
-using Kardx.Utils;
+using Kardx.Core.Planning;
 using Kardx.UI.Components;
+using Kardx.Utils;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -99,13 +102,17 @@ namespace Kardx.UI.Scenes
                     cardDetailView = FindObjectOfType<CardDetailView>(true);
                     if (cardDetailView == null)
                     {
-                        Debug.LogError("[CardCollectionView] CardDetailView not found in scene. Please ensure CardPanel has CardDetailView component.");
+                        Debug.LogError(
+                            "[CardCollectionView] CardDetailView not found in scene. Please ensure CardPanel has CardDetailView component."
+                        );
                         return;
                     }
                 }
             }
 
-            Debug.Log($"[CardCollectionView] Found CardDetailView on: {cardDetailView.gameObject.name}");
+            Debug.Log(
+                $"[CardCollectionView] Found CardDetailView on: {cardDetailView.gameObject.name}"
+            );
             CardView.InitializeSharedDetailView(cardDetailView);
 
             // Make sure the CardPanel is initially inactive
@@ -116,9 +123,15 @@ namespace Kardx.UI.Scenes
 
         private void InitializeBattlefieldSlots()
         {
-            if (battlefieldArea == null || opponentBattlefieldArea == null || cardSlotPrefab == null)
+            if (
+                battlefieldArea == null
+                || opponentBattlefieldArea == null
+                || cardSlotPrefab == null
+            )
             {
-                Debug.LogError("[MatchView] Missing required components for battlefield initialization");
+                Debug.LogError(
+                    "[MatchView] Missing required components for battlefield initialization"
+                );
                 return;
             }
 
@@ -151,17 +164,48 @@ namespace Kardx.UI.Scenes
 
         private void Start()
         {
-            // Create BattleManager instance
-            matchManager = new MatchManager(new UnityLogger());
+            // Create MatchManager instance
+            matchManager = new MatchManager(new SimpleLogger("[MatchView]"));
 
-            // Subscribe to BattleManager events
+            // Subscribe to MatchManager events
             matchManager.OnCardDeployed += HandleCardDeployed;
             matchManager.OnCardDrawn += HandleCardDrawn;
             matchManager.OnCardDiscarded += HandleCardDiscarded;
 
+            // Subscribe to AI turn processing event
+            matchManager.OnProcessAITurn += HandleProcessAITurn;
+
             // Start the battle
-            matchManager.StartMatch("Player1", "Player2");
+            matchManager.StartMatch();
             UpdateUI();
+        }
+
+        /// <summary>
+        /// Handles the AI turn processing using Unity coroutines
+        /// </summary>
+        private void HandleProcessAITurn(
+            Board board,
+            StrategyPlanner strategyPlanner,
+            Action onComplete
+        )
+        {
+            StartCoroutine(ProcessAITurnCoroutine(board, strategyPlanner, onComplete));
+        }
+
+        /// <summary>
+        /// Coroutine that processes the AI turn
+        /// </summary>
+        private IEnumerator ProcessAITurnCoroutine(
+            Board board,
+            StrategyPlanner strategyPlanner,
+            Action onComplete
+        )
+        {
+            // Execute the next strategy using the strategy planner's coroutine
+            yield return StartCoroutine(strategyPlanner.ExecuteNextStrategyCoroutine(board));
+
+            // After the AI has finished its turn, call the completion callback
+            onComplete?.Invoke();
         }
 
         public void NextTurn()
@@ -178,6 +222,7 @@ namespace Kardx.UI.Scenes
                 matchManager.OnCardDeployed -= HandleCardDeployed;
                 matchManager.OnCardDrawn -= HandleCardDrawn;
                 matchManager.OnCardDiscarded -= HandleCardDiscarded;
+                matchManager.OnProcessAITurn -= HandleProcessAITurn;
             }
         }
 
@@ -432,12 +477,14 @@ namespace Kardx.UI.Scenes
                 image.sprite = cardBackSprite;
             }
 
-            Debug.Log($"[MatchView] Card UI setup complete - Name: {cardGO.name}, " +
-                     $"Has CardView: {cardView != null}, " +
-                     $"Has Image: {image != null}, " +
-                     $"RaycastTarget: {image?.raycastTarget ?? false}, " +
-                     $"Parent: {parent.name}, " +
-                     $"Canvas: {cardGO.GetComponentInParent<Canvas>()?.name ?? "None"}");
+            Debug.Log(
+                $"[MatchView] Card UI setup complete - Name: {cardGO.name}, "
+                    + $"Has CardView: {cardView != null}, "
+                    + $"Has Image: {image != null}, "
+                    + $"RaycastTarget: {image?.raycastTarget ?? false}, "
+                    + $"Parent: {parent.name}, "
+                    + $"Canvas: {cardGO.GetComponentInParent<Canvas>()?.name ?? "None"}"
+            );
 
             cardUIElements[card] = cardGO;
             return cardGO;

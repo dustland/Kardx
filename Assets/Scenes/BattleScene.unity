@@ -501,6 +501,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 6690292769447173798, guid: d10a834fe5ea74777b700c6e0592906f, type: 3}
+      propertyPath: m_Color.a
+      value: 0.5176471
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -1062,11 +1066,11 @@ RectTransform:
   - {fileID: 985749914}
   - {fileID: 383897158}
   - {fileID: 908022905}
-  - {fileID: 649907286}
-  - {fileID: 1291962201}
-  - {fileID: 1505250934}
-  - {fileID: 143837733}
   - {fileID: 1278659093}
+  - {fileID: 143837733}
+  - {fileID: 1505250934}
+  - {fileID: 1291962201}
+  - {fileID: 649907286}
   - {fileID: 651721356}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -1224,8 +1228,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 351, y: -52}
-  m_SizeDelta: {x: 66.994, y: 28.7802}
+  m_AnchoredPosition: {x: 351, y: -49.62331}
+  m_SizeDelta: {x: 66.994, y: 33.5336}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &649907287
 MonoBehaviour:
@@ -1272,8 +1276,8 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 531703581}
-        m_TargetAssemblyTypeName: Kardx.UI.Scenes.Battle.BattleView, Assembly-CSharp
-        m_MethodName: EndTurn
+        m_TargetAssemblyTypeName: Kardx.UI.Scenes.MatchView, Assembly-CSharp
+        m_MethodName: NextTurn
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -1296,7 +1300,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 0.5019608}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -1882,6 +1886,50 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 4579611311953020275, guid: d10a834fe5ea74777b700c6e0592906f, type: 3}
   m_PrefabInstance: {fileID: 355044914}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1397227985
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1397227987}
+  - component: {fileID: 1397227986}
+  m_Layer: 0
+  m_Name: LogProcessor
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1397227986
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1397227985}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 470f2763e42074b97a734d062a2d16d4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!4 &1397227987
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1397227985}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1505250933
 GameObject:
   m_ObjectHideFlags: 0
@@ -2128,3 +2176,4 @@ SceneRoots:
   - {fileID: 619394802}
   - {fileID: 531703580}
   - {fileID: 50118427}
+  - {fileID: 1397227987}

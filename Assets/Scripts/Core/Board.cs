@@ -12,13 +12,15 @@ namespace Kardx.Core
         private int turnNumber;
         private string currentPlayerId;
         private ILogger logger;
+
         // Public properties
         public Player Player => players[0];
         public Player Opponent => players[1];
         public int TurnNumber => turnNumber;
         public string CurrentPlayerId => currentPlayerId;
-        public Player CurrentPlayer =>
-            currentPlayerId == players[0].Id ? players[0] : players[1];
+        public Player CurrentPlayer => currentPlayerId == players[0].Id ? players[0] : players[1];
+        public Player Player1 => players[0];
+        public Player Player2 => players[1];
 
         public Board(Player player, Player opponent, ILogger logger = null)
         {
@@ -29,36 +31,48 @@ namespace Kardx.Core
             this.logger = logger;
         }
 
-        // Turn management
-        public void StartNextTurn()
+        // State management methods
+
+        /// <summary>
+        /// Sets the current player ID.
+        /// </summary>
+        /// <param name="playerId">The ID of the player to set as current.</param>
+        public void SetCurrentPlayer(string playerId)
         {
-            // Process end of turn effects
-            ProcessEndOfTurn();
-
-            // Switch current player
-            currentPlayerId = GetNextPlayerId();
-            IncrementTurnNumber();
-
-            // Process start of turn effects
-            ProcessStartOfTurn();
+            if (playerId == Player.Id || playerId == Opponent.Id)
+            {
+                currentPlayerId = playerId;
+            }
+            else
+            {
+                throw new ArgumentException($"Invalid player ID: {playerId}");
+            }
         }
 
         /// <summary>
-        /// Ends the current turn and starts the next turn.
+        /// Increments the turn number.
         /// </summary>
-        public void EndTurn()
-        {
-            StartNextTurn();
-        }
-
         public void IncrementTurnNumber()
         {
             turnNumber++;
         }
 
+        /// <summary>
+        /// Switches the current player to the other player.
+        /// </summary>
         public void SwitchCurrentPlayer()
         {
             currentPlayerId = currentPlayerId == Player.Id ? Opponent.Id : Player.Id;
+        }
+
+        /// <summary>
+        /// Gets the ID of the next player (the player who is not the current player).
+        /// </summary>
+        /// <returns>The ID of the next player.</returns>
+        public string GetNextPlayerId()
+        {
+            // Simple two-player implementation
+            return currentPlayerId == Player.Id ? Opponent.Id : Player.Id;
         }
 
         // Effect management
@@ -80,14 +94,10 @@ namespace Kardx.Core
             activeEffects.RemoveAll(e => !e.IsActive());
         }
 
-        // Private helper methods
-        private string GetNextPlayerId()
-        {
-            // Simple two-player implementation
-            return currentPlayerId == Player.Id ? Opponent.Id : Player.Id;
-        }
-
-        private void ProcessEndOfTurn()
+        /// <summary>
+        /// Processes effects that occur at the end of a turn.
+        /// </summary>
+        public void ProcessEndOfTurnEffects()
         {
             // Process game effects
             foreach (var effect in activeEffects.ToList())
@@ -100,13 +110,11 @@ namespace Kardx.Core
             }
         }
 
-        private void ProcessStartOfTurn()
+        /// <summary>
+        /// Processes effects that occur at the start of a turn.
+        /// </summary>
+        public void ProcessStartOfTurnEffects()
         {
-            var currentPlayer = CurrentPlayer;
-
-            // Start player's turn (add credits and draw card)
-            currentPlayer.StartTurn(turnNumber);
-
             // Process game effects
             foreach (var effect in activeEffects)
             {
