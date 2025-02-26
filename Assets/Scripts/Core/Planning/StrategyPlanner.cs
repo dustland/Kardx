@@ -17,6 +17,7 @@ namespace Kardx.Core.Planning
         private IStrategyProvider strategyProvider;
         private Player player;
         private StrategySource strategySource;
+        private MatchManager matchManager;
 
         // Events
         public event Action<Strategy> OnStrategyDetermined;
@@ -28,15 +29,18 @@ namespace Kardx.Core.Planning
         /// </summary>
         /// <param name="strategySource">The source of strategies to use.</param>
         /// <param name="player">The player this planner represents.</param>
+        /// <param name="matchManager">The match manager to use for game actions.</param>
         /// <param name="logger">Optional logger for debugging.</param>
         public StrategyPlanner(
             StrategySource strategySource,
             Player player,
+            MatchManager matchManager = null,
             Kardx.Utils.ILogger logger = null
         )
         {
             this.strategySource = strategySource;
             this.player = player ?? throw new ArgumentNullException(nameof(player));
+            this.matchManager = matchManager;
             // Use SimpleLogger if no logger is provided
             this.logger = logger ?? new SimpleLogger("StrategyPlanner");
 
@@ -151,13 +155,45 @@ namespace Kardx.Core.Planning
                     Card cardToDeploy = FindCardById(currentPlayer.Hand, action.TargetCardId);
                     if (cardToDeploy != null)
                     {
-                        // Find an empty slot (for simplicity, use the first available)
-                        int emptySlot = FindEmptySlot(currentPlayer.Battlefield);
-                        if (emptySlot >= 0)
+                        // Use the target slot from the decision
+                        int targetSlot = action.TargetSlot;
+                        if (targetSlot >= 0 && targetSlot < currentPlayer.Battlefield.Count)
                         {
-                            currentPlayer.DeployCard(cardToDeploy, emptySlot);
-                            logger?.Log($"Deployed card {cardToDeploy.Title} to slot {emptySlot}");
+                            logger?.Log(
+                                $"Attempting to deploy card {cardToDeploy.Title} (ID: {cardToDeploy.InstanceId}) to slot {targetSlot}"
+                            );
+
+                            bool success;
+                            // Use MatchManager.DeployCard if available, otherwise fall back to direct method
+                            if (matchManager != null)
+                            {
+                                success = matchManager.DeployCard(cardToDeploy, targetSlot);
+                                logger?.Log(
+                                    $"Deployed card {cardToDeploy.Title} to slot {targetSlot} via MatchManager, success: {success}"
+                                );
+                            }
+                            else
+                            {
+                                // Fall back to direct method if MatchManager is not available
+                                logger?.LogWarning(
+                                    "MatchManager not available, using direct Player.DeployCard method which won't update UI"
+                                );
+                                success = currentPlayer.DeployCard(cardToDeploy, targetSlot);
+                                logger?.Log(
+                                    $"Deployed card {cardToDeploy.Title} to slot {targetSlot} directly, success: {success}"
+                                );
+                            }
                         }
+                        else
+                        {
+                            logger?.LogError($"Invalid target slot: {targetSlot}");
+                        }
+                    }
+                    else
+                    {
+                        logger?.LogError(
+                            $"Card with ID {action.TargetCardId} not found in player's hand"
+                        );
                     }
                     break;
 
@@ -227,19 +263,6 @@ namespace Kardx.Core.Planning
         private Card FindCardById(IEnumerable<Card> cards, string cardId)
         {
             return cards.FirstOrDefault(c => c.InstanceId.ToString() == cardId);
-        }
-
-        // Helper method to find an empty slot in the battlefield
-        private int FindEmptySlot(IReadOnlyList<Card> battlefield)
-        {
-            for (int i = 0; i < battlefield.Count; i++)
-            {
-                if (battlefield[i] == null)
-                {
-                    return i;
-                }
-            }
-            return -1;
         }
     }
 

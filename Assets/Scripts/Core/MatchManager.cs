@@ -71,7 +71,7 @@ namespace Kardx.Core
             board = new Board(player1, player2);
 
             // Create the strategy planner for the opponent (player2)
-            strategyPlanner = new StrategyPlanner(StrategySource.Dummy, player2, logger);
+            strategyPlanner = new StrategyPlanner(StrategySource.Dummy, player2, this, logger);
 
             // Subscribe to strategy planner events
             if (strategyPlanner != null)
@@ -84,6 +84,9 @@ namespace Kardx.Core
 
                 strategyPlanner.OnDecisionExecuted += (decision) =>
                     OnDecisionExecuted?.Invoke(decision);
+
+                // Subscribe to additional events for opponent actions
+                SubscribeToStrategyPlannerEvents(strategyPlanner);
             }
 
             logger?.Log($"[MatchManager] Match started between {player1.Id} and {player2.Id}");
@@ -258,6 +261,26 @@ namespace Kardx.Core
             logger?.Log($"[{CurrentPlayerId}] Card deployed: {card.Title} at position {position}");
 
             return true;
+        }
+
+        /// <summary>
+        /// Subscribes to the strategy planner events to handle opponent actions.
+        /// This ensures that UI events are triggered for opponent actions.
+        /// </summary>
+        private void SubscribeToStrategyPlannerEvents(StrategyPlanner planner)
+        {
+            if (planner == null)
+                return;
+
+            // Since we're now using matchManager.DeployCard directly in the StrategyPlanner,
+            // we don't need to handle card deployments here anymore as the OnCardDeployed event
+            // will be triggered automatically by the DeployCard method.
+
+            // We can still handle other decision types here if needed
+            planner.OnDecisionExecuted += (decision) => {
+                // Handle other decision types if needed
+                // For example, card discards, attacks, etc.
+            };
         }
     }
 }

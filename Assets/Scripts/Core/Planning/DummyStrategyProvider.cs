@@ -89,19 +89,32 @@ namespace Kardx.Core.Planning
                 {
                     if (currentPlayer.Credits >= card.DeploymentCost)
                     {
-                        // Check if there's space on the battlefield
-                        int emptySlotCount = currentPlayer.Battlefield.Count(c => c == null);
-                        if (emptySlotCount > 0)
+                        // Find an empty slot on the battlefield
+                        int emptySlot = -1;
+                        for (int i = 0; i < currentPlayer.Battlefield.Count; i++)
                         {
-                            // Add a deploy card action
+                            if (currentPlayer.Battlefield[i] == null)
+                            {
+                                emptySlot = i;
+                                break;
+                            }
+                        }
+
+                        // Check if there's space on the battlefield
+                        if (emptySlot >= 0)
+                        {
+                            // Use the new method to add a deploy card action with a target slot
                             strategy.AddDeployCardAction(
                                 card.InstanceId.ToString(),
-                                $"Deploy {card.Title} (Cost: {card.DeploymentCost})"
+                                $"Deploy {card.Title} (Cost: {card.DeploymentCost}) to slot {emptySlot}",
+                                emptySlot
                             );
 
                             // Simulate the deployment to update the player's state for subsequent decisions
                             currentPlayer.SpendCredits(card.DeploymentCost);
-                            logger?.Log($"Added deploy action for {card.Title}");
+                            logger?.Log(
+                                $"Added deploy action for {card.Title} to slot {emptySlot}"
+                            );
                         }
                     }
                 }

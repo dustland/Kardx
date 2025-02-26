@@ -75,8 +75,6 @@ namespace Kardx.UI.Scenes
         private Dictionary<Card, GameObject> cardUIElements = new();
         private Transform[] battlefieldSlots = new Transform[Player.BATTLEFIELD_SLOT_COUNT];
         private Transform[] opponentBattlefieldSlots = new Transform[Player.BATTLEFIELD_SLOT_COUNT];
-        private Dictionary<int, CardView> deployedCards = new Dictionary<int, CardView>();
-        private Dictionary<int, CardView> opponentDeployedCards = new Dictionary<int, CardView>();
 
         [SerializeField]
         private CardDetailView cardDetailView; // Reference to the CardDetailView
@@ -229,7 +227,96 @@ namespace Kardx.UI.Scenes
         // Event handlers
         private void HandleCardDeployed(Card card, int position)
         {
-            UpdateUI(); // Refresh the entire UI
+            Debug.Log(
+                $"[MatchView] HandleCardDeployed: {card.Title} at position {position} by {matchManager.CurrentPlayerId}"
+            );
+
+            // Determine if this is an opponent deployment
+            bool isOpponent = matchManager.CurrentPlayerId == matchManager.Opponent.Id;
+
+            // Get the appropriate slot transform
+            Transform slotTransform = isOpponent
+                ? opponentBattlefieldSlots[position]
+                : battlefieldSlots[position];
+
+            // Check if there's already a CardView in this slot
+            bool hasCardView = false;
+            for (int i = 0; i < slotTransform.childCount; i++)
+            {
+                if (slotTransform.GetChild(i).GetComponent<CardView>() != null)
+                {
+                    hasCardView = true;
+                    break;
+                }
+            }
+
+            if (!hasCardView)
+            {
+                // Try to move the existing card UI from hand to battlefield if it exists
+                if (cardUIElements.TryGetValue(card, out GameObject existingCardUI))
+                {
+                    Debug.Log(
+                        $"[MatchView] Moving {(isOpponent ? "opponent" : "player")} card UI from hand to battlefield: {card.Title}"
+                    );
+
+                    // First remove it from the dictionary to avoid duplicate entries
+                    cardUIElements.Remove(card);
+
+                    // Make sure the card is active (it might have been hidden during drag)
+                    existingCardUI.SetActive(true);
+
+                    // Move the card to the battlefield slot
+                    existingCardUI.transform.SetParent(slotTransform);
+                    existingCardUI.transform.localPosition = Vector3.zero;
+                    existingCardUI.transform.localScale = Vector3.one;
+
+                    // Make sure the card is face up and properly positioned
+                    var cardView = existingCardUI.GetComponent<CardView>();
+                    if (cardView != null)
+                    {
+                        cardView.SetDraggable(false); // Disable dragging once deployed
+                    }
+
+                    // Add it back to the dictionary with the updated GameObject
+                    cardUIElements[card] = existingCardUI;
+                }
+                else
+                {
+                    // If no existing UI element was found, create a new one
+                    Debug.Log(
+                        $"[MatchView] Creating new {(isOpponent ? "opponent" : "player")} card UI for slot {position}: {card.Title}"
+                    );
+                    var cardGO = CreateCardUI(card, slotTransform, true);
+                    if (cardGO != null)
+                    {
+                        var cardView = cardGO.GetComponent<CardView>();
+                        if (cardView != null)
+                        {
+                            cardView.transform.localPosition = Vector3.zero;
+                            cardView.transform.localScale = Vector3.one;
+                            cardView.SetDraggable(false); // Disable dragging once deployed
+                            Debug.Log(
+                                $"[MatchView] Successfully created {(isOpponent ? "opponent" : "player")} card UI for slot {position}"
+                            );
+                        }
+                        else
+                        {
+                            Debug.LogError(
+                                $"[MatchView] Failed to get CardView component for {(isOpponent ? "opponent" : "player")} card in slot {position}"
+                            );
+                        }
+                    }
+                    else
+                    {
+                        Debug.LogError(
+                            $"[MatchView] Failed to create card UI for {(isOpponent ? "opponent" : "player")} card in slot {position}"
+                        );
+                    }
+                }
+            }
+
+            // We don't need to call UpdateUI here anymore since we're directly
+            // manipulating the card UI element
         }
 
         private void HandleCardDrawn(Card card)
@@ -264,45 +351,53 @@ namespace Kardx.UI.Scenes
                 return false;
             }
 
-            if (deployedCards.ContainsKey(slotIndex))
+            // Check if the slot is already occupied by looking for a CardView component
+            Transform slotTransform = battlefieldSlots[slotIndex];
+            bool hasCardView = false;
+            for (int i = 0; i < slotTransform.childCount; i++)
+            {
+                if (slotTransform.GetChild(i).GetComponent<CardView>() != null)
+                {
+                    hasCardView = true;
+                    break;
+                }
+            }
+
+            if (hasCardView)
             {
                 Debug.LogWarning($"Slot {slotIndex} is already occupied");
                 return false;
             }
 
             // Check and deploy via match manager
+            // This will trigger the HandleCardDeployed event which will handle the UI update
             if (!matchManager.DeployCard(card, slotIndex))
             {
                 Debug.LogWarning("Failed to deploy card via match manager");
                 return false;
             }
 
-            // Create card UI in the specific slot
-            var cardGO = CreateCardUI(card, battlefieldSlots[slotIndex], true);
-            if (cardGO != null)
-            {
-                var cardView = cardGO.GetComponent<CardView>();
-                if (cardView != null)
-                {
-                    deployedCards[slotIndex] = cardView;
-                    cardView.transform.localPosition = Vector3.zero;
-                    cardView.transform.localScale = Vector3.one;
-                }
-            }
-
+            // The HandleCardDeployed method will be called by the event system
+            // and will handle moving the card UI to the battlefield
             return true;
         }
 
         private void RemoveCard(int slotIndex, bool isOpponent = false)
         {
-            var cards = isOpponent ? opponentDeployedCards : deployedCards;
-            if (cards.TryGetValue(slotIndex, out var cardView))
+            var slots = isOpponent ? opponentBattlefieldSlots : battlefieldSlots;
+            Transform slotTransform = slots[slotIndex];
+
+            // Find and remove only the CardView component
+            for (int i = 0; i < slotTransform.childCount; i++)
             {
-                cards.Remove(slotIndex);
-                if (cardView != null)
+                Transform child = slotTransform.GetChild(i);
+                if (child.GetComponent<CardView>() != null)
                 {
-                    // Handle card removal animation/effects here
-                    Destroy(cardView.gameObject);
+                    Debug.Log(
+                        $"[MatchView] Removing card from slot {slotIndex} (isOpponent: {isOpponent})"
+                    );
+                    Destroy(child.gameObject);
+                    return; // Only remove one card
                 }
             }
         }
@@ -316,10 +411,12 @@ namespace Kardx.UI.Scenes
             }
         }
 
-        private void UpdateUI()
+        public void UpdateUI()
         {
             if (matchManager == null)
                 return;
+
+            Debug.Log("[MatchView] UpdateUI called");
 
             // Update turn info
             if (turnText != null)
@@ -341,35 +438,171 @@ namespace Kardx.UI.Scenes
                 opponentCreditsText.text = $"Credits: {opponentState.Credits}";
             }
 
-            // Clear only hand card UI elements, preserving battlefield cards
-            var cardsToPreserve = new HashSet<Card>();
-            foreach (var deployedCard in deployedCards.Values)
+            // Collect all cards that should have UI elements
+            var allActiveCards = new HashSet<Card>();
+
+            // Add cards from player's hand
+            var playerHand = playerState.Hand;
+            foreach (var card in playerHand)
             {
-                if (deployedCard != null && deployedCard.Card != null)
-                {
-                    cardsToPreserve.Add(deployedCard.Card);
-                }
+                allActiveCards.Add(card);
             }
-            foreach (var deployedCard in opponentDeployedCards.Values)
+
+            // Add cards from opponent's hand
+            var opponentHand = opponentState.Hand;
+            foreach (var card in opponentHand)
             {
-                if (deployedCard != null && deployedCard.Card != null)
+                allActiveCards.Add(card);
+            }
+
+            // Add cards from player's battlefield
+            var battlefield = playerState.Battlefield;
+            foreach (var card in battlefield)
+            {
+                if (card != null)
                 {
-                    cardsToPreserve.Add(deployedCard.Card);
+                    allActiveCards.Add(card);
                 }
             }
 
-            // Only destroy cards that aren't on the battlefield
+            // Add cards from opponent's battlefield
+            var opponentBattlefield = opponentState.Battlefield;
+            foreach (var card in opponentBattlefield)
+            {
+                if (card != null)
+                {
+                    allActiveCards.Add(card);
+                }
+            }
+
+            // Remove UI elements for cards that are no longer active
             foreach (var cardEntry in cardUIElements.ToList())
             {
-                if (!cardsToPreserve.Contains(cardEntry.Key))
+                if (!allActiveCards.Contains(cardEntry.Key))
                 {
+                    Debug.Log(
+                        $"[MatchView] Removing UI element for card {cardEntry.Key.Title} as it's no longer active"
+                    );
                     Destroy(cardEntry.Value);
                     cardUIElements.Remove(cardEntry.Key);
                 }
             }
 
+            // Update player's battlefield (bottom)
+            for (int i = 0; i < battlefieldSlots.Length; i++)
+            {
+                // Check if there's a card in the data model
+                if (battlefield[i] != null)
+                {
+                    // Check if there's already a CardView in this slot
+                    bool hasCardView = false;
+                    Transform slotTransform = battlefieldSlots[i];
+                    for (int j = 0; j < slotTransform.childCount; j++)
+                    {
+                        if (slotTransform.GetChild(j).GetComponent<CardView>() != null)
+                        {
+                            hasCardView = true;
+                            break;
+                        }
+                    }
+
+                    // If there's no UI element for this card, create one
+                    if (!hasCardView)
+                    {
+                        var cardGO = CreateCardUI(battlefield[i], battlefieldSlots[i], true);
+                        if (cardGO != null)
+                        {
+                            var cardView = cardGO.GetComponent<CardView>();
+                            if (cardView != null)
+                            {
+                                cardView.transform.localPosition = Vector3.zero;
+                                cardView.transform.localScale = Vector3.one;
+                            }
+                        }
+                    }
+                }
+                // If there's no card in the data model but there's a UI element, remove it
+                else
+                {
+                    RemoveCard(i, false);
+                }
+            }
+
+            // Update opponent's battlefield (top)
+            Debug.Log(
+                $"[MatchView] Updating opponent battlefield. Cards in data model: {opponentBattlefield.Count(c => c != null)}"
+            );
+
+            for (int i = 0; i < opponentBattlefieldSlots.Length; i++)
+            {
+                // Check if there's a card in the data model
+                if (opponentBattlefield[i] != null)
+                {
+                    Debug.Log(
+                        $"[MatchView] Opponent battlefield slot {i} has card: {opponentBattlefield[i].Title}"
+                    );
+
+                    // Check if there's already a CardView in this slot
+                    bool hasCardView = false;
+                    Transform slotTransform = opponentBattlefieldSlots[i];
+                    for (int j = 0; j < slotTransform.childCount; j++)
+                    {
+                        if (slotTransform.GetChild(j).GetComponent<CardView>() != null)
+                        {
+                            hasCardView = true;
+                            break;
+                        }
+                    }
+
+                    // If there's no UI element for this card, create one
+                    if (!hasCardView)
+                    {
+                        Debug.Log(
+                            $"[MatchView] Creating opponent card UI for slot {i}: {opponentBattlefield[i].Title}"
+                        );
+                        var cardGO = CreateCardUI(
+                            opponentBattlefield[i],
+                            opponentBattlefieldSlots[i],
+                            true
+                        );
+                        if (cardGO != null)
+                        {
+                            var cardView = cardGO.GetComponent<CardView>();
+                            if (cardView != null)
+                            {
+                                cardView.transform.localPosition = Vector3.zero;
+                                cardView.transform.localScale = Vector3.one;
+                                Debug.Log(
+                                    $"[MatchView] Successfully created opponent card UI for slot {i}"
+                                );
+                            }
+                            else
+                            {
+                                Debug.LogError(
+                                    $"[MatchView] Failed to get CardView component for opponent card in slot {i}"
+                                );
+                            }
+                        }
+                        else
+                        {
+                            Debug.LogError(
+                                $"[MatchView] Failed to create card UI for opponent card in slot {i}"
+                            );
+                        }
+                    }
+                }
+                // If there's no card in the data model but there's a UI element, remove it
+                else
+                {
+                    // Remove card if slot is now empty
+                    Debug.Log(
+                        $"[MatchView] Removing opponent card UI from slot {i} as it's now empty"
+                    );
+                    RemoveCard(i, true);
+                }
+            }
+
             // Update player's hand (bottom)
-            var playerHand = playerState.Hand;
             for (int i = 0; i < playerHand.Count; i++)
             {
                 if (!cardUIElements.ContainsKey(playerHand[i]))
@@ -379,36 +612,11 @@ namespace Kardx.UI.Scenes
             }
 
             // Update opponent's hand (top, face down)
-            var opponentHand = opponentState.Hand;
             for (int i = 0; i < opponentHand.Count; i++)
             {
                 if (!cardUIElements.ContainsKey(opponentHand[i]))
                 {
                     CreateHandCardUI(opponentHand[i], opponentHandArea, i, false);
-                }
-            }
-
-            // Update player's battlefield (bottom)
-            var battlefield = playerState.Battlefield;
-            for (int i = 0; i < battlefieldSlots.Length; i++)
-            {
-                if (deployedCards.TryGetValue(i, out var cardView))
-                {
-                    cardView.transform.SetParent(battlefieldSlots[i]);
-                    cardView.transform.localPosition = Vector3.zero;
-                    cardView.transform.localScale = Vector3.one;
-                }
-            }
-
-            // Update opponent's battlefield (top)
-            var opponentBattlefield = opponentState.Battlefield;
-            for (int i = 0; i < opponentBattlefieldSlots.Length; i++)
-            {
-                if (opponentDeployedCards.TryGetValue(i, out var cardView))
-                {
-                    cardView.transform.SetParent(opponentBattlefieldSlots[i]);
-                    cardView.transform.localPosition = Vector3.zero;
-                    cardView.transform.localScale = Vector3.one;
                 }
             }
         }

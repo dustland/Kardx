@@ -50,13 +50,15 @@ namespace Kardx.Core.Planning
         /// </summary>
         /// <param name="cardId">The ID of the card to deploy.</param>
         /// <param name="reason">The reason for deploying this card.</param>
-        public void AddDeployCardAction(string cardId, string reason = null)
+        /// <param name="targetSlot">The target slot to deploy the card to. Default is -1 (no specific slot).</param>
+        public void AddDeployCardAction(string cardId, string reason = null, int targetSlot = -1)
         {
             Decisions.Add(
                 new Decision
                 {
                     Type = DecisionType.DeployCard,
                     TargetCardId = cardId,
+                    TargetSlot = targetSlot,
                     Reasoning = reason,
                 }
             );

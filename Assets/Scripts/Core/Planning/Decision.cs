@@ -28,6 +28,11 @@ namespace Kardx.Core.Planning
         public int AbilityIndex { get; set; }
 
         /// <summary>
+        /// Gets or sets the target slot for deployment decisions.
+        /// </summary>
+        public int TargetSlot { get; set; } = -1;
+
+        /// <summary>
         /// Gets or sets the reasoning behind this decision.
         /// </summary>
         public string Reasoning { get; set; }

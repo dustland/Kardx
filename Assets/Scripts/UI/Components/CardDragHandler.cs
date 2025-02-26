@@ -164,6 +164,7 @@ namespace Kardx.UI.Components
             var raycastResults = new System.Collections.Generic.List<RaycastResult>();
             EventSystem.current.RaycastAll(eventData, raycastResults);
             bool wasSuccessful = false;
+            CardSlot targetSlot = null;
 
             foreach (var hit in raycastResults)
             {
@@ -171,15 +172,27 @@ namespace Kardx.UI.Components
                 if (dropZone != null && dropZone.IsValidDropTarget(cardView.Card))
                 {
                     wasSuccessful = true;
+                    targetSlot = dropZone;
+                    // When a card is successfully dropped, we need to hide it from the hand
+                    // This prevents it from appearing in both the hand and the battlefield
+                    gameObject.SetActive(false);
+                    Debug.Log(
+                        "[CardDragHandler] Card dropped successfully on valid target - hiding from hand"
+                    );
                     break;
                 }
             }
 
             if (!wasSuccessful)
             {
+                // Only reset the position if the drop was not successful
                 transform.SetParent(originalParent);
                 transform.position = originalPosition;
+                Debug.Log("[CardDragHandler] Card drop was not successful, resetting position");
             }
+            // Note: We don't need to do anything for successful drops
+            // The DeployCard method will handle moving the card to the battlefield
+            // and the UpdateUI method will handle removing it from the hand
 
             OnDragEnded?.Invoke(wasSuccessful);
         }

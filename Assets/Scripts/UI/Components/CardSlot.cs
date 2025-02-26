@@ -84,9 +84,12 @@ namespace Kardx.UI.Components
             }
 
             Debug.Log($"Card deployed successfully at position {position}");
-            cardView.transform.SetParent(transform);
-            cardView.transform.localPosition = Vector3.zero;
-            cardView.transform.localScale = Vector3.one;
+            // Don't set the parent here, as DeployCard will handle that
+            // The card will be moved or recreated in the battlefield by DeployCard
+
+            // We don't need to call UpdateUI here anymore since we're directly
+            // manipulating the card UI element in DeployCard and CardDragHandler
+            // matchView.UpdateUI();
         }
 
         public bool IsValidDropTarget(Card card)
