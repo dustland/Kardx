@@ -164,6 +164,12 @@ namespace Kardx.UI.Scenes
             UpdateUI();
         }
 
+        public void NextTurn()
+        {
+            matchManager.NextTurn();
+            UpdateUI();
+        }
+
         private void OnDestroy()
         {
             if (matchManager != null)

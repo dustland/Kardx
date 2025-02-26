@@ -43,6 +43,14 @@ namespace Kardx.Core
             ProcessStartOfTurn();
         }
 
+        /// <summary>
+        /// Ends the current turn and starts the next turn.
+        /// </summary>
+        public void EndTurn()
+        {
+            StartNextTurn();
+        }
+
         public void IncrementTurnNumber()
         {
             turnNumber++;
