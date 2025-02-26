@@ -87,7 +87,7 @@ namespace Kardx.UI.Scenes
                 if (cardPanel != null)
                 {
                     cardDetailView = cardPanel.GetComponent<CardDetailView>();
-                    Debug.Log("[CardCollectionView] Found CardDetailView on CardPanel");
+                    Debug.Log("[MatchView] Found CardDetailView on CardPanel");
                 }
 
                 // If still not found, try finding it anywhere in the scene
@@ -97,7 +97,7 @@ namespace Kardx.UI.Scenes
                     if (cardDetailView == null)
                     {
                         Debug.LogError(
-                            "[CardCollectionView] CardDetailView not found in scene. Please ensure CardPanel has CardDetailView component."
+                            "[MatchView] CardDetailView not found in scene. Please ensure CardPanel has CardDetailView component."
                         );
                         return;
                     }
@@ -381,7 +381,9 @@ namespace Kardx.UI.Scenes
 
         private void HandleCardDrawn(Card card)
         {
-            Debug.Log("[MatchView] HandleCardDrawn: " + card.Title);
+            Debug.Log(
+                $"[MatchView] HandleCardDrawn: {card.Title}, Owner: {card.OwnerFaction}, FaceDown: {card.FaceDown}"
+            );
 
             // Determine if this is an opponent card
             bool isOpponent = card.OwnerFaction == matchManager.Opponent.Faction;
@@ -393,6 +395,10 @@ namespace Kardx.UI.Scenes
 
             if (position >= 0)
             {
+                Debug.Log(
+                    $"[MatchView] Creating UI for {(isOpponent ? "opponent" : "player")} card at position {position}. Card is {(card.FaceDown ? "face down" : "face up")}"
+                );
+
                 // Create UI for the new card - the card's face-down state should already be set by the game logic
                 CreateHandCardUI(card, parent, position, isOpponent);
 
@@ -606,7 +612,11 @@ namespace Kardx.UI.Scenes
             UpdateHand(opponentHand, opponentHandArea, true);
         }
 
-        private void UpdateBattlefield(IReadOnlyList<Card> battlefield, Transform[] slots, bool isOpponent)
+        private void UpdateBattlefield(
+            IReadOnlyList<Card> battlefield,
+            Transform[] slots,
+            bool isOpponent
+        )
         {
             for (int i = 0; i < slots.Length; i++)
             {
@@ -723,7 +733,9 @@ namespace Kardx.UI.Scenes
 
         private GameObject CreateCardUI(Card card, Transform parent, bool faceDown)
         {
-            Debug.Log("[MatchView] Creating card UI: " + card.Title);
+            Debug.Log(
+                $"[MatchView] Creating card UI: {card.Title}, FaceDown: {faceDown}, Owner: {card.OwnerFaction}"
+            );
             if (cardPrefab == null)
             {
                 Debug.LogError("[MatchView] Card prefab is null");
@@ -741,10 +753,12 @@ namespace Kardx.UI.Scenes
             }
 
             // Initialize card data first, before any other setup
+            Debug.Log($"[MatchView] Initializing card data for {card.Title}");
             cardView.Initialize(card);
 
             // Ensure the UI reflects the current state of the card
             // Note: faceDown parameter is used only for the UI, not to modify the card's state
+            Debug.Log($"[MatchView] Setting face down state to {faceDown} for {card.Title}");
             cardView.SetFaceDown(faceDown);
 
             // Ensure the card has required UI components
@@ -762,9 +776,11 @@ namespace Kardx.UI.Scenes
                 image = cardGO.AddComponent<Image>();
             }
             image.raycastTarget = true;
+            Debug.Log($"[MatchView] Set raycastTarget to true for {card.Title}");
 
             // Set draggable state after initialization
             cardView.SetDraggable(true);
+            Debug.Log($"[MatchView] Card UI creation complete for {card.Title}");
 
             // Note: We don't need to manually set the card back sprite here
             // The CardView component already handles face-down cards with its own cardBackOverlay
@@ -785,11 +801,11 @@ namespace Kardx.UI.Scenes
             // Update credits display
             if (creditsText != null)
             {
-                creditsText.text = $"Credits: {playerState.Credits}";
+                creditsText.text = $"Kredits: {playerState.Credits}";
             }
             if (opponentCreditsText != null)
             {
-                opponentCreditsText.text = $"Credits: {opponentState.Credits}";
+                opponentCreditsText.text = $"Kredits: {opponentState.Credits}";
             }
         }
     }

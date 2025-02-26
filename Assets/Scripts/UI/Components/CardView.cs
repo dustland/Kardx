@@ -61,10 +61,10 @@ namespace Kardx.UI.Components
         {
             { Faction.UnitedStates, "CardBacks/BasicGermanB1" },
             { Faction.SovietUnion, "CardBacks/SovietBasicB1" },
-            { Faction.BritishEmpire, "CardBacks/british_back" },
-            { Faction.ThirdReich, "CardBacks/german_back" },
-            { Faction.Empire, "CardBacks/japan_back" },
-            { Faction.Neutral, "CardBacks/neutral_back" },
+            { Faction.BritishEmpire, "CardBacks/BasicGermanB1" },
+            { Faction.ThirdReich, "CardBacks/BasicGermanB1" },
+            { Faction.Empire, "CardBacks/SovietBasicB1" },
+            { Faction.Neutral, "CardBacks/BasicGermanB1" },
         };
 
         [Header("Effects")]
@@ -167,19 +167,6 @@ namespace Kardx.UI.Components
                     return;
                 }
 
-                // Check if card is face down first
-                if (card != null && card.FaceDown)
-                {
-                    ShowCardBack();
-                    return;
-                }
-
-                // Hide card back overlay when face up
-                if (cardBackOverlay != null)
-                {
-                    cardBackOverlay.gameObject.SetActive(false);
-                }
-
                 // Get the active card data source (either Card or CardType)
                 var name = card != null ? card.Title : cardType?.Title ?? "";
                 var description = card != null ? card.Description : cardType?.Description ?? "";
@@ -190,7 +177,7 @@ namespace Kardx.UI.Components
                 var attack = card != null ? card.Attack : cardType?.BaseAttack ?? 0;
                 var defence = card != null ? card.CurrentDefence : cardType?.BaseDefence ?? 0;
                 var imageUrl = card != null ? card.ImageUrl : cardType?.ImageUrl;
-                var abilities = card != null ? card.CardType.Abilities : cardType?.Abilities;
+                var abilities = card != null ? card.CardType?.Abilities : cardType?.Abilities;
 
                 // Update UI elements safely
                 if (nameText != null)
@@ -228,7 +215,13 @@ namespace Kardx.UI.Components
                     UpdateModifierEffects();
                 }
 
+                // Always load the card image, even for face-down cards
+                // This ensures the image is ready when the card is flipped
                 LoadCardImage();
+
+                // After all UI elements are initialized, check if the card should be face down
+                // Show or hide the card back overlay based on the card's face down state
+                ShowCardBack(card?.FaceDown ?? false);
             }
             catch (Exception ex)
             {
@@ -269,10 +262,28 @@ namespace Kardx.UI.Components
             }
 
             // Use the card's image URL if available, otherwise use the card type's image URL
-            string imageUrl = card != null ? card.ImageUrl : cardType.ImageUrl;
+            string imageUrl = null;
+
+            if (card != null)
+            {
+                imageUrl = card.ImageUrl;
+                // If card has no image URL but has a CardType, try to use the CardType's image URL
+                if (string.IsNullOrEmpty(imageUrl) && card.CardType != null)
+                {
+                    imageUrl = card.CardType.ImageUrl;
+                }
+            }
+            else if (cardType != null)
+            {
+                imageUrl = cardType.ImageUrl;
+            }
+
             if (string.IsNullOrEmpty(imageUrl))
             {
-                Debug.LogWarning($"[CardView] No image URL specified for card {cardType.Title}");
+                Debug.LogWarning(
+                    $"[CardView] No image URL specified for card {(card != null ? card.Title : cardType?.Title ?? "Unknown")}"
+                );
+                // Just log the warning, no placeholder needed
                 return;
             }
 
@@ -293,11 +304,13 @@ namespace Kardx.UI.Components
                 else
                 {
                     Debug.LogError($"[CardView] Failed to load image from Cards/{fileName}");
+                    // Just log the error, no placeholder needed
                 }
             }
             catch (Exception e)
             {
                 Debug.LogError($"[CardView] Error loading image for {imageUrl}: {e.Message}");
+                // Just log the error, no placeholder needed
             }
         }
 
@@ -321,10 +334,7 @@ namespace Kardx.UI.Components
         public void SetFaceDown(bool faceDown)
         {
             // Only update the UI state, don't modify the card's state
-            if (cardBackOverlay != null)
-            {
-                cardBackOverlay.gameObject.SetActive(faceDown);
-            }
+            ShowCardBack(faceDown);
         }
 
         public void Initialize(Card card)
@@ -393,8 +403,22 @@ namespace Kardx.UI.Components
             Debug.Log("[CardView] ShowDetail method completed");
         }
 
-        private void ShowCardBack()
+        private void ShowCardBack(bool show = true)
         {
+            Debug.Log(
+                $"[CardView] ShowCardBack called with show={show} for card: {(card != null ? card.Title : "null")} with faction: {(card != null ? card.OwnerFaction.ToString() : "null")}"
+            );
+
+            if (!show)
+            {
+                // If we're not showing the card back, just hide the overlay and return
+                if (cardBackOverlay != null)
+                {
+                    cardBackOverlay.gameObject.SetActive(false);
+                }
+                return;
+            }
+
             if (cardBackOverlay != null && card != null)
             {
                 // Load the appropriate card back sprite based on card's owner faction
@@ -402,10 +426,15 @@ namespace Kardx.UI.Components
                     card.OwnerFaction,
                     FactionCardBacks[Faction.Neutral]
                 );
+                Debug.Log($"[CardView] Attempting to load card back from path: {cardBackPath}");
+
                 Sprite cardBackSprite = Resources.Load<Sprite>(cardBackPath);
 
                 if (cardBackSprite != null)
                 {
+                    Debug.Log(
+                        $"[CardView] Successfully loaded card back sprite for faction {card.OwnerFaction}"
+                    );
                     cardBackOverlay.sprite = cardBackSprite;
                     cardBackOverlay.gameObject.SetActive(true);
                 }
@@ -414,18 +443,54 @@ namespace Kardx.UI.Components
                     Debug.LogWarning(
                         $"[CardView] Failed to load card back sprite for faction {card.OwnerFaction} at path: {cardBackPath}"
                     );
-                    // Load neutral back as fallback
-                    cardBackOverlay.sprite = Resources.Load<Sprite>(
-                        FactionCardBacks[Faction.Neutral]
-                    );
-                    cardBackOverlay.gameObject.SetActive(true);
+
+                    // Try loading with a direct path to the Resources/Cards folder as fallback
+                    string fallbackPath = $"Cards/{Path.GetFileName(cardBackPath)}";
+                    Debug.Log($"[CardView] Trying fallback path: {fallbackPath}");
+                    cardBackSprite = Resources.Load<Sprite>(fallbackPath);
+
+                    if (cardBackSprite != null)
+                    {
+                        Debug.Log($"[CardView] Successfully loaded card back from fallback path");
+                        cardBackOverlay.sprite = cardBackSprite;
+                        cardBackOverlay.gameObject.SetActive(true);
+                    }
+                    else
+                    {
+                        Debug.LogError(
+                            $"[CardView] Failed to load card back from fallback path. Using neutral back as last resort"
+                        );
+                        // Load neutral back as fallback
+                        cardBackSprite = Resources.Load<Sprite>(FactionCardBacks[Faction.Neutral]);
+
+                        if (cardBackSprite == null)
+                        {
+                            Debug.LogError(
+                                "[CardView] Even neutral card back failed to load! Creating placeholder image."
+                            );
+                            // Skip placeholder creation
+                            cardBackOverlay.gameObject.SetActive(false);
+                        }
+                        else
+                        {
+                            cardBackOverlay.sprite = cardBackSprite;
+                            cardBackOverlay.gameObject.SetActive(true);
+                        }
+                    }
                 }
             }
             else
             {
                 Debug.LogWarning(
-                    "[CardView] Missing card back overlay image component or card is null"
+                    $"[CardView] Missing card back overlay image component ({cardBackOverlay == null}) or card is null ({card == null})"
                 );
+
+                // If we have a card back overlay but no card, still show a placeholder
+                if (cardBackOverlay != null && card == null)
+                {
+                    // Skip placeholder creation
+                    cardBackOverlay.gameObject.SetActive(false);
+                }
             }
         }
 
