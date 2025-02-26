@@ -77,6 +77,17 @@ namespace Kardx.UI.Components
             // Clear highlight before handling the drop
             SetHighlight(false);
 
+            // Ensure the card's CanvasGroup.blocksRaycasts is set to true
+            // This is critical because OnEndDrag might not be called if the card is successfully deployed
+            var canvasGroup = cardView.GetComponent<CanvasGroup>();
+            if (canvasGroup != null)
+            {
+                canvasGroup.blocksRaycasts = true;
+                Debug.Log(
+                    $"[CardSlot] Ensuring CanvasGroup.blocksRaycasts is true for dropped card"
+                );
+            }
+
             if (matchView == null || !matchView.DeployCard(cardView.Card, position))
             {
                 Debug.Log($"Failed to deploy card at position {position}");

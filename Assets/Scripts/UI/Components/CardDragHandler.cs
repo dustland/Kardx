@@ -100,9 +100,17 @@ namespace Kardx.UI.Components
             originalPosition = transform.position;
             originalParent = transform.parent;
             transform.SetParent(canvas.transform);
-            canvasGroup.blocksRaycasts = false; // Disable raycast blocking during drag
+
+            // We disable blocksRaycasts during drag so that:
+            // 1. The card itself doesn't block raycasts to potential drop targets underneath
+            // 2. This allows the EventSystem to detect the drop zones (CardSlot components)
+            // NOTE: This is the standard approach for drag and drop in Unity UI
+            canvasGroup.blocksRaycasts = false;
+
             OnDragStarted?.Invoke();
-            Debug.Log($"[CardDragHandler] Started dragging card: {cardView.Card.Title}");
+            Debug.Log(
+                $"[CardDragHandler] Started dragging card: {cardView.Card.Title}, blocksRaycasts set to false"
+            );
         }
 
         public void OnDrag(PointerEventData eventData)
@@ -159,7 +167,10 @@ namespace Kardx.UI.Components
                 lastHighlightedSlot = null;
             }
 
+            // Re-enable raycast blocking when drag ends
+            // This is critical for the card to receive click events after being dropped
             canvasGroup.blocksRaycasts = true;
+            Debug.Log($"[CardDragHandler] End drag - blocksRaycasts restored to true");
 
             var raycastResults = new System.Collections.Generic.List<RaycastResult>();
             EventSystem.current.RaycastAll(eventData, raycastResults);
@@ -173,11 +184,14 @@ namespace Kardx.UI.Components
                 {
                     wasSuccessful = true;
                     targetSlot = dropZone;
-                    // When a card is successfully dropped, we need to hide it from the hand
-                    // This prevents it from appearing in both the hand and the battlefield
-                    gameObject.SetActive(false);
+
+                    // IMPORTANT: We don't hide the card or change its parent here anymore.
+                    // Instead, we let HandleCardDeployed handle moving the card to the battlefield.
+                    // This ensures that the card's CanvasGroup.blocksRaycasts remains true
+                    // after being deployed, allowing it to receive click events.
+
                     Debug.Log(
-                        "[CardDragHandler] Card dropped successfully on valid target - hiding from hand"
+                        "[CardDragHandler] Card dropped successfully on valid target - will be moved by HandleCardDeployed"
                     );
                     break;
                 }
@@ -193,6 +207,11 @@ namespace Kardx.UI.Components
             // Note: We don't need to do anything for successful drops
             // The DeployCard method will handle moving the card to the battlefield
             // and the UpdateUI method will handle removing it from the hand
+
+            // Double-check that blocksRaycasts is enabled
+            Debug.Log(
+                $"[CardDragHandler] End drag - blocksRaycasts set to: {canvasGroup.blocksRaycasts}"
+            );
 
             OnDragEnded?.Invoke(wasSuccessful);
         }

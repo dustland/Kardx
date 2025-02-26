@@ -327,6 +327,34 @@ namespace Kardx.UI.Scenes
                         // Just reflect the model state, don't modify it
                         cardView.SetFaceDown(card.FaceDown);
                         cardView.SetDraggable(false); // Disable dragging once deployed
+
+                        // Explicitly reset the isDragging flag to ensure the card can be clicked
+                        cardView.ResetDraggingState();
+
+                        // Ensure the CanvasGroup's blocksRaycasts is enabled
+                        // This is critical because OnEndDrag might not be called if the card is successfully deployed
+                        var canvasGroup = existingCardUI.GetComponent<CanvasGroup>();
+                        if (canvasGroup != null)
+                        {
+                            canvasGroup.blocksRaycasts = true;
+                            Debug.Log(
+                                $"[MatchView] Ensuring CanvasGroup.blocksRaycasts is true for {card.Title}"
+                            );
+                        }
+
+                        // Check if the card's image components have raycastTarget enabled
+                        var images = existingCardUI.GetComponentsInChildren<Image>();
+                        Debug.Log(
+                            $"[MatchView] Card {card.Title} in {(isOpponent ? "opponent" : "player")} battlefield has {images.Length} Image components"
+                        );
+                        foreach (var img in images)
+                        {
+                            Debug.Log(
+                                $"[MatchView] Image '{img.name}' raycastTarget: {img.raycastTarget}"
+                            );
+                            // Ensure raycastTarget is enabled for all images
+                            img.raycastTarget = true;
+                        }
                     }
 
                     // Add it back to the dictionary with the updated GameObject
@@ -349,6 +377,35 @@ namespace Kardx.UI.Scenes
                             cardView.transform.localPosition = Vector3.zero;
                             cardView.transform.localScale = Vector3.one;
                             cardView.SetDraggable(false); // Disable dragging once deployed
+
+                            // Explicitly reset the isDragging flag to ensure the card can be clicked
+                            cardView.ResetDraggingState();
+
+                            // Ensure the CanvasGroup's blocksRaycasts is enabled
+                            // This is critical because OnEndDrag might not be called if the card is successfully deployed
+                            var canvasGroup = cardGO.GetComponent<CanvasGroup>();
+                            if (canvasGroup != null)
+                            {
+                                canvasGroup.blocksRaycasts = true;
+                                Debug.Log(
+                                    $"[MatchView] Ensuring CanvasGroup.blocksRaycasts is true for {card.Title}"
+                                );
+                            }
+
+                            // Check if the card's image components have raycastTarget enabled
+                            var images = cardGO.GetComponentsInChildren<Image>();
+                            Debug.Log(
+                                $"[MatchView] New card {card.Title} in {(isOpponent ? "opponent" : "player")} battlefield has {images.Length} Image components"
+                            );
+                            foreach (var img in images)
+                            {
+                                Debug.Log(
+                                    $"[MatchView] Image '{img.name}' raycastTarget: {img.raycastTarget}"
+                                );
+                                // Ensure raycastTarget is enabled for all images
+                                img.raycastTarget = true;
+                            }
+
                             Debug.Log(
                                 $"[MatchView] Successfully created {(isOpponent ? "opponent" : "player")} card UI for slot {position}"
                             );

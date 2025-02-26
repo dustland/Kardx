@@ -88,6 +88,10 @@ namespace Kardx.UI.Components
 
         private void Awake()
         {
+            // Initialize isDragging to false
+            isDragging = false;
+            Debug.Log($"[CardView] Initializing {gameObject.name} with isDragging = {isDragging}");
+
             // Ensure we have the basic required components
             if (GetComponent<RectTransform>() == null)
             {
@@ -144,6 +148,13 @@ namespace Kardx.UI.Components
                 $"[CardView] OnPointerClick on {gameObject.name} (isDragging: {isDragging}, EventCamera: {eventData.enterEventCamera?.name}, PointerPress: {eventData.pointerPress?.name})"
             );
 
+            // Check if the CanvasGroup is blocking raycasts
+            var canvasGroup = GetComponent<CanvasGroup>();
+            if (canvasGroup != null)
+            {
+                Debug.Log($"[CardView] CanvasGroup.blocksRaycasts: {canvasGroup.blocksRaycasts}");
+            }
+
             // Only handle the click if this GameObject is the actual target
             if (eventData.pointerPress != gameObject)
             {
@@ -151,9 +162,25 @@ namespace Kardx.UI.Components
                 return;
             }
 
+            // Check if this is a player card in the battlefield
+            bool isInBattlefield =
+                transform.parent != null
+                && transform.parent.name.Contains("CardSlot")
+                && !transform.parent.name.Contains("Opponent");
+            if (isInBattlefield)
+            {
+                Debug.Log(
+                    $"[CardView] Card is in player battlefield. isDragging: {isDragging}, Card: {(card != null ? card.Title : "null")}"
+                );
+            }
+
             if (!isDragging)
             {
                 ShowDetail();
+            }
+            else
+            {
+                Debug.Log("[CardView] Not showing detail because card is being dragged");
             }
         }
 
@@ -329,6 +356,28 @@ namespace Kardx.UI.Components
             {
                 dragHandler.enabled = canDrag;
             }
+
+            // When a card is deployed to the battlefield, we disable dragging
+            // Make sure to reset the isDragging flag to ensure the card can be clicked
+            if (!canDrag)
+            {
+                isDragging = false;
+                Debug.Log(
+                    $"[CardView] Card {(card != null ? card.Title : "unknown")} is no longer draggable, resetting isDragging to false"
+                );
+            }
+        }
+
+        /// <summary>
+        /// Explicitly resets the isDragging flag to ensure the card can be clicked.
+        /// This is useful when the card is moved from hand to battlefield.
+        /// </summary>
+        public void ResetDraggingState()
+        {
+            isDragging = false;
+            Debug.Log(
+                $"[CardView] Explicitly reset isDragging flag for {(card != null ? card.Title : "unknown")}"
+            );
         }
 
         public void SetFaceDown(bool faceDown)
