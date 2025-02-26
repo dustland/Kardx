@@ -161,7 +161,7 @@ namespace Kardx.Core
             logger?.Log($"[MatchManager] Added {creditsToAdd} credits to player {nextPlayer.Id}");
 
             // Draw a card for the player
-            Card drawnCard = nextPlayer.DrawCard();
+            Card drawnCard = nextPlayer.DrawCard(nextPlayer.Id == board.Player2.Id);
             if (drawnCard != null)
             {
                 OnCardDrawn?.Invoke(drawnCard);
@@ -248,13 +248,54 @@ namespace Kardx.Core
         public bool DeployCard(Card card, int position)
         {
             if (!CanDeployCard(card))
+            {
+                // Add more detailed logging to help diagnose the issue
+                var player = board.CurrentPlayer;
+                if (card == null)
+                {
+                    logger?.LogError("[MatchManager] Cannot deploy card: card is null");
+                }
+                else if (!player.Hand.Contains(card))
+                {
+                    logger?.LogError(
+                        $"[MatchManager] Cannot deploy card {card.Title}: not in player's hand"
+                    );
+                }
+                else if (player.Credits < card.DeploymentCost)
+                {
+                    logger?.LogError(
+                        $"[MatchManager] Cannot deploy card {card.Title}: insufficient credits (has {player.Credits}, needs {card.DeploymentCost})"
+                    );
+                }
+                else if (position < 0 || position >= Player.BATTLEFIELD_SLOT_COUNT)
+                {
+                    logger?.LogError(
+                        $"[MatchManager] Cannot deploy card {card.Title}: invalid position {position}"
+                    );
+                }
+                else if (player.Battlefield[position] != null)
+                {
+                    logger?.LogError(
+                        $"[MatchManager] Cannot deploy card {card.Title}: position {position} is already occupied"
+                    );
+                }
+                else
+                {
+                    logger?.LogError(
+                        $"[MatchManager] Cannot deploy card {card.Title}: unknown reason"
+                    );
+                }
                 return false;
+            }
 
             var currentPlayer = board.CurrentPlayer;
 
             // Try to deploy the card
             if (!currentPlayer.DeployCard(card, position))
                 return false;
+
+            // The Player.DeployCard method already sets the card to face-up
+            // No need to set it again here
 
             // Notify listeners
             OnCardDeployed?.Invoke(card, position);

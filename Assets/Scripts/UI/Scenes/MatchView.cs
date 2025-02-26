@@ -60,10 +60,6 @@ namespace Kardx.UI.Scenes
         [SerializeField]
         private TextMeshProUGUI opponentCreditsText;
 
-        [Header("Card Settings")]
-        [SerializeField]
-        private Sprite cardBackSprite;
-
         [Header("Layout Settings")]
         [SerializeField]
         private float handCurveHeight = 0.5f;
@@ -163,19 +159,64 @@ namespace Kardx.UI.Scenes
         private void Start()
         {
             // Create MatchManager instance
-            matchManager = new MatchManager(new SimpleLogger("[MatchView]"));
+            matchManager = new MatchManager(new SimpleLogger("[MatchManager]"));
 
             // Subscribe to MatchManager events
             matchManager.OnCardDeployed += HandleCardDeployed;
             matchManager.OnCardDrawn += HandleCardDrawn;
             matchManager.OnCardDiscarded += HandleCardDiscarded;
 
+            // Subscribe to turn events
+            matchManager.OnTurnStarted += HandleTurnStarted;
+            matchManager.OnTurnEnded += HandleTurnEnded;
+
+            // Subscribe to match events
+            matchManager.OnMatchStarted += HandleMatchStarted;
+            matchManager.OnMatchEnded += HandleMatchEnded;
+
             // Subscribe to AI turn processing event
             matchManager.OnProcessAITurn += HandleProcessAITurn;
 
             // Start the battle
             matchManager.StartMatch();
+        }
+
+        private void HandleMatchStarted(string message)
+        {
+            Debug.Log($"[MatchView] Match started: {message}");
+
+            // Do a full UI refresh at the start of the match
             UpdateUI();
+        }
+
+        private void HandleMatchEnded(string message)
+        {
+            Debug.Log($"[MatchView] Match ended: {message}");
+
+            // Handle match end UI updates if needed
+        }
+
+        private void HandleTurnStarted(object sender, Player player)
+        {
+            UpdateTurnDisplay();
+            UpdateCreditsDisplay();
+        }
+
+        private void HandleTurnEnded(object sender, Player player)
+        {
+            // Any cleanup needed at the end of a turn
+        }
+
+        private void UpdateTurnDisplay()
+        {
+            if (matchManager == null)
+                return;
+
+            // Update turn info
+            if (turnText != null)
+            {
+                turnText.text = $"Turn {matchManager.TurnNumber}";
+            }
         }
 
         /// <summary>
@@ -209,18 +250,27 @@ namespace Kardx.UI.Scenes
         public void NextTurn()
         {
             matchManager.NextTurn();
-            UpdateUI();
+            // UpdateUI is no longer needed here as all UI updates will be handled by event callbacks
+            // UpdateUI();
         }
 
         private void OnDestroy()
         {
             if (matchManager != null)
             {
-                // Unsubscribe from BattleManager events
+                // Unsubscribe from MatchManager events
                 matchManager.OnCardDeployed -= HandleCardDeployed;
                 matchManager.OnCardDrawn -= HandleCardDrawn;
                 matchManager.OnCardDiscarded -= HandleCardDiscarded;
                 matchManager.OnProcessAITurn -= HandleProcessAITurn;
+
+                // Unsubscribe from turn events
+                matchManager.OnTurnStarted -= HandleTurnStarted;
+                matchManager.OnTurnEnded -= HandleTurnEnded;
+
+                // Unsubscribe from match events
+                matchManager.OnMatchStarted -= HandleMatchStarted;
+                matchManager.OnMatchEnded -= HandleMatchEnded;
             }
         }
 
@@ -270,10 +320,12 @@ namespace Kardx.UI.Scenes
                     existingCardUI.transform.localPosition = Vector3.zero;
                     existingCardUI.transform.localScale = Vector3.one;
 
-                    // Make sure the card is face up and properly positioned
+                    // Make sure the card view reflects the current state of the card
                     var cardView = existingCardUI.GetComponent<CardView>();
                     if (cardView != null)
                     {
+                        // Just reflect the model state, don't modify it
+                        cardView.SetFaceDown(card.FaceDown);
                         cardView.SetDraggable(false); // Disable dragging once deployed
                     }
 
@@ -286,7 +338,9 @@ namespace Kardx.UI.Scenes
                     Debug.Log(
                         $"[MatchView] Creating new {(isOpponent ? "opponent" : "player")} card UI for slot {position}: {card.Title}"
                     );
-                    var cardGO = CreateCardUI(card, slotTransform, true);
+
+                    // Create UI based on the current state of the card
+                    var cardGO = CreateCardUI(card, slotTransform, card.FaceDown);
                     if (cardGO != null)
                     {
                         var cardView = cardGO.GetComponent<CardView>();
@@ -314,6 +368,12 @@ namespace Kardx.UI.Scenes
                     }
                 }
             }
+            else
+            {
+                Debug.Log(
+                    $"[MatchView] Card {card.Title} already in slot {position} (isOpponent: {isOpponent})"
+                );
+            }
 
             // We don't need to call UpdateUI here anymore since we're directly
             // manipulating the card UI element
@@ -322,12 +382,65 @@ namespace Kardx.UI.Scenes
         private void HandleCardDrawn(Card card)
         {
             Debug.Log("[MatchView] HandleCardDrawn: " + card.Title);
-            UpdateUI(); // Refresh the entire UI
+
+            // Determine if this is an opponent card
+            bool isOpponent = card.OwnerFaction == matchManager.Opponent.Faction;
+            Transform parent = isOpponent ? opponentHandArea : handArea;
+
+            // Get the position in hand
+            var hand = isOpponent ? matchManager.Opponent.Hand : matchManager.Player.Hand;
+            int position = hand.ToList().IndexOf(card);
+
+            if (position >= 0)
+            {
+                // Create UI for the new card - the card's face-down state should already be set by the game logic
+                CreateHandCardUI(card, parent, position, isOpponent);
+
+                // Update credits display
+                UpdateCreditsDisplay();
+            }
         }
 
         private void HandleCardDiscarded(Card card)
         {
-            UpdateUI(); // Refresh the entire UI
+            Debug.Log("[MatchView] HandleCardDiscarded: " + card.Title);
+
+            // Remove the UI element for the discarded card
+            if (cardUIElements.TryGetValue(card, out GameObject cardGO))
+            {
+                Debug.Log($"[MatchView] Removing UI element for discarded card: {card.Title}");
+                Destroy(cardGO);
+                cardUIElements.Remove(card);
+            }
+
+            // Update hand positions for remaining cards
+            UpdateHandPositions(card.OwnerFaction == matchManager.Opponent.Faction);
+
+            // Update credits display
+            UpdateCreditsDisplay();
+        }
+
+        private void UpdateHandPositions(bool isOpponent)
+        {
+            // Get the appropriate hand and parent
+            var hand = isOpponent ? matchManager.Opponent.Hand : matchManager.Player.Hand;
+            Transform parent = isOpponent ? opponentHandArea : handArea;
+
+            // Update positions for all cards in hand
+            for (int i = 0; i < hand.Count; i++)
+            {
+                if (cardUIElements.TryGetValue(hand[i], out GameObject cardGO))
+                {
+                    var rectTransform = cardGO.GetComponent<RectTransform>();
+                    if (rectTransform != null)
+                    {
+                        float xOffset = i * cardSpacing;
+                        float yOffset =
+                            parent == handArea ? Mathf.Sin(i * 0.5f) * handCurveHeight : 0;
+                        rectTransform.anchoredPosition = new Vector2(xOffset, yOffset);
+                    }
+                }
+            }
         }
 
         // Public methods for BattlefieldDropZone
@@ -411,32 +524,24 @@ namespace Kardx.UI.Scenes
             }
         }
 
+        /// <summary>
+        /// Full UI refresh - should only be used for initial setup or when a complete refresh is necessary.
+        /// For normal gameplay, use the specific update methods instead.
+        /// </summary>
         public void UpdateUI()
         {
             if (matchManager == null)
                 return;
 
-            Debug.Log("[MatchView] UpdateUI called");
+            Debug.Log("[MatchView] Full UI refresh called");
 
-            // Update turn info
-            if (turnText != null)
-            {
-                turnText.text = $"Turn {matchManager.TurnNumber}";
-            }
+            // Update turn and credits displays
+            UpdateTurnDisplay();
+            UpdateCreditsDisplay();
 
             // Player1 is always at bottom, Player2 (opponent) always at top
             var playerState = matchManager.Player;
             var opponentState = matchManager.Opponent;
-
-            // Update credits display
-            if (creditsText != null)
-            {
-                creditsText.text = $"Credits: {playerState.Credits}";
-            }
-            if (opponentCreditsText != null)
-            {
-                opponentCreditsText.text = $"Credits: {opponentState.Credits}";
-            }
 
             // Collect all cards that should have UI elements
             var allActiveCards = new HashSet<Card>();
@@ -489,62 +594,28 @@ namespace Kardx.UI.Scenes
             }
 
             // Update player's battlefield (bottom)
-            for (int i = 0; i < battlefieldSlots.Length; i++)
-            {
-                // Check if there's a card in the data model
-                if (battlefield[i] != null)
-                {
-                    // Check if there's already a CardView in this slot
-                    bool hasCardView = false;
-                    Transform slotTransform = battlefieldSlots[i];
-                    for (int j = 0; j < slotTransform.childCount; j++)
-                    {
-                        if (slotTransform.GetChild(j).GetComponent<CardView>() != null)
-                        {
-                            hasCardView = true;
-                            break;
-                        }
-                    }
-
-                    // If there's no UI element for this card, create one
-                    if (!hasCardView)
-                    {
-                        var cardGO = CreateCardUI(battlefield[i], battlefieldSlots[i], true);
-                        if (cardGO != null)
-                        {
-                            var cardView = cardGO.GetComponent<CardView>();
-                            if (cardView != null)
-                            {
-                                cardView.transform.localPosition = Vector3.zero;
-                                cardView.transform.localScale = Vector3.one;
-                            }
-                        }
-                    }
-                }
-                // If there's no card in the data model but there's a UI element, remove it
-                else
-                {
-                    RemoveCard(i, false);
-                }
-            }
+            UpdateBattlefield(battlefield, battlefieldSlots, false);
 
             // Update opponent's battlefield (top)
-            Debug.Log(
-                $"[MatchView] Updating opponent battlefield. Cards in data model: {opponentBattlefield.Count(c => c != null)}"
-            );
+            UpdateBattlefield(opponentBattlefield, opponentBattlefieldSlots, true);
 
-            for (int i = 0; i < opponentBattlefieldSlots.Length; i++)
+            // Update player's hand (bottom)
+            UpdateHand(playerHand, handArea, false);
+
+            // Update opponent's hand (top, face down)
+            UpdateHand(opponentHand, opponentHandArea, true);
+        }
+
+        private void UpdateBattlefield(IReadOnlyList<Card> battlefield, Transform[] slots, bool isOpponent)
+        {
+            for (int i = 0; i < slots.Length; i++)
             {
                 // Check if there's a card in the data model
-                if (opponentBattlefield[i] != null)
+                if (i < battlefield.Count && battlefield[i] != null)
                 {
-                    Debug.Log(
-                        $"[MatchView] Opponent battlefield slot {i} has card: {opponentBattlefield[i].Title}"
-                    );
-
                     // Check if there's already a CardView in this slot
                     bool hasCardView = false;
-                    Transform slotTransform = opponentBattlefieldSlots[i];
+                    Transform slotTransform = slots[i];
                     for (int j = 0; j < slotTransform.childCount; j++)
                     {
                         if (slotTransform.GetChild(j).GetComponent<CardView>() != null)
@@ -557,13 +628,11 @@ namespace Kardx.UI.Scenes
                     // If there's no UI element for this card, create one
                     if (!hasCardView)
                     {
-                        Debug.Log(
-                            $"[MatchView] Creating opponent card UI for slot {i}: {opponentBattlefield[i].Title}"
-                        );
+                        // Create UI based on the current state of the card
                         var cardGO = CreateCardUI(
-                            opponentBattlefield[i],
-                            opponentBattlefieldSlots[i],
-                            true
+                            battlefield[i],
+                            slotTransform,
+                            battlefield[i].FaceDown
                         );
                         if (cardGO != null)
                         {
@@ -572,58 +641,65 @@ namespace Kardx.UI.Scenes
                             {
                                 cardView.transform.localPosition = Vector3.zero;
                                 cardView.transform.localScale = Vector3.one;
-                                Debug.Log(
-                                    $"[MatchView] Successfully created opponent card UI for slot {i}"
-                                );
+                                cardView.SetDraggable(false); // Disable dragging for battlefield cards
                             }
-                            else
-                            {
-                                Debug.LogError(
-                                    $"[MatchView] Failed to get CardView component for opponent card in slot {i}"
-                                );
-                            }
-                        }
-                        else
-                        {
-                            Debug.LogError(
-                                $"[MatchView] Failed to create card UI for opponent card in slot {i}"
-                            );
                         }
                     }
                 }
                 // If there's no card in the data model but there's a UI element, remove it
                 else
                 {
-                    // Remove card if slot is now empty
-                    Debug.Log(
-                        $"[MatchView] Removing opponent card UI from slot {i} as it's now empty"
-                    );
-                    RemoveCard(i, true);
-                }
-            }
-
-            // Update player's hand (bottom)
-            for (int i = 0; i < playerHand.Count; i++)
-            {
-                if (!cardUIElements.ContainsKey(playerHand[i]))
-                {
-                    CreateHandCardUI(playerHand[i], handArea, i, true);
-                }
-            }
-
-            // Update opponent's hand (top, face down)
-            for (int i = 0; i < opponentHand.Count; i++)
-            {
-                if (!cardUIElements.ContainsKey(opponentHand[i]))
-                {
-                    CreateHandCardUI(opponentHand[i], opponentHandArea, i, false);
+                    RemoveCard(i, isOpponent);
                 }
             }
         }
 
-        private GameObject CreateHandCardUI(Card card, Transform parent, int position, bool faceUp)
+        private void UpdateHand(IReadOnlyList<Card> hand, Transform parent, bool isOpponent)
         {
-            var cardGO = CreateCardUI(card, parent, faceUp);
+            for (int i = 0; i < hand.Count; i++)
+            {
+                if (!cardUIElements.ContainsKey(hand[i]))
+                {
+                    CreateHandCardUI(hand[i], parent, i, isOpponent);
+                }
+                else
+                {
+                    // Update the UI if needed
+                    if (cardUIElements.TryGetValue(hand[i], out GameObject cardGO))
+                    {
+                        var cardView = cardGO.GetComponent<CardView>();
+                        if (cardView != null)
+                        {
+                            // Just reflect the model state, don't modify it
+                            cardView.SetFaceDown(hand[i].FaceDown);
+                            cardView.SetDraggable(!isOpponent);
+
+                            // Update position
+                            var rectTransform = cardGO.GetComponent<RectTransform>();
+                            if (rectTransform != null)
+                            {
+                                float xOffset = i * cardSpacing;
+                                float yOffset =
+                                    parent == handArea ? Mathf.Sin(i * 0.5f) * handCurveHeight : 0;
+                                rectTransform.anchoredPosition = new Vector2(xOffset, yOffset);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        private GameObject CreateHandCardUI(
+            Card card,
+            Transform parent,
+            int position,
+            bool isOpponent
+        )
+        {
+            // Note: The card's face-down state should already be set by the game logic
+            // We just create the UI to reflect that state
+
+            var cardGO = CreateCardUI(card, parent, card.FaceDown);
             if (cardGO != null)
             {
                 var rectTransform = cardGO.GetComponent<RectTransform>();
@@ -634,11 +710,18 @@ namespace Kardx.UI.Scenes
                         parent == handArea ? Mathf.Sin(position * 0.5f) * handCurveHeight : 0;
                     rectTransform.anchoredPosition = new Vector2(xOffset, yOffset);
                 }
+
+                // Set draggable only for player's hand cards
+                var cardView = cardGO.GetComponent<CardView>();
+                if (cardView != null)
+                {
+                    cardView.SetDraggable(parent == handArea);
+                }
             }
             return cardGO;
         }
 
-        private GameObject CreateCardUI(Card card, Transform parent, bool faceUp)
+        private GameObject CreateCardUI(Card card, Transform parent, bool faceDown)
         {
             Debug.Log("[MatchView] Creating card UI: " + card.Title);
             if (cardPrefab == null)
@@ -660,6 +743,10 @@ namespace Kardx.UI.Scenes
             // Initialize card data first, before any other setup
             cardView.Initialize(card);
 
+            // Ensure the UI reflects the current state of the card
+            // Note: faceDown parameter is used only for the UI, not to modify the card's state
+            cardView.SetFaceDown(faceDown);
+
             // Ensure the card has required UI components
             var rectTransform = cardGO.GetComponent<RectTransform>();
             if (rectTransform == null)
@@ -677,25 +764,33 @@ namespace Kardx.UI.Scenes
             image.raycastTarget = true;
 
             // Set draggable state after initialization
-            cardView.SetDraggable(faceUp);
+            cardView.SetDraggable(true);
 
-            // For face down cards, hide the card details and show card back
-            if (!faceUp && image != null && cardBackSprite != null)
-            {
-                image.sprite = cardBackSprite;
-            }
-
-            Debug.Log(
-                $"[MatchView] Card UI setup complete - Name: {cardGO.name}, "
-                    + $"Has CardView: {cardView != null}, "
-                    + $"Has Image: {image != null}, "
-                    + $"RaycastTarget: {image?.raycastTarget ?? false}, "
-                    + $"Parent: {parent.name}, "
-                    + $"Canvas: {cardGO.GetComponentInParent<Canvas>()?.name ?? "None"}"
-            );
+            // Note: We don't need to manually set the card back sprite here
+            // The CardView component already handles face-down cards with its own cardBackOverlay
 
             cardUIElements[card] = cardGO;
             return cardGO;
+        }
+
+        private void UpdateCreditsDisplay()
+        {
+            if (matchManager == null)
+                return;
+
+            // Player1 is always at bottom, Player2 (opponent) always at top
+            var playerState = matchManager.Player;
+            var opponentState = matchManager.Opponent;
+
+            // Update credits display
+            if (creditsText != null)
+            {
+                creditsText.text = $"Credits: {playerState.Credits}";
+            }
+            if (opponentCreditsText != null)
+            {
+                opponentCreditsText.text = $"Credits: {opponentState.Credits}";
+            }
         }
     }
 }

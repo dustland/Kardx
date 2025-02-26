@@ -280,7 +280,6 @@ namespace Kardx.UI.Components
             {
                 // Remove file extension as Unity adds its own
                 string fileName = Path.GetFileNameWithoutExtension(imageUrl);
-                Debug.Log($"[CardView] Loading image for {imageUrl}");
 
                 // Load sprite from Cards folder
                 Sprite sprite = Resources.Load<Sprite>($"Cards/{fileName}");
@@ -319,18 +318,26 @@ namespace Kardx.UI.Components
             }
         }
 
+        public void SetFaceDown(bool faceDown)
+        {
+            // Only update the UI state, don't modify the card's state
+            if (cardBackOverlay != null)
+            {
+                cardBackOverlay.gameObject.SetActive(faceDown);
+            }
+        }
+
         public void Initialize(Card card)
         {
-            Debug.Log("[CardView] Initializing card: " + card.Title);
             this.card = card;
-            this.cardType = null;
-            SetDraggable(true);
+            this.cardType = card?.CardType;
+
+            // Update the UI to reflect the card's current state
             UpdateCardView();
         }
 
         public void Initialize(CardType cardType)
         {
-            Debug.Log("[CardView] Initializing cardType: " + cardType.Title);
             this.card = null;
             this.cardType = cardType;
             SetDraggable(false); // CardType view should not be draggable
@@ -429,17 +436,6 @@ namespace Kardx.UI.Components
                 dragHandler.OnDragStarted -= () => isDragging = true;
                 dragHandler.OnDragEnded -= (success) => isDragging = false;
             }
-        }
-
-        // Add this method to test if the GameObject is properly set up for UI interaction
-        private void OnEnable()
-        {
-            Debug.Log(
-                $"[CardView] Card enabled: {gameObject.name}. "
-                    + $"Active in hierarchy: {gameObject.activeInHierarchy}, "
-                    + $"Layer: {gameObject.layer}, "
-                    + $"Canvas: {GetComponentInParent<Canvas>()?.name ?? "None"}"
-            );
         }
     }
 }

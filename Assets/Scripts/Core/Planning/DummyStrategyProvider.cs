@@ -78,6 +78,16 @@ namespace Kardx.Core.Planning
             // Get the current player from the board
             Player currentPlayer = board.CurrentPlayer;
 
+            // Create a simulated state for planning without modifying the actual player state
+            int simulatedCredits = currentPlayer.Credits;
+            bool[] simulatedOccupiedSlots = new bool[Player.BATTLEFIELD_SLOT_COUNT];
+
+            // Initialize the simulated occupied slots based on the current battlefield state
+            for (int i = 0; i < currentPlayer.Battlefield.Count; i++)
+            {
+                simulatedOccupiedSlots[i] = currentPlayer.Battlefield[i] != null;
+            }
+
             // Check if the player has cards in hand
             if (currentPlayer.Hand.Count > 0)
             {
@@ -87,13 +97,13 @@ namespace Kardx.Core.Planning
                 // Try to deploy cards that the player can afford
                 foreach (var card in sortedCards)
                 {
-                    if (currentPlayer.Credits >= card.DeploymentCost)
+                    if (simulatedCredits >= card.DeploymentCost)
                     {
-                        // Find an empty slot on the battlefield
+                        // Find an empty slot on the battlefield using our simulated state
                         int emptySlot = -1;
-                        for (int i = 0; i < currentPlayer.Battlefield.Count; i++)
+                        for (int i = 0; i < simulatedOccupiedSlots.Length; i++)
                         {
-                            if (currentPlayer.Battlefield[i] == null)
+                            if (!simulatedOccupiedSlots[i])
                             {
                                 emptySlot = i;
                                 break;
@@ -110,8 +120,10 @@ namespace Kardx.Core.Planning
                                 emptySlot
                             );
 
-                            // Simulate the deployment to update the player's state for subsequent decisions
-                            currentPlayer.SpendCredits(card.DeploymentCost);
+                            // Update our simulated state
+                            simulatedCredits -= card.DeploymentCost;
+                            simulatedOccupiedSlots[emptySlot] = true;
+
                             logger?.Log(
                                 $"Added deploy action for {card.Title} to slot {emptySlot}"
                             );

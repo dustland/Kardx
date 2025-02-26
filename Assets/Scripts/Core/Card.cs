@@ -8,7 +8,7 @@ namespace Kardx.Core
     {
         private Guid instanceId; // Unique instance identifier
         private CardType cardType; // Reference to static card definition
-        private bool faceDown; // Whether the card is hidden
+        public bool FaceDown { get; private set; } // Whether the card is hidden
         private Faction ownerFaction; // The faction that owns this card
         private List<Modifier> modifiers = new(); // Active temporary modifiers
         private Dictionary<string, int> dynamicAttributes = new(); // Computed attributes
@@ -20,7 +20,6 @@ namespace Kardx.Core
         public CardType CardType => cardType;
         public AbilityType CurrentAbility =>
             cardType.Abilities.FirstOrDefault(a => a.Id == currentAbilityId);
-        public bool FaceDown => faceDown;
         public Faction OwnerFaction => ownerFaction;
         public IReadOnlyList<Modifier> Modifiers => modifiers;
         public IReadOnlyDictionary<string, int> DynamicAttributes => dynamicAttributes;
@@ -50,21 +49,16 @@ namespace Kardx.Core
             this.cardType = cardType;
             this.instanceId = Guid.NewGuid();
             this.currentDefence = cardType.BaseDefence;
-            this.faceDown = false; // Default to face up
+            this.FaceDown = false; // Default to face up
             this.ownerFaction = ownerFaction;
             this.currentAbilityId =
                 cardType.Abilities.Count > 0 ? cardType.Abilities[0].Id : string.Empty;
         }
 
-        // Methods to control face-down state
+        // Add the missing SetFaceDown method
         public void SetFaceDown(bool isFaceDown)
         {
-            this.faceDown = isFaceDown;
-        }
-
-        public void Flip()
-        {
-            this.faceDown = !this.faceDown;
+            FaceDown = isFaceDown;
         }
 
         // Modifier management
@@ -90,7 +84,6 @@ namespace Kardx.Core
             modifiers.RemoveAll(m => !m.IsActive());
             RecalculateAttributes();
         }
-
 
         private int GetAttributeModifier(string attribute)
         {
