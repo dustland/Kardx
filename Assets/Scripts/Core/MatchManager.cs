@@ -39,6 +39,10 @@ namespace Kardx.Core
         public event Action<string> OnMatchStarted;
         public event Action<string> OnMatchEnded;
 
+        // Ability-related events
+        public event Action<Card, Card, int, int> OnAttackCompleted;
+        public event Action<Card> OnCardDied;
+
         // Event for signaling when AI needs to process its turn
         public event Action<Board, StrategyPlanner, Action> OnProcessAITurn;
 
@@ -178,8 +182,9 @@ namespace Kardx.Core
             // Notify listeners that a new turn is starting
             OnTurnStarted?.Invoke(this, nextPlayer);
 
-            // Reset card attack status
-            nextPlayer.ResetCardAttackStatus();
+            // Reset card attack status for both players
+            board.Player1.ResetCardAttackStatus();
+            board.Player2.ResetCardAttackStatus();
 
             // If it's the opponent's turn, process it automatically
             if (nextPlayer.Id == board.Player2.Id)
@@ -328,16 +333,118 @@ namespace Kardx.Core
         }
 
         /// <summary>
-        /// Gets the opponent of the specified player.
+        /// Checks if a card can attack another card
         /// </summary>
-        /// <param name="player">The player to find the opponent for.</param>
-        /// <returns>The opponent player, or null if the input is null.</returns>
-        public Player GetOpponentPlayer(Player player)
+        /// <param name="attackerCard">The attacking card</param>
+        /// <param name="defenderCard">The defending card</param>
+        /// <returns>True if the attack is valid, false otherwise</returns>
+        public bool CanAttack(Card attackerCard, Card defenderCard)
         {
-            if (player == null)
-                return null;
+            if (attackerCard == null || defenderCard == null)
+                return false;
 
-            return player == Player ? Opponent : Player;
+            // Check if the attacker has already attacked this turn
+            if (attackerCard.HasAttackedThisTurn)
+                return false;
+
+            // Check if the cards belong to different players
+            if (attackerCard.Owner == defenderCard.Owner)
+                return false;
+
+            // Check if both cards are on the battlefield
+            bool attackerOnBattlefield = attackerCard.Owner.Battlefield.Contains(attackerCard);
+            bool defenderOnBattlefield = defenderCard.Owner.Battlefield.Contains(defenderCard);
+
+            if (!attackerOnBattlefield || !defenderOnBattlefield)
+                return false;
+
+            // Add any other attack validation rules here
+
+            return true;
+        }
+
+        /// <summary>
+        /// Initiates an attack between two cards
+        /// </summary>
+        /// <param name="attackerCard">The attacking card</param>
+        /// <param name="defenderCard">The defending card</param>
+        /// <returns>True if the attack was successful, false otherwise</returns>
+        public bool InitiateAttack(Card attackerCard, Card defenderCard)
+        {
+            logger?.Log($"Initiating attack from {attackerCard.Title} to {defenderCard.Title}");
+
+            // Check if the attack is valid
+            if (!CanAttack(attackerCard, defenderCard))
+            {
+                logger?.Log($"Invalid attack from {attackerCard.Title} to {defenderCard.Title}");
+                return false;
+            }
+
+            // Process the attack
+            return ProcessAttack(attackerCard, defenderCard);
+        }
+
+        /// <summary>
+        /// Processes an attack between two cards
+        /// </summary>
+        /// <param name="attackerCard">The attacking card</param>
+        /// <param name="defenderCard">The defending card</param>
+        /// <returns>True if the attack was processed successfully, false otherwise</returns>
+        public bool ProcessAttack(Card attackerCard, Card defenderCard)
+        {
+            if (!CanAttack(attackerCard, defenderCard))
+            {
+                logger?.Log($"Invalid attack from {attackerCard.Title} to {defenderCard.Title}");
+                return false;
+            }
+
+            // Mark the attacker as having attacked this turn
+            attackerCard.HasAttackedThisTurn = true;
+
+            // Calculate damage
+            int attackDamage = attackerCard.Attack;
+            int counterAttackDamage = defenderCard.CounterAttack;
+
+            // Apply damage to defender
+            defenderCard.TakeDamage(attackDamage);
+
+            // Apply counter-attack damage to attacker if defender is still alive
+            if (defenderCard.CurrentDefence > 0)
+            {
+                attackerCard.TakeDamage(counterAttackDamage);
+            }
+
+            // Notify listeners about the attack
+            OnAttackCompleted?.Invoke(
+                attackerCard,
+                defenderCard,
+                attackDamage,
+                counterAttackDamage
+            );
+
+            // Check if any cards died as a result of the attack
+            CheckCardDeath(attackerCard);
+            CheckCardDeath(defenderCard);
+
+            return true;
+        }
+
+        /// <summary>
+        /// Checks if a card has died and handles its death
+        /// </summary>
+        /// <param name="card">The card to check</param>
+        private void CheckCardDeath(Card card)
+        {
+            if (card.CurrentDefence <= 0)
+            {
+                // Remove the card from the battlefield using the proper method
+                card.Owner.RemoveFromBattlefield(card);
+
+                logger?.Log($"Card {card.Title} has died and been moved to the discard pile");
+
+                // Fire event to notify UI
+                OnCardDied?.Invoke(card);
+            }
         }
     }
 }

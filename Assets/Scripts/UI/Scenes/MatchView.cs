@@ -176,50 +176,30 @@ namespace Kardx.UI.Scenes
             SetupMatch();
         }
 
-        private void InitializeAttackManager()
-        {
-            // Make sure we have an AttackManager component
-            AttackManager attackManager = GetComponent<AttackManager>();
-            if (attackManager == null)
-            {
-                attackManager = gameObject.AddComponent<AttackManager>();
-                Debug.Log("[MatchView] Added AttackManager component");
-            }
-
-            // Set the MatchManager in the AttackManager when it's available
-            if (matchManager != null)
-            {
-                attackManager.SetMatchManager(matchManager);
-                Debug.Log("[MatchView] Set MatchManager in AttackManager");
-            }
-        }
-
         private void SetupMatch()
         {
             // Create MatchManager instance
             matchManager = new MatchManager(new SimpleLogger("[MatchManager]"));
 
-            // Initialize the AttackManager
-            InitializeAttackManager();
-
             // Subscribe to MatchManager events
             matchManager.OnCardDeployed += HandleCardDeployed;
             matchManager.OnCardDrawn += HandleCardDrawn;
             matchManager.OnCardDiscarded += HandleCardDiscarded;
-
-            // Subscribe to turn events
             matchManager.OnTurnStarted += HandleTurnStarted;
             matchManager.OnTurnEnded += HandleTurnEnded;
-
-            // Subscribe to match events
             matchManager.OnMatchStarted += HandleMatchStarted;
             matchManager.OnMatchEnded += HandleMatchEnded;
+            matchManager.OnAttackCompleted += HandleAttackCompleted;
+            matchManager.OnCardDied += HandleCardDied;
 
-            // Subscribe to AI turn processing event
+            // Subscribe to AI turn processing
             matchManager.OnProcessAITurn += HandleProcessAITurn;
 
-            // Start the battle
+            // Start the match
             matchManager.StartMatch();
+
+            // Initialize the UI
+            UpdateUI();
         }
 
         private void HandleMatchStarted(string message)
@@ -312,6 +292,8 @@ namespace Kardx.UI.Scenes
                 // Unsubscribe from match events
                 matchManager.OnMatchStarted -= HandleMatchStarted;
                 matchManager.OnMatchEnded -= HandleMatchEnded;
+                matchManager.OnAttackCompleted -= HandleAttackCompleted;
+                matchManager.OnCardDied -= HandleCardDied;
             }
         }
 
@@ -446,7 +428,7 @@ namespace Kardx.UI.Scenes
             {
                 // Just reflect the model state, don't modify it
                 cardView.SetFaceDown(card.FaceDown);
-                
+
                 // For player cards, we want to enable dragging to use abilities
                 // For opponent cards, we want to disable dragging
                 cardView.SetDraggable(!isOpponent);
@@ -472,13 +454,17 @@ namespace Kardx.UI.Scenes
                         abilityDragHandler = cardGO.AddComponent<AbilityDragHandler>();
                         Debug.Log($"[MatchView] Added AbilityDragHandler to {card.Title}");
                     }
-                    
+
                     // Make sure the AbilityDragHandler is enabled
                     abilityDragHandler.enabled = true;
                     Debug.Log($"[MatchView] Enabled AbilityDragHandler on {card.Title}");
-                    
+
                     // Force the AbilityDragHandler to update its state
-                    abilityDragHandler.SendMessage("UpdateComponentState", null, SendMessageOptions.DontRequireReceiver);
+                    abilityDragHandler.SendMessage(
+                        "UpdateComponentState",
+                        null,
+                        SendMessageOptions.DontRequireReceiver
+                    );
                 }
             }
 
@@ -1076,19 +1062,39 @@ namespace Kardx.UI.Scenes
                 return;
             }
 
-            // Find the AttackManager component
-            var attackManager = GetComponent<AttackManager>();
-            if (attackManager == null)
-            {
-                Debug.LogError("[MatchView] Cannot attack: AttackManager component is missing");
-                return;
-            }
-
-            // Process the attack
-            attackManager.ProcessAttack(attackerCard, defenderCard);
+            // Process the attack using MatchManager directly
+            matchManager.ProcessAttack(attackerCard, defenderCard);
 
             // Update the UI to reflect any changes
             UpdateUI();
+        }
+
+        // Handle attack completed event
+        private void HandleAttackCompleted(
+            Card attacker,
+            Card defender,
+            int attackDamage,
+            int counterDamage
+        )
+        {
+            Debug.Log(
+                $"[MatchView] Attack completed: {attacker.Title} dealt {attackDamage} damage to {defender.Title}, received {counterDamage} counter damage"
+            );
+
+            // Update the UI to reflect the attack results
+            UpdateUI();
+        }
+
+        // Handle card died event
+        private void HandleCardDied(Card card)
+        {
+            Debug.Log($"[MatchView] Card died: {card.Title}");
+
+            // Update the UI to reflect the card death
+            UpdateUI();
+
+            // Play death animation or sound effect if needed
+            // TODO: Add death animation or sound effect
         }
     }
 }

@@ -91,8 +91,11 @@ namespace Kardx.UI.Components
 
         private void Update()
         {
-            // Continuously update component state based on card position
-            UpdateComponentState();
+            // We don't need to update component state every frame
+            // UpdateComponentState will be called when needed:
+            // - When the component is enabled (OnEnable)
+            // - When explicitly requested via SendMessage
+            // - When game state changes (turn changes, card state changes)
         }
 
         private void UpdateComponentState()
@@ -100,9 +103,9 @@ namespace Kardx.UI.Components
             bool shouldBeEnabled = CanCardAttack();
 
             // Debug log to help diagnose issues with enabling/disabling
-            Debug.Log(
-                $"[AbilityDragHandler] Card {(cardView?.Card?.Title ?? "unknown")} CanCardAttack: {shouldBeEnabled}"
-            );
+            // Debug.Log(
+            //     $"[AbilityDragHandler] Card {(cardView?.Card?.Title ?? "unknown")} CanCardAttack: {shouldBeEnabled}"
+            // );
 
             // Enable this component only when the card can attack
             enabled = shouldBeEnabled;
@@ -223,40 +226,40 @@ namespace Kardx.UI.Components
             // Store original state for resetting after drag
             originalParent = transform.parent;
             originalPosition = transform.position;
-            
+
             // Disable blocksRaycasts during drag
             if (canvasGroup != null)
             {
                 canvasGroup.blocksRaycasts = false;
                 Debug.Log("[AbilityDragHandler] Disabled blocksRaycasts for drag");
             }
-            
+
             // Show the attack arrow
             ShowArrow();
-            
+
             // Highlight valid targets
             HighlightValidTargets(eventData);
-            
+
             OnDragStarted?.Invoke();
         }
 
         public void OnEndDrag(PointerEventData eventData)
         {
             Debug.Log($"[AbilityDragHandler] OnEndDrag called for {cardView.Card.Title}");
-            
+
             // Re-enable blocksRaycasts to allow the card to be clicked again
             canvasGroup.blocksRaycasts = true;
-            
+
             // Clear all highlights
             ClearHighlights();
-            
+
             // Check if we dropped on a valid target
             var raycastResults = new System.Collections.Generic.List<RaycastResult>();
             EventSystem.current.RaycastAll(eventData, raycastResults);
-            
+
             bool wasSuccessful = false;
             Card targetCard = null;
-            
+
             foreach (var hit in raycastResults)
             {
                 var opponentSlot = hit.gameObject.GetComponent<OpponentCardSlot>();
@@ -273,18 +276,20 @@ namespace Kardx.UI.Components
                     }
                 }
             }
-            
+
             // Return to original position
             transform.SetParent(originalParent);
             transform.position = originalPosition;
-            
+
             // If we found a valid target, initiate the attack
             if (wasSuccessful && targetCard != null)
             {
-                Debug.Log($"[AbilityDragHandler] Initiating attack from {cardView.Card.Title} to {targetCard.Title}");
+                Debug.Log(
+                    $"[AbilityDragHandler] Initiating attack from {cardView.Card.Title} to {targetCard.Title}"
+                );
                 OnAttackInitiated?.Invoke(cardView.Card, targetCard);
             }
-            
+
             OnDragEnded?.Invoke(wasSuccessful);
         }
 
@@ -352,7 +357,7 @@ namespace Kardx.UI.Components
                 return false;
             }
 
-            Debug.Log($"[AbilityDragHandler] Card {cardView.Card.Title} can attack");
+            // Debug.Log($"[AbilityDragHandler] Card {cardView.Card.Title} can attack");
             return true;
         }
 
@@ -360,7 +365,7 @@ namespace Kardx.UI.Components
         {
             // Find all valid target slots (opponent card slots)
             var opponentSlots = canvas.GetComponentsInChildren<OpponentCardSlot>(true);
-            
+
             foreach (var slot in opponentSlots)
             {
                 // Get the card at this position
@@ -385,20 +390,20 @@ namespace Kardx.UI.Components
                 slot.SetHighlight(false);
             }
         }
-        
+
         private Card GetCardAtOpponentSlot(OpponentCardSlot slot)
         {
             if (matchView == null)
                 return null;
-                
+
             var opponent = matchView.GetOpponent();
             if (opponent == null)
                 return null;
-                
+
             int position = slot.GetPosition();
             if (position < 0 || position >= opponent.Battlefield.Count)
                 return null;
-                
+
             return opponent.Battlefield[position];
         }
 

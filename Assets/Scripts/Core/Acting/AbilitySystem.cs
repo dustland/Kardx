@@ -415,7 +415,7 @@ namespace Kardx.Core.Acting
                 return new List<Card>();
             }
 
-            var opponentPlayer = matchManager.GetOpponentPlayer(sourcePlayer);
+            var opponentPlayer = matchManager.Opponent;
 
             switch (abilityType.Targeting)
             {

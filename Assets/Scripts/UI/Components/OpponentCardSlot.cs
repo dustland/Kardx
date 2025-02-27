@@ -19,12 +19,10 @@ namespace Kardx.UI.Components
         private int position; // 0-4 for the five positions
 
         private Kardx.UI.Scenes.MatchView matchView;
-        private Kardx.UI.Scenes.AttackManager attackManager;
 
         private void Awake()
         {
             matchView = GetComponentInParent<Kardx.UI.Scenes.MatchView>();
-            attackManager = GetComponentInParent<Kardx.UI.Scenes.AttackManager>();
 
             if (!highlightImage)
                 CreateHighlight();
@@ -114,9 +112,9 @@ namespace Kardx.UI.Components
                 // matchView.UseAbility(cardView.Card, targetCard);
 
                 // For now, we'll treat it as an attack
-                if (attackManager != null)
+                if (matchView != null)
                 {
-                    attackManager.InitiateAttack(cardView.Card, targetCard);
+                    matchView.AttackCard(cardView.Card, targetCard);
                     Debug.Log(
                         $"[OpponentCardSlot] Attack initiated from {cardView.Card.Title} to {targetCard.Title}"
                     );
