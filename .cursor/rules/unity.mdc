@@ -1,0 +1,41 @@
+---
+description: Guidelines and best practices for developing the Kardx Unity project using C#.   Applies to all C# scripts within the project.
+globs: *.cs
+alwaysApply: false
+---
+# Kardx Unity C# Development Guidelines
+
+## Project Context
+
+This project is a Unity-based 3D tower defense game utilizing C# for scripting. The game incorporates a unique control scheme using the Nintendo Ring-Con accessory. Players place turrets and then engage in physical activities to charge up those turrets.
+
+## Coding Standards
+
+- **Naming Conventions**:
+  - Use `PascalCase` for class names and public members.
+  - Use `camelCase` for private variables and method parameters.
+
+- **Code Structure**:
+  - Organize scripts into folders based on their functionality (e.g., `Controllers`, `Models`, `Views`).
+  - Include XML documentation comments for all public methods and classes.
+
+## Design Patterns
+
+- Implement the MVC (Model-View-Controller) pattern where applicable.
+- Utilize `ScriptableObject` for managing game data and configurations.
+- Employ object pooling for managing enemies and projectiles to optimize performance.
+- Use Unity's event system to handle player input and game events.
+
+## Performance Guidelines
+
+- Optimize all assets to ensure the game runs smoothly on target platforms.
+- Minimize the use of `Update()` methods; prefer event-driven architectures.
+- Use LOD (Level of Detail) groups for complex models to improve rendering performance.
+- Profile the game regularly to identify and address performance bottlenecks.
+
+## Testing and Debugging
+
+- Write unit tests for all critical game logic using the NUnit framework.
+- Use Unity's built-in Profiler to monitor performance during playtesting.
+- Implement comprehensive logging for key game events to facilitate debugging.
+- Ensure all scenes have been thoroughly playtested before committing changes.

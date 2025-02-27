@@ -144,12 +144,26 @@ namespace Kardx.UI.Components
                 var slot = hit.gameObject.GetComponent<CardSlot>();
                 if (slot != null)
                 {
+                    // Check if this is a valid drop target
                     bool isValid = slot.IsValidDropTarget(cardView.Card);
-                    slot.SetHighlight(isValid);
+
+                    // Only highlight if it's valid
                     if (isValid)
                     {
+                        slot.SetHighlight(true);
                         lastHighlightedSlot = slot;
-                        break; // Break only after finding a valid slot
+                        Debug.Log(
+                            $"[CardDragHandler] Found valid drop target at slot {hit.gameObject.name}"
+                        );
+                        break; // Break after finding a valid slot
+                    }
+                    else
+                    {
+                        // Make sure invalid slots are not highlighted
+                        slot.SetHighlight(false);
+                        Debug.Log(
+                            $"[CardDragHandler] Invalid drop target at slot {hit.gameObject.name}"
+                        );
                     }
                 }
             }
@@ -180,20 +194,26 @@ namespace Kardx.UI.Components
             foreach (var hit in raycastResults)
             {
                 var dropZone = hit.gameObject.GetComponent<CardSlot>();
-                if (dropZone != null && dropZone.IsValidDropTarget(cardView.Card))
+                if (dropZone != null)
                 {
-                    wasSuccessful = true;
-                    targetSlot = dropZone;
+                    // IsValidDropTarget already checks if the slot is droppable (isDroppable)
+                    if (dropZone.IsValidDropTarget(cardView.Card))
+                    {
+                        wasSuccessful = true;
+                        targetSlot = dropZone;
 
-                    // IMPORTANT: We don't hide the card or change its parent here anymore.
-                    // Instead, we let HandleCardDeployed handle moving the card to the battlefield.
-                    // This ensures that the card's CanvasGroup.blocksRaycasts remains true
-                    // after being deployed, allowing it to receive click events.
-
-                    Debug.Log(
-                        "[CardDragHandler] Card dropped successfully on valid target - will be moved by HandleCardDeployed"
-                    );
-                    break;
+                        Debug.Log(
+                            $"[CardDragHandler] Card dropped successfully on valid slot: {dropZone.name}"
+                        );
+                        break;
+                    }
+                    else
+                    {
+                        // This is not a valid drop target
+                        Debug.Log(
+                            $"[CardDragHandler] Card dropped on invalid slot: {dropZone.name}"
+                        );
+                    }
                 }
             }
 
@@ -204,9 +224,6 @@ namespace Kardx.UI.Components
                 transform.position = originalPosition;
                 Debug.Log("[CardDragHandler] Card drop was not successful, resetting position");
             }
-            // Note: We don't need to do anything for successful drops
-            // The DeployCard method will handle moving the card to the battlefield
-            // and the UpdateUI method will handle removing it from the hand
 
             // Double-check that blocksRaycasts is enabled
             Debug.Log(

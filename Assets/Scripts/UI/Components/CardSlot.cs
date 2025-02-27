@@ -16,6 +16,12 @@ namespace Kardx.UI.Components
         [SerializeField]
         private int position; // 0-4 for the five positions
 
+        [SerializeField]
+        [Tooltip(
+            "Whether this slot can accept cards dropped by the player. Set to false for opponent slots."
+        )]
+        private bool isDroppable = true;
+
         private MatchView matchView;
 
         private void Awake()
@@ -67,6 +73,16 @@ namespace Kardx.UI.Components
         public void OnDrop(PointerEventData eventData)
         {
             Debug.Log($"OnDrop called at position {position}");
+
+            // Immediately return if this is not a droppable slot (e.g., opponent slot)
+            if (!isDroppable)
+            {
+                Debug.LogWarning(
+                    $"[CardSlot] Prevented drop on non-droppable slot at position {position}"
+                );
+                return;
+            }
+
             var cardView = eventData.pointerDrag?.GetComponent<CardView>();
             if (cardView == null)
             {
@@ -105,6 +121,13 @@ namespace Kardx.UI.Components
 
         public bool IsValidDropTarget(Card card)
         {
+            // First check if this slot is configured as droppable in the editor
+            if (!isDroppable)
+            {
+                return false;
+            }
+
+            // If the slot is droppable, check with the match view if the card can be deployed
             return matchView?.CanDeployCard(card) ?? false;
         }
 
@@ -118,6 +141,19 @@ namespace Kardx.UI.Components
         public void SetPosition(int position)
         {
             this.position = Mathf.Clamp(position, 0, 4);
+        }
+
+        // Set whether this slot can accept dropped cards
+        public void SetDroppable(bool droppable)
+        {
+            this.isDroppable = droppable;
+            Debug.Log($"[CardSlot] Slot {position} droppable set to: {droppable}");
+        }
+
+        // Check if this is a player slot (i.e., if it's droppable)
+        public bool IsPlayerSlot()
+        {
+            return isDroppable;
         }
     }
 }

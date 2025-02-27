@@ -104,9 +104,17 @@ namespace Kardx.UI.Scenes
                 }
             }
 
-            Debug.Log(
-                $"[CardCollectionView] Found CardDetailView on: {cardDetailView.gameObject.name}"
-            );
+            Debug.Log($"[MatchView] Found CardDetailView on: {cardDetailView.gameObject.name}");
+
+            // Ensure the CardPanel is initially active so it can run coroutines
+            // but immediately hide it
+            if (!cardDetailView.gameObject.activeSelf)
+            {
+                cardDetailView.gameObject.SetActive(true);
+                cardDetailView.Hide(); // This will properly hide it after initialization
+            }
+
+            // Initialize the shared reference
             CardView.InitializeSharedDetailView(cardDetailView);
 
             // Make sure the CardPanel is initially inactive
@@ -139,6 +147,9 @@ namespace Kardx.UI.Scenes
                 if (cardSlot != null)
                 {
                     cardSlot.SetPosition(i);
+
+                    // Set the slot as droppable using the public method
+                    cardSlot.SetDroppable(true);
                 }
             }
 
@@ -152,6 +163,8 @@ namespace Kardx.UI.Scenes
                 if (cardSlot != null)
                 {
                     cardSlot.SetPosition(i);
+
+                    cardSlot.SetDroppable(false);
                 }
             }
         }
@@ -290,150 +303,155 @@ namespace Kardx.UI.Scenes
                 : battlefieldSlots[position];
 
             // Check if there's already a CardView in this slot
-            bool hasCardView = false;
-            for (int i = 0; i < slotTransform.childCount; i++)
-            {
-                if (slotTransform.GetChild(i).GetComponent<CardView>() != null)
-                {
-                    hasCardView = true;
-                    break;
-                }
-            }
-
-            if (!hasCardView)
-            {
-                // Try to move the existing card UI from hand to battlefield if it exists
-                if (cardUIElements.TryGetValue(card, out GameObject existingCardUI))
-                {
-                    Debug.Log(
-                        $"[MatchView] Moving {(isOpponent ? "opponent" : "player")} card UI from hand to battlefield: {card.Title}"
-                    );
-
-                    // First remove it from the dictionary to avoid duplicate entries
-                    cardUIElements.Remove(card);
-
-                    // Make sure the card is active (it might have been hidden during drag)
-                    existingCardUI.SetActive(true);
-
-                    // Move the card to the battlefield slot
-                    existingCardUI.transform.SetParent(slotTransform);
-                    existingCardUI.transform.localPosition = Vector3.zero;
-                    existingCardUI.transform.localScale = Vector3.one;
-
-                    // Make sure the card view reflects the current state of the card
-                    var cardView = existingCardUI.GetComponent<CardView>();
-                    if (cardView != null)
-                    {
-                        // Just reflect the model state, don't modify it
-                        cardView.SetFaceDown(card.FaceDown);
-                        cardView.SetDraggable(false); // Disable dragging once deployed
-
-                        // Explicitly reset the isDragging flag to ensure the card can be clicked
-                        cardView.ResetDraggingState();
-
-                        // Ensure the CanvasGroup's blocksRaycasts is enabled
-                        // This is critical because OnEndDrag might not be called if the card is successfully deployed
-                        var canvasGroup = existingCardUI.GetComponent<CanvasGroup>();
-                        if (canvasGroup != null)
-                        {
-                            canvasGroup.blocksRaycasts = true;
-                            Debug.Log(
-                                $"[MatchView] Ensuring CanvasGroup.blocksRaycasts is true for {card.Title}"
-                            );
-                        }
-
-                        // Check if the card's image components have raycastTarget enabled
-                        var images = existingCardUI.GetComponentsInChildren<Image>();
-                        Debug.Log(
-                            $"[MatchView] Card {card.Title} in {(isOpponent ? "opponent" : "player")} battlefield has {images.Length} Image components"
-                        );
-                        foreach (var img in images)
-                        {
-                            Debug.Log(
-                                $"[MatchView] Image '{img.name}' raycastTarget: {img.raycastTarget}"
-                            );
-                            // Ensure raycastTarget is enabled for all images
-                            img.raycastTarget = true;
-                        }
-                    }
-
-                    // Add it back to the dictionary with the updated GameObject
-                    cardUIElements[card] = existingCardUI;
-                }
-                else
-                {
-                    // If no existing UI element was found, create a new one
-                    Debug.Log(
-                        $"[MatchView] Creating new {(isOpponent ? "opponent" : "player")} card UI for slot {position}: {card.Title}"
-                    );
-
-                    // Create UI based on the current state of the card
-                    var cardGO = CreateCardUI(card, slotTransform, card.FaceDown);
-                    if (cardGO != null)
-                    {
-                        var cardView = cardGO.GetComponent<CardView>();
-                        if (cardView != null)
-                        {
-                            cardView.transform.localPosition = Vector3.zero;
-                            cardView.transform.localScale = Vector3.one;
-                            cardView.SetDraggable(false); // Disable dragging once deployed
-
-                            // Explicitly reset the isDragging flag to ensure the card can be clicked
-                            cardView.ResetDraggingState();
-
-                            // Ensure the CanvasGroup's blocksRaycasts is enabled
-                            // This is critical because OnEndDrag might not be called if the card is successfully deployed
-                            var canvasGroup = cardGO.GetComponent<CanvasGroup>();
-                            if (canvasGroup != null)
-                            {
-                                canvasGroup.blocksRaycasts = true;
-                                Debug.Log(
-                                    $"[MatchView] Ensuring CanvasGroup.blocksRaycasts is true for {card.Title}"
-                                );
-                            }
-
-                            // Check if the card's image components have raycastTarget enabled
-                            var images = cardGO.GetComponentsInChildren<Image>();
-                            Debug.Log(
-                                $"[MatchView] New card {card.Title} in {(isOpponent ? "opponent" : "player")} battlefield has {images.Length} Image components"
-                            );
-                            foreach (var img in images)
-                            {
-                                Debug.Log(
-                                    $"[MatchView] Image '{img.name}' raycastTarget: {img.raycastTarget}"
-                                );
-                                // Ensure raycastTarget is enabled for all images
-                                img.raycastTarget = true;
-                            }
-
-                            Debug.Log(
-                                $"[MatchView] Successfully created {(isOpponent ? "opponent" : "player")} card UI for slot {position}"
-                            );
-                        }
-                        else
-                        {
-                            Debug.LogError(
-                                $"[MatchView] Failed to get CardView component for {(isOpponent ? "opponent" : "player")} card in slot {position}"
-                            );
-                        }
-                    }
-                    else
-                    {
-                        Debug.LogError(
-                            $"[MatchView] Failed to create card UI for {(isOpponent ? "opponent" : "player")} card in slot {position}"
-                        );
-                    }
-                }
-            }
-            else
+            if (IsSlotOccupied(slotTransform))
             {
                 Debug.Log(
                     $"[MatchView] Card {card.Title} already in slot {position} (isOpponent: {isOpponent})"
                 );
+                return;
             }
 
-            // We don't need to call UpdateUI here anymore since we're directly
-            // manipulating the card UI element
+            // Try to move the existing card UI from hand to battlefield if it exists
+            if (cardUIElements.TryGetValue(card, out GameObject existingCardUI))
+            {
+                MoveCardToBattlefield(card, existingCardUI, slotTransform, isOpponent);
+            }
+            else
+            {
+                // If no existing UI element was found, create a new one
+                CreateCardInBattlefield(card, slotTransform, position, isOpponent);
+            }
+        }
+
+        // Helper method to check if a slot is occupied
+        private bool IsSlotOccupied(Transform slotTransform)
+        {
+            for (int i = 0; i < slotTransform.childCount; i++)
+            {
+                if (slotTransform.GetChild(i).GetComponent<CardView>() != null)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Helper method to move an existing card to the battlefield
+        private void MoveCardToBattlefield(
+            Card card,
+            GameObject cardGO,
+            Transform slotTransform,
+            bool isOpponent
+        )
+        {
+            Debug.Log(
+                $"[MatchView] Moving {(isOpponent ? "opponent" : "player")} card UI from hand to battlefield: {card.Title}"
+            );
+
+            // First remove it from the dictionary to avoid duplicate entries
+            cardUIElements.Remove(card);
+
+            // Make sure the card is active (it might have been hidden during drag)
+            cardGO.SetActive(true);
+
+            // Move the card to the battlefield slot
+            cardGO.transform.SetParent(slotTransform);
+            cardGO.transform.localPosition = Vector3.zero;
+            cardGO.transform.localScale = Vector3.one;
+
+            // Configure the card for battlefield
+            ConfigureCardForBattlefield(card, cardGO, isOpponent);
+
+            // Add it back to the dictionary with the updated GameObject
+            cardUIElements[card] = cardGO;
+        }
+
+        // Helper method to create a new card in the battlefield
+        private void CreateCardInBattlefield(
+            Card card,
+            Transform slotTransform,
+            int position,
+            bool isOpponent
+        )
+        {
+            Debug.Log(
+                $"[MatchView] Creating new {(isOpponent ? "opponent" : "player")} card UI for slot {position}: {card.Title}"
+            );
+
+            // Create UI based on the current state of the card
+            var cardGO = CreateCardUI(card, slotTransform, card.FaceDown);
+            if (cardGO != null)
+            {
+                var cardView = cardGO.GetComponent<CardView>();
+                if (cardView != null)
+                {
+                    cardView.transform.localPosition = Vector3.zero;
+                    cardView.transform.localScale = Vector3.one;
+
+                    // Configure the card for battlefield
+                    ConfigureCardForBattlefield(card, cardGO, isOpponent);
+
+                    Debug.Log(
+                        $"[MatchView] Successfully created {(isOpponent ? "opponent" : "player")} card UI for slot {position}"
+                    );
+                }
+                else
+                {
+                    Debug.LogError(
+                        $"[MatchView] Failed to get CardView component for {(isOpponent ? "opponent" : "player")} card in slot {position}"
+                    );
+                }
+            }
+            else
+            {
+                Debug.LogError(
+                    $"[MatchView] Failed to create card UI for {(isOpponent ? "opponent" : "player")} card in slot {position}"
+                );
+            }
+        }
+
+        // Helper method to configure a card for the battlefield
+        private void ConfigureCardForBattlefield(Card card, GameObject cardGO, bool isOpponent)
+        {
+            var cardView = cardGO.GetComponent<CardView>();
+            if (cardView != null)
+            {
+                // Just reflect the model state, don't modify it
+                cardView.SetFaceDown(card.FaceDown);
+                cardView.SetDraggable(false); // Disable dragging once deployed
+
+                // Explicitly reset the isDragging flag to ensure the card can be clicked
+                cardView.ResetDraggingState();
+            }
+
+            // Ensure the CanvasGroup's blocksRaycasts is enabled
+            var canvasGroup = cardGO.GetComponent<CanvasGroup>();
+            if (canvasGroup != null)
+            {
+                canvasGroup.blocksRaycasts = true;
+                Debug.Log(
+                    $"[MatchView] Ensuring CanvasGroup.blocksRaycasts is true for {card.Title}"
+                );
+            }
+
+            // Ensure all images have raycastTarget enabled
+            EnableRaycastsOnImages(card, cardGO, isOpponent);
+        }
+
+        // Helper method to enable raycasts on all images
+        private void EnableRaycastsOnImages(Card card, GameObject cardGO, bool isOpponent)
+        {
+            var images = cardGO.GetComponentsInChildren<Image>();
+            Debug.Log(
+                $"[MatchView] Card {card.Title} in {(isOpponent ? "opponent" : "player")} battlefield has {images.Length} Image components"
+            );
+
+            foreach (var img in images)
+            {
+                Debug.Log($"[MatchView] Image '{img.name}' raycastTarget: {img.raycastTarget}");
+                // Ensure raycastTarget is enabled for all images
+                img.raycastTarget = true;
+            }
         }
 
         private void HandleCardDrawn(Card card)
@@ -527,6 +545,13 @@ namespace Kardx.UI.Scenes
                 return false;
             }
 
+            // Ensure the card belongs to the player, not the opponent
+            if (card.OwnerFaction != matchManager.Player.Faction)
+            {
+                Debug.LogError($"Cannot deploy opponent's card: {card.Title}");
+                return false;
+            }
+
             // Check if the slot is already occupied by looking for a CardView component
             Transform slotTransform = battlefieldSlots[slotIndex];
             bool hasCardView = false;
@@ -552,6 +577,8 @@ namespace Kardx.UI.Scenes
                 Debug.LogWarning("Failed to deploy card via match manager");
                 return false;
             }
+
+            UpdateCreditsDisplay();
 
             // The HandleCardDeployed method will be called by the event system
             // and will handle moving the card UI to the battlefield
