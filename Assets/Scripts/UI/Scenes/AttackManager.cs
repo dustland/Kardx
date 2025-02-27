@@ -101,15 +101,19 @@ namespace Kardx.UI.Scenes
         // Method to initiate an attack between two cards
         public void InitiateAttack(Card attackerCard, Card defenderCard)
         {
-            Debug.Log($"[AttackManager] Initiating attack from {attackerCard.Title} to {defenderCard.Title}");
-            
+            Debug.Log(
+                $"[AttackManager] Initiating attack from {attackerCard.Title} to {defenderCard.Title}"
+            );
+
             // Check if the attack is valid
             if (!CanAttack(attackerCard, defenderCard))
             {
-                Debug.LogWarning($"[AttackManager] Invalid attack from {attackerCard.Title} to {defenderCard.Title}");
+                Debug.LogWarning(
+                    $"[AttackManager] Invalid attack from {attackerCard.Title} to {defenderCard.Title}"
+                );
                 return;
             }
-            
+
             // Process the attack
             ProcessAttack(attackerCard, defenderCard);
         }

@@ -16,6 +16,7 @@
 # Visual Studio / VS Code / Rider cache directory
 .vs/
 .vscode/
+.VSCodeCounter/
 .idea/
 *.csproj
 *.unityproj

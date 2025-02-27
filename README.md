@@ -1,6 +1,8 @@
 # Kardx
 
-A digital card game built with Unity that simulates physical card game mechanics.
+A digital collectible card game built with Unity that simulates the physical card game mechanics of [Kards](https://kards.com/), a popular World-War II-style strategy card game. It is a turn-based game where players deploy units to the battlefield, use abilities, and attack opponents to win.
+
+![Kards](./Docs/Images/Kards.jpg)
 
 ## Overview
 
@@ -11,26 +13,26 @@ Kardx is a turn-based card game where players deploy units to the battlefield, u
 - Battlefield positioning strategy
 - Hand and resource management
 
-## Documentation
+## Design Documents
 
 For developers who want to understand the project better:
 
-- [Architecture](./Design/Arch.md) - Overview of the game's structure
-- [Data System Design](./Design/Data.md) - How card data is organized
-- [Ability System Design](./Design/Ability.md) - How card abilities work
+- [Architecture](./Docs/Arch.md) - Overview and design principles of the game's architecture
+- [Data System Design](./Docs/Data.md) - Data structures, demonstrates how to make model-view-controller (MVC) game design
+- [Ability System Design](./Docs/Ability.md) - How card abilities work, demonstrates how to make data-driven system design
 
 ## Getting Started
 
 ### Prerequisites
 
 - Unity 6 (v6000.0.38f1) - [Download from Unity Hub](https://unity.com/download)
-- Basic understanding of C# and Unity concepts
+- Basic understanding of C# language and Unity concepts
 
 ### Required Unity Packages
 
 Install these packages to work with the project:
 
-1. **Windsurf IDE** (recommended editor)
+1. **Windsurf Integration**
    - Install from Git URL: `https://github.com/Asuta/com.unity.ide.windsurf.git.windsurf.git`
    - Windsurf offers better performance than Cursor IDE
 
@@ -51,10 +53,12 @@ All code and assets are organized in the `Assets` folder:
 - **`Assets/Scripts/Core`** - Core game logic
   - Card, Player, Board, and Ability classes
   - **`/Acting`** - Ability system implementation (card effects and triggers)
-  - **`/Planning`** - Game planning logic
+  - **`/Planning`** - Strategy planning logic of opponent, for both AI and remote players
+  - **`/AI`** - AI logic for the opponent (to be implemented)
 
 - **`Assets/Scripts/UI`** - User interface components
-  - Views connected to Unity UI elements
+  - **`/Components`** - connected to Unity UI elements
+  - **`/Scenes`** - connected to Unity Scenes, the most important one is `MatchView`
 
 ### Asset Organization
 
