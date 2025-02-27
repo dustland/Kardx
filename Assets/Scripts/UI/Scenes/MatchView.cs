@@ -64,11 +64,7 @@ namespace Kardx.UI.Scenes
         private TextMeshProUGUI opponentCreditsText;
 
         [Header("Layout Settings")]
-        [SerializeField]
-        private float handCurveHeight = 0.5f;
-
-        [SerializeField]
-        private float cardSpacing = 1.2f;
+        // Removed cardSpacing as it's no longer needed - layout groups handle spacing
 
         // Non-serialized fields
         private Dictionary<Card, GameObject> cardUIElements = new();
@@ -500,73 +496,46 @@ namespace Kardx.UI.Scenes
 
         private void HandleCardDrawn(Card card)
         {
-            Debug.Log(
-                $"[MatchView] HandleCardDrawn: {card.Title}, Owner: {card.OwnerFaction}, FaceDown: {card.FaceDown}"
-            );
+            Debug.Log("[MatchView] HandleCardDrawn: " + card.Title);
 
             // Determine if this is an opponent card
-            bool isOpponent = card.OwnerFaction == matchManager.Opponent.Faction;
+            bool isOpponent = card.Owner.Id == matchManager.Opponent.Id;
             Transform parent = isOpponent ? opponentHandArea : handArea;
 
-            // Get the position in hand
-            var hand = isOpponent ? matchManager.Opponent.Hand : matchManager.Player.Hand;
-            int position = hand.ToList().IndexOf(card);
-
-            if (position >= 0)
+            // Create UI for the new card directly
+            var cardGO = CreateCardUI(card, parent, card.FaceDown);
+            if (cardGO != null)
             {
-                Debug.Log(
-                    $"[MatchView] Creating UI for {(isOpponent ? "opponent" : "player")} card at position {position}. Card is {(card.FaceDown ? "face down" : "face up")}"
-                );
+                // Set draggable only for player's hand cards
+                var cardView = cardGO.GetComponent<CardView>();
+                if (cardView != null)
+                {
+                    cardView.SetDraggable(!isOpponent);
+                }
 
-                // Create UI for the new card - the card's face-down state should already be set by the game logic
-                CreateHandCardUI(card, parent, position, isOpponent);
-
-                // Update credits display
-                UpdateCreditsDisplay();
+                // No need to manually position - the layout group will handle it
             }
+
+            // Update credits display
+            UpdateCreditsDisplay();
         }
 
         private void HandleCardDiscarded(Card card)
         {
             Debug.Log("[MatchView] HandleCardDiscarded: " + card.Title);
 
-            // Remove the UI element for the discarded card
+            // Remove the card UI
             if (cardUIElements.TryGetValue(card, out GameObject cardGO))
             {
-                Debug.Log($"[MatchView] Removing UI element for discarded card: {card.Title}");
                 Destroy(cardGO);
                 cardUIElements.Remove(card);
             }
-
-            // Update hand positions for remaining cards
-            UpdateHandPositions(card.OwnerFaction == matchManager.Opponent.Faction);
 
             // Update credits display
             UpdateCreditsDisplay();
         }
 
-        private void UpdateHandPositions(bool isOpponent)
-        {
-            // Get the appropriate hand and parent
-            var hand = isOpponent ? matchManager.Opponent.Hand : matchManager.Player.Hand;
-            Transform parent = isOpponent ? opponentHandArea : handArea;
-
-            // Update positions for all cards in hand
-            for (int i = 0; i < hand.Count; i++)
-            {
-                if (cardUIElements.TryGetValue(hand[i], out GameObject cardGO))
-                {
-                    var rectTransform = cardGO.GetComponent<RectTransform>();
-                    if (rectTransform != null)
-                    {
-                        float xOffset = i * cardSpacing;
-                        float yOffset =
-                            parent == handArea ? Mathf.Sin(i * 0.5f) * handCurveHeight : 0;
-                        rectTransform.anchoredPosition = new Vector2(xOffset, yOffset);
-                    }
-                }
-            }
-        }
+        // UpdateHandPositions method removed as it's no longer needed with layout groups
 
         // Public methods for BattlefieldDropZone
         public bool CanDeployCard(Card card)
@@ -840,75 +809,50 @@ namespace Kardx.UI.Scenes
 
         private void UpdateHand(IReadOnlyList<Card> hand, Transform parent, bool isOpponent)
         {
+            // First, make sure all existing cards that should be in the hand are properly parented
             for (int i = 0; i < hand.Count; i++)
             {
-                if (!cardUIElements.ContainsKey(hand[i]))
+                Card card = hand[i];
+
+                // Get or create the card UI element
+                GameObject cardGO;
+                if (!cardUIElements.TryGetValue(card, out cardGO))
                 {
-                    CreateHandCardUI(hand[i], parent, i, isOpponent);
+                    // Create a new card UI if it doesn't exist
+                    cardGO = CreateCardUI(card, parent, card.FaceDown);
+
+                    // Configure it for hand use
+                    var cardView = cardGO.GetComponent<CardView>();
+                    if (cardView != null)
+                    {
+                        cardView.SetDraggable(!isOpponent);
+                    }
                 }
                 else
                 {
-                    // Update the UI if needed
-                    if (cardUIElements.TryGetValue(hand[i], out GameObject cardGO))
+                    // Ensure existing card is properly parented
+                    if (cardGO.transform.parent != parent)
                     {
-                        var cardView = cardGO.GetComponent<CardView>();
-                        if (cardView != null)
-                        {
-                            // Just reflect the model state, don't modify it
-                            cardView.SetFaceDown(hand[i].FaceDown);
-                            cardView.SetDraggable(!isOpponent);
+                        cardGO.transform.SetParent(parent, false);
+                    }
 
-                            // Update position
-                            var rectTransform = cardGO.GetComponent<RectTransform>();
-                            if (rectTransform != null)
-                            {
-                                float xOffset = i * cardSpacing;
-                                float yOffset =
-                                    parent == handArea ? Mathf.Sin(i * 0.5f) * handCurveHeight : 0;
-                                rectTransform.anchoredPosition = new Vector2(xOffset, yOffset);
-                            }
-                        }
+                    // Update card state
+                    var cardView = cardGO.GetComponent<CardView>();
+                    if (cardView != null)
+                    {
+                        cardView.SetFaceDown(card.FaceDown);
+                        cardView.SetDraggable(!isOpponent);
                     }
                 }
+
+                // No need to manually position - the layout group will handle it
             }
-        }
-
-        private GameObject CreateHandCardUI(
-            Card card,
-            Transform parent,
-            int position,
-            bool isOpponent
-        )
-        {
-            // Note: The card's face-down state should already be set by the game logic
-            // We just create the UI to reflect that state
-
-            var cardGO = CreateCardUI(card, parent, card.FaceDown);
-            if (cardGO != null)
-            {
-                var rectTransform = cardGO.GetComponent<RectTransform>();
-                if (rectTransform != null)
-                {
-                    float xOffset = position * cardSpacing;
-                    float yOffset =
-                        parent == handArea ? Mathf.Sin(position * 0.5f) * handCurveHeight : 0;
-                    rectTransform.anchoredPosition = new Vector2(xOffset, yOffset);
-                }
-
-                // Set draggable only for player's hand cards
-                var cardView = cardGO.GetComponent<CardView>();
-                if (cardView != null)
-                {
-                    cardView.SetDraggable(parent == handArea);
-                }
-            }
-            return cardGO;
         }
 
         private GameObject CreateCardUI(Card card, Transform parent, bool faceDown)
         {
             Debug.Log(
-                $"[MatchView] Creating card UI: {card.Title}, FaceDown: {faceDown}, Owner: {card.OwnerFaction}"
+                $"[MatchView] Creating card UI: {card.Title}, FaceDown: {faceDown}, Owner: {card.Owner.Id}"
             );
             if (cardPrefab == null)
             {
