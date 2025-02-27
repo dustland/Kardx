@@ -1,5 +1,3 @@
-using Kardx.UI.Components;
-using Kardx.UI.Scenes;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -8,7 +6,11 @@ namespace Kardx.UI.Components
 {
     using Card = Kardx.Core.Card;
 
-    public class CardSlot : MonoBehaviour, IDropHandler
+    /// <summary>
+    /// Specialized card slot for the player's battlefield.
+    /// Handles card deployment and ability targeting.
+    /// </summary>
+    public class PlayerCardSlot : MonoBehaviour, IDropHandler
     {
         [SerializeField]
         private Image highlightImage;
@@ -16,17 +18,11 @@ namespace Kardx.UI.Components
         [SerializeField]
         private int position; // 0-4 for the five positions
 
-        [SerializeField]
-        [Tooltip(
-            "Whether this slot can accept cards dropped by the player. Set to false for opponent slots."
-        )]
-        private bool isDroppable = true;
-
-        private MatchView matchView;
+        private Kardx.UI.Scenes.MatchView matchView;
 
         private void Awake()
         {
-            matchView = GetComponentInParent<MatchView>();
+            matchView = GetComponentInParent<Kardx.UI.Scenes.MatchView>();
             if (!highlightImage)
                 CreateHighlight();
             else
@@ -72,21 +68,12 @@ namespace Kardx.UI.Components
 
         public void OnDrop(PointerEventData eventData)
         {
-            Debug.Log($"OnDrop called at position {position}");
-
-            // Immediately return if this is not a droppable slot (e.g., opponent slot)
-            if (!isDroppable)
-            {
-                Debug.LogWarning(
-                    $"[CardSlot] Prevented drop on non-droppable slot at position {position}"
-                );
-                return;
-            }
+            Debug.Log($"[PlayerCardSlot] OnDrop called at position {position}");
 
             var cardView = eventData.pointerDrag?.GetComponent<CardView>();
             if (cardView == null)
             {
-                Debug.Log("No CardView found on dropped object");
+                Debug.Log("[PlayerCardSlot] No CardView found on dropped object");
                 return;
             }
 
@@ -100,7 +87,7 @@ namespace Kardx.UI.Components
             {
                 canvasGroup.blocksRaycasts = true;
                 Debug.Log(
-                    $"[CardSlot] Ensuring CanvasGroup.blocksRaycasts is true for dropped card"
+                    $"[PlayerCardSlot] Ensuring CanvasGroup.blocksRaycasts is true for dropped card"
                 );
             }
 
@@ -113,21 +100,25 @@ namespace Kardx.UI.Components
                 // Handle card deployment
                 if (matchView == null || !matchView.DeployCard(cardView.Card, position))
                 {
-                    Debug.Log($"Failed to deploy card at position {position}");
+                    Debug.Log($"[PlayerCardSlot] Failed to deploy card at position {position}");
                     return;
                 }
-                Debug.Log($"Card deployed successfully at position {position}");
+                Debug.Log($"[PlayerCardSlot] Card deployed successfully at position {position}");
             }
             else if (isAbilityUse)
             {
                 // Handle ability use
-                Debug.Log($"Ability use detected from card {cardView.Card.Title} to position {position}");
+                Debug.Log(
+                    $"[PlayerCardSlot] Ability use detected from card {cardView.Card.Title} to position {position}"
+                );
                 // TODO: Implement ability targeting logic here
                 // This would call something like: matchView.UseAbility(cardView.Card, targetCard);
             }
             else
             {
-                Debug.Log($"Card is neither in hand nor on battlefield, cannot determine action");
+                Debug.Log(
+                    $"[PlayerCardSlot] Card is neither in hand nor on battlefield, cannot determine action"
+                );
                 return;
             }
         }
@@ -152,7 +143,7 @@ namespace Kardx.UI.Components
         {
             if (card == null || card.Owner == null)
                 return false;
-                
+
             // Check if the card is in the battlefield
             var battlefield = card.Owner.Battlefield;
             foreach (var battlefieldCard in battlefield)
@@ -165,13 +156,7 @@ namespace Kardx.UI.Components
 
         public bool IsValidDropTarget(Card card)
         {
-            // First check if this slot is configured as droppable in the editor
-            if (!isDroppable)
-            {
-                return false;
-            }
-
-            // If the slot is droppable, check with the match view if the card can be deployed
+            // Check with the match view if the card can be deployed
             return matchView?.CanDeployCard(card) ?? false;
         }
 
@@ -187,17 +172,10 @@ namespace Kardx.UI.Components
             this.position = Mathf.Clamp(position, 0, 4);
         }
 
-        // Set whether this slot can accept dropped cards
-        public void SetDroppable(bool droppable)
+        // Get the position of this slot
+        public int GetPosition()
         {
-            this.isDroppable = droppable;
-            Debug.Log($"[CardSlot] Slot {position} droppable set to: {droppable}");
-        }
-
-        // Check if this is a player slot (i.e., if it's droppable)
-        public bool IsPlayerSlot()
-        {
-            return isDroppable;
+            return position;
         }
     }
 }

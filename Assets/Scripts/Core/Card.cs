@@ -15,6 +15,7 @@ namespace Kardx.Core
         private int currentDefence; // Current defence value
         private string currentAbilityId; // Current applied ability, should be one of the abilities in the card type
         private Player owner; // Reference to the Player who owns this card
+        private bool hasAttackedThisTurn; // Whether this card has attacked this turn
 
         // Public properties
         public Guid InstanceId => instanceId;
@@ -25,6 +26,11 @@ namespace Kardx.Core
         public IReadOnlyList<Modifier> Modifiers => modifiers;
         public IReadOnlyDictionary<string, int> DynamicAttributes => dynamicAttributes;
         public Player Owner => owner;
+        public bool HasAttackedThisTurn
+        {
+            get => hasAttackedThisTurn;
+            set => hasAttackedThisTurn = value;
+        }
 
         // Computed properties
         // When current defence is 0, the card is destroyed
@@ -56,6 +62,7 @@ namespace Kardx.Core
             this.owner = owner;
             this.currentAbilityId =
                 cardType.Abilities.Count > 0 ? cardType.Abilities[0].Id : string.Empty;
+            this.hasAttackedThisTurn = false; // Initialize to false
         }
 
         // Add the missing SetFaceDown method
@@ -121,6 +128,21 @@ namespace Kardx.Core
                     dynamicAttributes[mod.Attribute] += mod.Value;
                 }
             }
+        }
+
+        // Take damage
+        public void TakeDamage(int amount)
+        {
+            if (amount <= 0)
+                return;
+
+            int previousDefence = CurrentDefence;
+            CurrentDefence -= amount;
+
+            // Log the damage
+            UnityEngine.Debug.Log(
+                $"[Card] {Title} took {amount} damage. Defence reduced from {previousDefence} to {CurrentDefence}"
+            );
         }
 
         // Event handlers

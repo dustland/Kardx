@@ -17,7 +17,7 @@
       "health": 5,
       "speed": 1
     },
-    "abilities": ["Blitzkrieg", "Field Repairs", "Counterattack"]
+    "abilities": ["550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440001", "550e8400-e29b-41d4-a716-446655440008"]
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440001",
@@ -37,7 +37,7 @@
       "health": 4,
       "range": 3
     },
-    "abilities": ["Artillery Barrage", "Fortify", "Reconnaissance"]
+    "abilities": ["550e8400-e29b-41d4-a716-446655440006", "550e8400-e29b-41d4-a716-446655440005", "550e8400-e29b-41d4-a716-446655440003"]
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440002",
@@ -57,7 +57,7 @@
       "health": 8,
       "speed": 2
     },
-    "abilities": ["Blitzkrieg", "Fortify", "Counterattack"]
+    "abilities": ["550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440005", "550e8400-e29b-41d4-a716-446655440008"]
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440003",
@@ -77,7 +77,7 @@
       "health": 4,
       "speed": 1
     },
-    "abilities": ["Medic Team", "Field Repairs", "Reconnaissance"]
+    "abilities": ["550e8400-e29b-41d4-a716-446655440007", "550e8400-e29b-41d4-a716-446655440001", "550e8400-e29b-41d4-a716-446655440003"]
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440004",
@@ -97,7 +97,7 @@
       "health": 4,
       "speed": 3
     },
-    "abilities": ["Ambush", "Blitzkrieg", "Reconnaissance"]
+    "abilities": ["550e8400-e29b-41d4-a716-446655440004", "550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440003"]
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440005",
@@ -117,7 +117,7 @@
       "health": 5,
       "range": 2
     },
-    "abilities": ["Artillery Barrage", "Fortify", "Counterattack"]
+    "abilities": ["550e8400-e29b-41d4-a716-446655440006", "550e8400-e29b-41d4-a716-446655440005", "550e8400-e29b-41d4-a716-446655440008"]
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440006",
@@ -137,7 +137,7 @@
       "health": 3,
       "speed": 4
     },
-    "abilities": ["Reconnaissance", "Ambush", "Field Repairs"]
+    "abilities": ["550e8400-e29b-41d4-a716-446655440003", "550e8400-e29b-41d4-a716-446655440004", "550e8400-e29b-41d4-a716-446655440001"]
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440007",
@@ -157,7 +157,7 @@
       "health": 6,
       "speed": 5
     },
-    "abilities": ["Blitzkrieg", "Ambush", "Counterattack"]
+    "abilities": ["550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440004", "550e8400-e29b-41d4-a716-446655440008"]
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440008",
@@ -177,7 +177,7 @@
       "health": 4,
       "speed": 2
     },
-    "abilities": ["Reconnaissance", "Field Repairs", "Medic Team"]
+    "abilities": ["550e8400-e29b-41d4-a716-446655440003", "550e8400-e29b-41d4-a716-446655440001", "550e8400-e29b-41d4-a716-446655440007"]
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440009",
@@ -197,6 +197,6 @@
       "health": 10,
       "speed": 1
     },
-    "abilities": ["Blitzkrieg", "Fortify", "Counterattack"]
+    "abilities": ["550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440005", "550e8400-e29b-41d4-a716-446655440008"]
   }
 ]

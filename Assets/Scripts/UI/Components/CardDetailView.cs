@@ -55,11 +55,11 @@ namespace Kardx.UI.Components
             canvasGroup.interactable = true;
 
             Debug.Log("[CardDetailView] Initialized with background panel and raycast blocking");
-            
+
             // Make sure the card view is properly configured
             EnsureCardViewIsConfigured();
         }
-        
+
         private void EnsureCardViewIsConfigured()
         {
             if (cardView == null)
@@ -67,7 +67,7 @@ namespace Kardx.UI.Components
                 Debug.LogError("[CardDetailView] CardView is null, cannot configure");
                 return;
             }
-            
+
             // Make sure all image components are enabled
             var images = cardView.GetComponentsInChildren<Image>(true);
             foreach (var img in images)
@@ -75,10 +75,10 @@ namespace Kardx.UI.Components
                 img.enabled = true;
                 Debug.Log($"[CardDetailView] Enabled image component: {img.name}");
             }
-            
+
             // Make sure the card view itself is active
             cardView.gameObject.SetActive(true);
-            
+
             Debug.Log("[CardDetailView] CardView configuration completed");
         }
 
@@ -89,19 +89,19 @@ namespace Kardx.UI.Components
             {
                 // First make the panel active so we can initialize properly
                 gameObject.SetActive(true);
-                
+
                 // Initialize the card data
                 cardView.Initialize(cardType);
-                
+
                 // Force the card to load its image immediately
                 if (cardView.GetComponent<Image>() != null)
                 {
                     cardView.GetComponent<Image>().enabled = true;
                 }
-                
+
                 // Make sure all image components are enabled
                 EnsureCardViewIsConfigured();
-                
+
                 Debug.Log($"[CardDetailView] Panel activated for cardType: {cardType?.Title}");
             }
             else
@@ -118,19 +118,19 @@ namespace Kardx.UI.Components
             {
                 // First make the panel active so we can initialize properly
                 gameObject.SetActive(true);
-                
+
                 // Initialize the card data
                 cardView.Initialize(card);
-                
+
                 // Force the card to load its image immediately
                 if (cardView.GetComponent<Image>() != null)
                 {
                     cardView.GetComponent<Image>().enabled = true;
                 }
-                
+
                 // Make sure all image components are enabled
                 EnsureCardViewIsConfigured();
-                
+
                 Debug.Log($"[CardDetailView] Panel activated for card: {card?.Title}");
             }
             else

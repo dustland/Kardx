@@ -25,6 +25,7 @@ namespace Kardx.Core
         public Player Player => board.Player;
         public Player Opponent => board.Opponent;
         public Board Board => board;
+        public Player CurrentPlayer => board.CurrentPlayer;
 
         // Essential events for UI updates
         public event Action<Card, int> OnCardDeployed;
@@ -119,6 +120,9 @@ namespace Kardx.Core
             // Notify listeners that a new turn is starting
             OnTurnStarted?.Invoke(this, currentPlayer);
 
+            // Reset card attack status
+            currentPlayer.ResetCardAttackStatus();
+
             // If it's the opponent's turn, process it automatically
             if (currentPlayer.Id == board.Player2.Id)
             {
@@ -173,6 +177,9 @@ namespace Kardx.Core
 
             // Notify listeners that a new turn is starting
             OnTurnStarted?.Invoke(this, nextPlayer);
+
+            // Reset card attack status
+            nextPlayer.ResetCardAttackStatus();
 
             // If it's the opponent's turn, process it automatically
             if (nextPlayer.Id == board.Player2.Id)

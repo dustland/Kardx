@@ -27,7 +27,14 @@ namespace Kardx.Core
         private readonly Card[] battlefield = new Card[BATTLEFIELD_SLOT_COUNT];
         private readonly Stack<Card> deck = new();
         private readonly Queue<Card> discardPile = new();
+        private readonly List<Card> graveyard = new(); // Added a new list to hold destroyed cards
         private Card headquartersCard;
+
+        // Events
+        public event Action<Card> OnCardDrawn;
+        public event Action<Card> OnCardDiscarded;
+        public event Action<Card, int> OnCardDeployed;
+        public event Action<Card> OnCardDestroyed;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="PlayerState"/> class.
@@ -98,6 +105,11 @@ namespace Kardx.Core
         public IReadOnlyList<Card> DiscardPile => discardPile.ToList();
 
         /// <summary>
+        /// Gets the player's graveyard of destroyed cards.
+        /// </summary>
+        public IReadOnlyList<Card> Graveyard => graveyard; // Added a new property to access the graveyard
+
+        /// <summary>
         /// Gets the player's headquarter card.
         /// </summary>
         public Card Headquarter => headquartersCard;
@@ -134,6 +146,7 @@ namespace Kardx.Core
             card.SetOwner(this); // Set the owner of the card
             hand.Add(card);
             logger?.Log($"[{playerId}] Drew card: {card.Title}");
+            OnCardDrawn?.Invoke(card);
             return card;
         }
 
@@ -153,6 +166,7 @@ namespace Kardx.Core
             hand.Remove(card);
             discardPile.Enqueue(card);
             logger?.Log($"[{playerId}] Discarded card: {card.Title}");
+            OnCardDiscarded?.Invoke(card);
             return true;
         }
 
@@ -210,6 +224,7 @@ namespace Kardx.Core
             battlefield[position] = card;
 
             logger?.Log($"[{playerId}] Deployed card {card.Title} to battlefield slot {position}");
+            OnCardDeployed?.Invoke(card, position);
             return true;
         }
 
@@ -291,6 +306,48 @@ namespace Kardx.Core
         public List<Card> GetCardsInPlay()
         {
             return battlefield.Where(card => card != null).ToList();
+        }
+
+        // Reset all cards' attack status at the start of a turn
+        public void ResetCardAttackStatus()
+        {
+            // Reset attack status for all cards on the battlefield
+            foreach (var card in battlefield)
+            {
+                if (card != null)
+                {
+                    card.HasAttackedThisTurn = false;
+                }
+            }
+        }
+
+        // Destroy a card and move it to the graveyard
+        public void DestroyCard(Card card)
+        {
+            if (card == null)
+                return;
+
+            // Find the card in the battlefield
+            int slotIndex = -1;
+            for (int i = 0; i < battlefield.Length; i++)
+            {
+                if (battlefield[i] == card)
+                {
+                    slotIndex = i;
+                    break;
+                }
+            }
+
+            // If found, remove it and add to graveyard
+            if (slotIndex >= 0)
+            {
+                battlefield[slotIndex] = null;
+                // Add the card to the graveyard
+                graveyard.Add(card);
+
+                // Notify listeners about the card being destroyed
+                OnCardDestroyed?.Invoke(card);
+            }
         }
     }
 }

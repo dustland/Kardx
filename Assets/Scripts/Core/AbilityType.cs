@@ -6,53 +6,66 @@ namespace Kardx.Core
 {
     public class AbilityType
     {
-        // 基本信息
+        // Basic Information
         [JsonProperty("id")]
         private string id;
+
         [JsonProperty("name")]
         private string name;
+
         [JsonProperty("description")]
         private string description;
+
         [JsonProperty("iconPath")]
         private string iconPath;
 
-        // 激活参数
+        // Activation Parameters
         [JsonProperty("trigger")]
         private TriggerType trigger;
+
         [JsonProperty("cooldownTurns")]
         private int cooldownTurns;
+
         [JsonProperty("usesPerTurn")]
         private int usesPerTurn;
+
         [JsonProperty("usesPerMatch")]
         private int usesPerMatch;
+
         [JsonProperty("requiresFaceUp")]
         private bool requiresFaceUp;
+
         [JsonProperty("operationCost")]
         private int operationCost;
 
-        // 目标参数
+        // Target Parameters
         [JsonProperty("targeting")]
         private TargetingType targeting;
+
         [JsonProperty("range")]
         private RangeType range;
+
         [JsonProperty("canTargetFaceDown")]
         private bool canTargetFaceDown;
 
-        // 效果参数
+        // Effect Parameters
         [JsonProperty("effect")]
         private EffectType effect;
+
         [JsonProperty("effectValue")]
         private int effectValue;
+
         [JsonProperty("effectDuration")]
         private int effectDuration;
 
-        // 特殊参数
+        // Special Parameters
         [JsonProperty("specialEffectId")]
         private string specialEffectId;
+
         [JsonProperty("customParameters")]
         private Dictionary<string, object> customParameters = new Dictionary<string, object>();
 
-        // 公共属性
+        // Public Properties
         public string Id => id;
         public string Name => name;
         public string Description => description;
@@ -72,7 +85,7 @@ namespace Kardx.Core
         public string SpecialEffectId => specialEffectId;
         public IReadOnlyDictionary<string, object> CustomParameters => customParameters;
 
-        // 构造函数
+        // Constructor
         public AbilityType(
             string id,
             string name,
@@ -102,15 +115,19 @@ namespace Kardx.Core
             this.specialEffectId = string.Empty;
         }
 
-        // 设置目标参数
-        public void SetTargetingParameters(TargetingType targeting, RangeType range, bool canTargetFaceDown)
+        // Set Target Parameters
+        public void SetTargetingParameters(
+            TargetingType targeting,
+            RangeType range,
+            bool canTargetFaceDown
+        )
         {
             this.targeting = targeting;
             this.range = range;
             this.canTargetFaceDown = canTargetFaceDown;
         }
 
-        // 设置效果参数
+        // Set Effect Parameters
         public void SetEffectParameters(EffectType effect, int effectValue, int effectDuration = 0)
         {
             this.effect = effect;
@@ -118,19 +135,19 @@ namespace Kardx.Core
             this.effectDuration = Math.Max(0, effectDuration);
         }
 
-        // 设置特殊效果ID
+        // Set Special Effect ID
         public void SetSpecialEffectId(string specialEffectId)
         {
             this.specialEffectId = specialEffectId ?? string.Empty;
         }
 
-        // 设置图标路径
+        // Set Icon Path
         public void SetIconPath(string iconPath)
         {
             this.iconPath = iconPath;
         }
 
-        // 自定义参数管理
+        // Custom Parameter Management
         public void SetCustomParameter(string key, object value)
         {
             if (!string.IsNullOrEmpty(key))
@@ -156,7 +173,7 @@ namespace Kardx.Core
             }
         }
 
-        // 克隆方法
+        // Clone Method
         public AbilityType Clone()
         {
             var clone = new AbilityType(
@@ -184,7 +201,7 @@ namespace Kardx.Core
             return clone;
         }
 
-        // 序列化方法
+        // Serialization Method
         public static AbilityType FromJson(string json)
         {
             return JsonConvert.DeserializeObject<AbilityType>(json);

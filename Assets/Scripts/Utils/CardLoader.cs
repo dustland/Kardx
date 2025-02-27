@@ -15,7 +15,7 @@ namespace Kardx.Utils
         private static readonly JsonSerializerSettings JsonSettings = new()
         {
             Formatting = Formatting.Indented,
-            NullValueHandling = NullValueHandling.Ignore
+            NullValueHandling = NullValueHandling.Ignore,
         };
 
         private class CardDataJson
@@ -34,6 +34,8 @@ namespace Kardx.Utils
             public string SetId { get; set; }
             public string ImageUrl { get; set; }
             public Dictionary<string, int> Attributes { get; set; }
+
+            [JsonProperty("abilities")]
             public List<string> AbilityIds { get; set; } // Store ability IDs instead of full objects
         }
 
@@ -59,7 +61,10 @@ namespace Kardx.Utils
                 }
 
                 string cardJsonData = File.ReadAllText(cardFilePath);
-                var cardDataList = JsonConvert.DeserializeObject<List<CardDataJson>>(cardJsonData, JsonSettings);
+                var cardDataList = JsonConvert.DeserializeObject<List<CardDataJson>>(
+                    cardJsonData,
+                    JsonSettings
+                );
 
                 // Convert CardDataJson to CardType and link abilities
                 foreach (var cardData in cardDataList)
@@ -98,7 +103,9 @@ namespace Kardx.Utils
                             }
                             else
                             {
-                                Debug.LogWarning($"Ability {abilityId} not found for card {cardData.Id}");
+                                Debug.LogWarning(
+                                    $"Ability {abilityId} not found for card {cardData.Id}"
+                                );
                             }
                         }
                     }
@@ -127,7 +134,10 @@ namespace Kardx.Utils
                 }
 
                 string abilityJsonData = File.ReadAllText(abilityFilePath);
-                return JsonConvert.DeserializeObject<List<AbilityType>>(abilityJsonData, JsonSettings);
+                return JsonConvert.DeserializeObject<List<AbilityType>>(
+                    abilityJsonData,
+                    JsonSettings
+                );
             }
             catch (Exception ex)
             {

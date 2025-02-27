@@ -46,7 +46,10 @@ namespace Kardx.UI.Scenes
 
         [Header("UI Elements")]
         [SerializeField]
-        private GameObject cardSlotPrefab; // Prefab for card slot
+        private GameObject playerCardSlotPrefab; // Prefab for player card slot
+
+        [SerializeField]
+        private GameObject opponentCardSlotPrefab; // Prefab for opponent card slot
 
         [SerializeField]
         private GameObject cardPrefab;
@@ -128,7 +131,8 @@ namespace Kardx.UI.Scenes
             if (
                 battlefieldArea == null
                 || opponentBattlefieldArea == null
-                || cardSlotPrefab == null
+                || playerCardSlotPrefab == null
+                || opponentCardSlotPrefab == null
             )
             {
                 Debug.LogError(
@@ -140,36 +144,53 @@ namespace Kardx.UI.Scenes
             // Create player's battlefield slots
             for (int i = 0; i < Player.BATTLEFIELD_SLOT_COUNT; i++)
             {
-                var slot = Instantiate(cardSlotPrefab, battlefieldArea);
+                var slot = Instantiate(playerCardSlotPrefab, battlefieldArea);
                 slot.name = $"CardSlot{i + 1}";
                 battlefieldSlots[i] = slot.transform;
-                var cardSlot = slot.GetComponent<CardSlot>();
+                var cardSlot = slot.GetComponent<PlayerCardSlot>();
                 if (cardSlot != null)
                 {
                     cardSlot.SetPosition(i);
-
-                    // Set the slot as droppable using the public method
-                    cardSlot.SetDroppable(true);
+                    // PlayerCardSlot is designed to be droppable by default
                 }
             }
 
             // Create opponent's battlefield slots
             for (int i = 0; i < Player.BATTLEFIELD_SLOT_COUNT; i++)
             {
-                var slot = Instantiate(cardSlotPrefab, opponentBattlefieldArea);
+                var slot = Instantiate(opponentCardSlotPrefab, opponentBattlefieldArea);
                 slot.name = $"OpponentCardSlot{i + 1}";
                 opponentBattlefieldSlots[i] = slot.transform;
-                var cardSlot = slot.GetComponent<CardSlot>();
+                var cardSlot = slot.GetComponent<OpponentCardSlot>();
                 if (cardSlot != null)
                 {
                     cardSlot.SetPosition(i);
-
-                    cardSlot.SetDroppable(false);
+                    // No need to set droppable for OpponentCardSlot as it's designed specifically for opponent cards
                 }
             }
         }
 
         private void Start()
+        {
+            // Initialize the AttackManager
+            InitializeAttackManager();
+
+            // Set up the match
+            SetupMatch();
+        }
+
+        private void InitializeAttackManager()
+        {
+            // Make sure we have an AttackManager component
+            AttackManager attackManager = GetComponent<AttackManager>();
+            if (attackManager == null)
+            {
+                attackManager = gameObject.AddComponent<AttackManager>();
+                Debug.Log("[MatchView] Added AttackManager component");
+            }
+        }
+
+        private void SetupMatch()
         {
             // Create MatchManager instance
             matchManager = new MatchManager(new SimpleLogger("[MatchManager]"));
@@ -418,10 +439,40 @@ namespace Kardx.UI.Scenes
             {
                 // Just reflect the model state, don't modify it
                 cardView.SetFaceDown(card.FaceDown);
-                cardView.SetDraggable(false); // Disable dragging once deployed
+                
+                // For player cards, we want to enable dragging to use abilities
+                // For opponent cards, we want to disable dragging
+                cardView.SetDraggable(!isOpponent);
 
                 // Explicitly reset the isDragging flag to ensure the card can be clicked
                 cardView.ResetDraggingState();
+
+                // Switch from DeployDragHandler to AbilityDragHandler for battlefield cards
+                // Only do this for the player's cards, not opponent cards
+                if (!isOpponent)
+                {
+                    // Disable the DeployDragHandler
+                    var deployDragHandler = cardGO.GetComponent<DeployDragHandler>();
+                    if (deployDragHandler != null)
+                    {
+                        deployDragHandler.enabled = false;
+                    }
+
+                    // Enable the AbilityDragHandler if it exists, or add it if it doesn't
+                    var abilityDragHandler = cardGO.GetComponent<AbilityDragHandler>();
+                    if (abilityDragHandler == null)
+                    {
+                        abilityDragHandler = cardGO.AddComponent<AbilityDragHandler>();
+                        Debug.Log($"[MatchView] Added AbilityDragHandler to {card.Title}");
+                    }
+                    
+                    // Make sure the AbilityDragHandler is enabled
+                    abilityDragHandler.enabled = true;
+                    Debug.Log($"[MatchView] Enabled AbilityDragHandler on {card.Title}");
+                    
+                    // Force the AbilityDragHandler to update its state
+                    abilityDragHandler.SendMessage("UpdateComponentState", null, SendMessageOptions.DontRequireReceiver);
+                }
             }
 
             // Ensure the CanvasGroup's blocksRaycasts is enabled
@@ -539,62 +590,106 @@ namespace Kardx.UI.Scenes
 
         public bool DeployCard(Card card, int slotIndex)
         {
-            if (slotIndex < 0 || slotIndex >= battlefieldSlots.Length)
+            Debug.Log(
+                $"[MatchView] Attempting to deploy card {card.Title} to position {slotIndex}"
+            );
+
+            // Check if the card can be deployed
+            if (!CanDeployCard(card))
             {
-                Debug.LogError($"Invalid slot index: {slotIndex}");
+                Debug.LogWarning($"[MatchView] Cannot deploy card {card.Title}");
                 return false;
             }
 
-            // Ensure the card belongs to the player, not the opponent
-            if (card.OwnerFaction != matchManager.Player.Faction)
+            // Deploy the card in the game model
+            bool success = matchManager.DeployCard(card, slotIndex);
+            if (!success)
             {
-                Debug.LogError($"Cannot deploy opponent's card: {card.Title}");
+                Debug.LogWarning(
+                    $"[MatchView] Failed to deploy card {card.Title} at position {slotIndex}"
+                );
                 return false;
             }
 
-            // Check if the slot is already occupied by looking for a CardView component
-            Transform slotTransform = battlefieldSlots[slotIndex];
-            bool hasCardView = false;
-            for (int i = 0; i < slotTransform.childCount; i++)
+            Debug.Log(
+                $"[MatchView] Successfully deployed card {card.Title} at position {slotIndex}"
+            );
+
+            // Update only the credits display instead of full UI refresh
+            UpdateCreditsDisplay();
+
+            // Make sure the card has the correct drag handlers enabled
+            if (cardUIElements.TryGetValue(card, out GameObject cardGO))
             {
-                if (slotTransform.GetChild(i).GetComponent<CardView>() != null)
+                var cardView = cardGO.GetComponent<CardView>();
+                if (cardView != null)
                 {
-                    hasCardView = true;
-                    break;
+                    // Ensure AbilityDragHandler is added and enabled for battlefield cards
+                    var abilityDragHandler = cardGO.GetComponent<AbilityDragHandler>();
+                    if (abilityDragHandler == null)
+                    {
+                        abilityDragHandler = cardGO.AddComponent<AbilityDragHandler>();
+                        Debug.Log(
+                            $"[MatchView] Added AbilityDragHandler to deployed card {card.Title}"
+                        );
+                    }
+                    abilityDragHandler.enabled = true;
+
+                    // Disable DeployDragHandler for battlefield cards
+                    var deployDragHandler = cardGO.GetComponent<DeployDragHandler>();
+                    if (deployDragHandler != null)
+                    {
+                        deployDragHandler.enabled = false;
+                    }
+
+                    Debug.Log(
+                        $"[MatchView] Updated drag handlers for deployed card {card.Title}: AbilityDragHandler enabled, DeployDragHandler disabled"
+                    );
                 }
             }
 
-            if (hasCardView)
-            {
-                Debug.LogWarning($"Slot {slotIndex} is already occupied");
-                return false;
-            }
-
-            // Check and deploy via match manager
-            // This will trigger the HandleCardDeployed event which will handle the UI update
-            if (!matchManager.DeployCard(card, slotIndex))
-            {
-                Debug.LogWarning("Failed to deploy card via match manager");
-                return false;
-            }
-
-            UpdateCreditsDisplay();
-
-            // The HandleCardDeployed method will be called by the event system
-            // and will handle moving the card UI to the battlefield
             return true;
         }
 
         private void RemoveCard(int slotIndex, bool isOpponent = false)
         {
+            // Check if the slot index is valid
+            if (slotIndex < 0 || slotIndex >= Player.BATTLEFIELD_SLOT_COUNT)
+            {
+                Debug.LogError($"[MatchView] Invalid slot index: {slotIndex}");
+                return;
+            }
+
             var slots = isOpponent ? opponentBattlefieldSlots : battlefieldSlots;
+
+            // Check if the slots array is initialized
+            if (slots == null)
+            {
+                Debug.LogError(
+                    $"[MatchView] Battlefield slots array is null for {(isOpponent ? "opponent" : "player")}"
+                );
+                return;
+            }
+
+            // Check if the slot at the given index exists
+            if (slots[slotIndex] == null)
+            {
+                Debug.LogError(
+                    $"[MatchView] Slot at index {slotIndex} is null for {(isOpponent ? "opponent" : "player")}"
+                );
+                return;
+            }
+
             Transform slotTransform = slots[slotIndex];
+            Debug.Log(
+                $"[MatchView] Attempting to remove card from slot {slotIndex} (isOpponent: {isOpponent})"
+            );
 
             // Find and remove only the CardView component
             for (int i = 0; i < slotTransform.childCount; i++)
             {
                 Transform child = slotTransform.GetChild(i);
-                if (child.GetComponent<CardView>() != null)
+                if (child != null && child.GetComponent<CardView>() != null)
                 {
                     Debug.Log(
                         $"[MatchView] Removing card from slot {slotIndex} (isOpponent: {isOpponent})"
@@ -603,6 +698,8 @@ namespace Kardx.UI.Scenes
                     return; // Only remove one card
                 }
             }
+
+            Debug.Log($"[MatchView] No card found in slot {slotIndex} (isOpponent: {isOpponent})");
         }
 
         private void ClearBattlefield()
@@ -735,7 +832,7 @@ namespace Kardx.UI.Scenes
                             {
                                 cardView.transform.localPosition = Vector3.zero;
                                 cardView.transform.localScale = Vector3.one;
-                                cardView.SetDraggable(false); // Disable dragging for battlefield cards
+                                cardView.SetDraggable(true); // Enable dragging for battlefield cards to allow abilities
                             }
                         }
                     }
@@ -862,7 +959,49 @@ namespace Kardx.UI.Scenes
             image.raycastTarget = true;
             Debug.Log($"[MatchView] Set raycastTarget to true for {card.Title}");
 
-            // Set draggable state after initialization
+            // Set up the appropriate drag handler based on where the card is
+            bool isInHand = parent == handArea;
+            bool isOnBattlefield = parent == battlefieldArea || parent.IsChildOf(battlefieldArea);
+
+            // For cards in hand, add DeployDragHandler if it doesn't exist
+            if (isInHand)
+            {
+                var deployDragHandler = cardGO.GetComponent<DeployDragHandler>();
+                if (deployDragHandler == null)
+                {
+                    deployDragHandler = cardGO.AddComponent<DeployDragHandler>();
+                    Debug.Log($"[MatchView] Added DeployDragHandler to {card.Title}");
+                }
+                deployDragHandler.enabled = true;
+
+                // Disable AbilityDragHandler for hand cards
+                var abilityDragHandler = cardGO.GetComponent<AbilityDragHandler>();
+                if (abilityDragHandler != null)
+                {
+                    abilityDragHandler.enabled = false;
+                }
+            }
+            // For cards on battlefield, add AbilityDragHandler if it doesn't exist
+            else if (isOnBattlefield)
+            {
+                var abilityDragHandler = cardGO.GetComponent<AbilityDragHandler>();
+                if (abilityDragHandler == null)
+                {
+                    abilityDragHandler = cardGO.AddComponent<AbilityDragHandler>();
+                    Debug.Log($"[MatchView] Added AbilityDragHandler to {card.Title}");
+                }
+                abilityDragHandler.enabled = true;
+
+                // Disable DeployDragHandler for battlefield cards
+                var deployDragHandler = cardGO.GetComponent<DeployDragHandler>();
+                if (deployDragHandler != null)
+                {
+                    deployDragHandler.enabled = false;
+                }
+            }
+
+            // Set draggable state after initialization - this will be handled by the CardView
+            // based on the parent and the card's state
             cardView.SetDraggable(true);
             Debug.Log($"[MatchView] Card UI creation complete for {card.Title}");
 
@@ -891,6 +1030,58 @@ namespace Kardx.UI.Scenes
             {
                 opponentCreditsText.text = $"Kredits: {opponentState.Credits}";
             }
+        }
+
+        // Get the current player
+        public Player GetCurrentPlayer()
+        {
+            if (matchManager == null)
+            {
+                Debug.LogError("[MatchView] MatchManager is null");
+                return null;
+            }
+            return matchManager.Player;
+        }
+
+        // Get the opponent
+        public Player GetOpponent()
+        {
+            if (matchManager == null)
+            {
+                Debug.LogError("[MatchView] MatchManager is null");
+                return null;
+            }
+            return matchManager.Opponent;
+        }
+
+        // Get the MatchManager instance
+        public MatchManager GetMatchManager()
+        {
+            return matchManager;
+        }
+
+        // Handle card attacks
+        public void AttackCard(Card attackerCard, Card defenderCard)
+        {
+            if (matchManager == null)
+            {
+                Debug.LogError("[MatchView] Cannot attack: MatchManager is null");
+                return;
+            }
+
+            // Find the AttackManager component
+            var attackManager = GetComponent<AttackManager>();
+            if (attackManager == null)
+            {
+                Debug.LogError("[MatchView] Cannot attack: AttackManager component is missing");
+                return;
+            }
+
+            // Process the attack
+            attackManager.ProcessAttack(attackerCard, defenderCard);
+
+            // Update the UI to reflect any changes
+            UpdateUI();
         }
     }
 }

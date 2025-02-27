@@ -977,6 +977,7 @@ GameObject:
   - component: {fileID: 531703578}
   - component: {fileID: 531703577}
   - component: {fileID: 531703581}
+  - component: {fileID: 531703582}
   m_Layer: 5
   m_Name: Canvas
   m_TagString: Untagged
@@ -1107,6 +1108,20 @@ MonoBehaviour:
   handCurveHeight: 0.5
   cardSpacing: 1.2
   cardDetailView: {fileID: 0}
+--- !u!114 &531703582
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 531703576}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c76fabacded2c4864add2f173a23fbde, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  attackAnimationDuration: 0.3
+  damageDisplayDuration: 1
 --- !u!1 &619394800
 GameObject:
   m_ObjectHideFlags: 0
