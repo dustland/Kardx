@@ -14,6 +14,7 @@ namespace Kardx.Core
         private Dictionary<string, int> dynamicAttributes = new(); // Computed attributes
         private int currentDefence; // Current defence value
         private string currentAbilityId; // Current applied ability, should be one of the abilities in the card type
+        private Player owner; // Reference to the Player who owns this card
 
         // Public properties
         public Guid InstanceId => instanceId;
@@ -23,6 +24,7 @@ namespace Kardx.Core
         public Faction OwnerFaction => ownerFaction;
         public IReadOnlyList<Modifier> Modifiers => modifiers;
         public IReadOnlyDictionary<string, int> DynamicAttributes => dynamicAttributes;
+        public Player Owner => owner;
 
         // Computed properties
         // When current defence is 0, the card is destroyed
@@ -44,13 +46,14 @@ namespace Kardx.Core
         public string Description => cardType.Description;
 
         // Constructor
-        public Card(CardType cardType, Faction ownerFaction = Faction.Neutral)
+        public Card(CardType cardType, Faction ownerFaction = Faction.Neutral, Player owner = null)
         {
             this.cardType = cardType;
             this.instanceId = Guid.NewGuid();
             this.currentDefence = cardType.BaseDefence;
             this.FaceDown = false; // Default to face up
             this.ownerFaction = ownerFaction;
+            this.owner = owner;
             this.currentAbilityId =
                 cardType.Abilities.Count > 0 ? cardType.Abilities[0].Id : string.Empty;
         }
@@ -59,6 +62,12 @@ namespace Kardx.Core
         public void SetFaceDown(bool isFaceDown)
         {
             FaceDown = isFaceDown;
+        }
+
+        // Set the owner of the card
+        public void SetOwner(Player player)
+        {
+            this.owner = player;
         }
 
         // Modifier management

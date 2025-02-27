@@ -304,10 +304,6 @@ namespace Kardx.Core
             return true;
         }
 
-        /// <summary>
-        /// Subscribes to the strategy planner events to handle opponent actions.
-        /// This ensures that UI events are triggered for opponent actions.
-        /// </summary>
         private void SubscribeToStrategyPlannerEvents(StrategyPlanner planner)
         {
             if (planner == null)
@@ -322,6 +318,19 @@ namespace Kardx.Core
                 // Handle other decision types if needed
                 // For example, card discards, attacks, etc.
             };
+        }
+
+        /// <summary>
+        /// Gets the opponent of the specified player.
+        /// </summary>
+        /// <param name="player">The player to find the opponent for.</param>
+        /// <returns>The opponent player, or null if the input is null.</returns>
+        public Player GetOpponentPlayer(Player player)
+        {
+            if (player == null)
+                return null;
+
+            return player == Player ? Opponent : Player;
         }
     }
 }

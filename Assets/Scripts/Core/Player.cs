@@ -61,6 +61,7 @@ namespace Kardx.Core
             // Initialize deck with initial cards
             foreach (var card in initialDeck)
             {
+                card.SetOwner(this); // Set the owner of the card
                 deck.Push(card);
             }
         }
@@ -130,6 +131,7 @@ namespace Kardx.Core
 
             var card = deck.Pop();
             card.SetFaceDown(faceDown);
+            card.SetOwner(this); // Set the owner of the card
             hand.Add(card);
             logger?.Log($"[{playerId}] Drew card: {card.Title}");
             return card;
@@ -204,6 +206,7 @@ namespace Kardx.Core
             // Move card from hand to battlefield and make it face up
             hand.Remove(card);
             card.SetFaceDown(false); // Card becomes visible when deployed
+            card.SetOwner(this); // Set the owner of the card
             battlefield[position] = card;
 
             logger?.Log($"[{playerId}] Deployed card {card.Title} to battlefield slot {position}");
@@ -279,6 +282,15 @@ namespace Kardx.Core
 
             credits = Math.Min(credits + amount, MAX_CREDITS);
             logger?.Log($"[{playerId}] Added {amount} credits. Current: {credits}");
+        }
+
+        /// <summary>
+        /// Gets all cards currently in play for this player (on the battlefield).
+        /// </summary>
+        /// <returns>A list of cards currently in play, excluding null slots.</returns>
+        public List<Card> GetCardsInPlay()
+        {
+            return battlefield.Where(card => card != null).ToList();
         }
     }
 }
