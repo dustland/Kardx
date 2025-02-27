@@ -172,9 +172,6 @@ namespace Kardx.UI.Scenes
 
         private void Start()
         {
-            // Initialize the AttackManager
-            InitializeAttackManager();
-
             // Set up the match
             SetupMatch();
         }
@@ -188,12 +185,22 @@ namespace Kardx.UI.Scenes
                 attackManager = gameObject.AddComponent<AttackManager>();
                 Debug.Log("[MatchView] Added AttackManager component");
             }
+
+            // Set the MatchManager in the AttackManager when it's available
+            if (matchManager != null)
+            {
+                attackManager.SetMatchManager(matchManager);
+                Debug.Log("[MatchView] Set MatchManager in AttackManager");
+            }
         }
 
         private void SetupMatch()
         {
             // Create MatchManager instance
             matchManager = new MatchManager(new SimpleLogger("[MatchManager]"));
+
+            // Initialize the AttackManager
+            InitializeAttackManager();
 
             // Subscribe to MatchManager events
             matchManager.OnCardDeployed += HandleCardDeployed;
