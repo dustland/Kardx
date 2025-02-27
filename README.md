@@ -12,7 +12,9 @@ The design of the game is based on the following principles:
 
 This project is explained in the following documents:
 
+- [Overall Architecture](./Design/Arch.md)
 - [Data Design](./Design/Data.md)
+- [Ability System Design](./Design/Ability.md)
 
 ## Development
 
