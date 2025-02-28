@@ -42,7 +42,7 @@
   {
     "id": "550e8400-e29b-41d4-a716-446655440002",
     "title": "Tank Division",
-    "description": "A heavily armored unit with high attack and defense.",
+    "description": "A heavily armored unit with high attack and defence.",
     "category": "Unit",
     "subtype": "Armor",
     "deploymentCost": 5,
@@ -57,7 +57,11 @@
       "health": 8,
       "speed": 2
     },
-    "abilities": ["550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440005", "550e8400-e29b-41d4-a716-446655440008"]
+    "abilities": [
+      "550e8400-e29b-41d4-a716-446655440000",
+      "550e8400-e29b-41d4-a716-446655440005",
+      "550e8400-e29b-41d4-a716-446655440008"
+    ]
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440003",

@@ -7,7 +7,7 @@ alwaysApply: false
 
 ## Project Context
 
-This project is a Unity-based 3D tower defense game utilizing C# for scripting. The game incorporates a unique control scheme using the Nintendo Ring-Con accessory. Players place turrets and then engage in physical activities to charge up those turrets.
+This project is a Unity-based 3D tower defence game utilizing C# for scripting. The game incorporates a unique control scheme using the Nintendo Ring-Con accessory. Players place turrets and then engage in physical activities to charge up those turrets.
 
 ## Coding Standards
 

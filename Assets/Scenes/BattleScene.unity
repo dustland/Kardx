@@ -570,7 +570,7 @@ MonoBehaviour:
   m_ChildForceExpandWidth: 0
   m_ChildForceExpandHeight: 1
   m_ChildControlWidth: 0
-  m_ChildControlHeight: 1
+  m_ChildControlHeight: 0
   m_ChildScaleWidth: 0
   m_ChildScaleHeight: 0
   m_ReverseArrangement: 0
@@ -922,7 +922,7 @@ MonoBehaviour:
   m_ChildForceExpandWidth: 0
   m_ChildForceExpandHeight: 1
   m_ChildControlWidth: 0
-  m_ChildControlHeight: 1
+  m_ChildControlHeight: 0
   m_ChildScaleWidth: 0
   m_ChildScaleHeight: 0
   m_ReverseArrangement: 0
@@ -1100,14 +1100,13 @@ MonoBehaviour:
   opponentDiscardArea: {fileID: 0}
   headquarter: {fileID: 908022905}
   opponentHeadquarter: {fileID: 330137339}
-  cardSlotPrefab: {fileID: 4490461323352344462, guid: d16f424aaa8a343acaeb2d1f272550ab, type: 3}
+  playerCardSlotPrefab: {fileID: 4490461323352344462, guid: ae03838d3f7f045848db334e89b85ee2, type: 3}
+  opponentCardSlotPrefab: {fileID: 4490461323352344462, guid: f6cb0f6ad832d45d5865a4efc9c7b829, type: 3}
   cardPrefab: {fileID: 2520979994167464494, guid: 70d878790cddb4adfa555fe0cc32137d, type: 3}
   turnText: {fileID: 1278659094}
   creditsText: {fileID: 1505250935}
   opponentCreditsText: {fileID: 143837734}
-  handCurveHeight: 0.5
-  cardSpacing: 1.2
-  cardDetailView: {fileID: 0}
+  cardDetailView: {fileID: 1179852294}
 --- !u!114 &531703582
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1242,8 +1241,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 351, y: -49.62331}
-  m_SizeDelta: {x: 66.994, y: 33.5336}
+  m_AnchoredPosition: {x: 344.77, y: -50.522606}
+  m_SizeDelta: {x: 79.462, y: 31.7349}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &649907287
 MonoBehaviour:
@@ -1759,6 +1758,17 @@ MonoBehaviour:
   m_ChildScaleWidth: 0
   m_ChildScaleHeight: 0
   m_ReverseArrangement: 0
+--- !u!114 &1179852294 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 4302176922871980540, guid: 618d06de69e214ceea2075debe4c55c6, type: 3}
+  m_PrefabInstance: {fileID: 416265044}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0775f91310aa34c35a386fea6b3b4f80, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &1278659092
 GameObject:
   m_ObjectHideFlags: 0

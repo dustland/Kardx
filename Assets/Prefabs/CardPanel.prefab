@@ -34,7 +34,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -41.126, y: -52}
+  m_AnchoredPosition: {x: -61.47, y: -52}
   m_SizeDelta: {x: 33.3485, y: 37.0667}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &581541824094674444
@@ -364,8 +364,8 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 16
-  m_fontSizeBase: 16
+  m_fontSize: 12
+  m_fontSizeBase: 12
   m_fontWeight: 400
   m_enableAutoSizing: 0
   m_fontSizeMin: 18
@@ -508,7 +508,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   backgroundImage: {fileID: 0}
-  contentRoot: {fileID: 0}
   artworkImage: {fileID: 1896003884705756953}
   nameText: {fileID: 121241409076812652}
   descriptionText: {fileID: 6251684222740182078}
@@ -518,6 +517,7 @@ MonoBehaviour:
   defenceText: {fileID: 7084003578576755478}
   abilityText: {fileID: 2141038047567318173}
   abilityDescriptionText: {fileID: 8513557567576385631}
+  cardBackOverlay: {fileID: 0}
   highlightEffect: {fileID: 0}
 --- !u!1 &1195949620471029252
 GameObject:
@@ -628,8 +628,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -34.753, y: 103.68}
-  m_SizeDelta: {x: 20.603, y: 34.5183}
+  m_AnchoredPosition: {x: -34.753, y: 105.72}
+  m_SizeDelta: {x: 20.603, y: 30.433}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &7390979387469976792
 CanvasRenderer:
@@ -686,8 +686,8 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 24
-  m_fontSizeBase: 24
+  m_fontSize: 9
+  m_fontSizeBase: 9
   m_fontWeight: 400
   m_enableAutoSizing: 0
   m_fontSizeMin: 18
@@ -764,7 +764,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 39.931, y: -51.231}
+  m_AnchoredPosition: {x: 62.706, y: -52}
   m_SizeDelta: {x: 33.3485, y: 35.5284}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &862380358062684274
@@ -958,8 +958,8 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 36
-  m_fontSizeBase: 36
+  m_fontSize: 24
+  m_fontSizeBase: 24
   m_fontWeight: 400
   m_enableAutoSizing: 0
   m_fontSizeMin: 18
@@ -1207,8 +1207,8 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 20
-  m_fontSizeBase: 20
+  m_fontSize: 12
+  m_fontSizeBase: 12
   m_fontWeight: 400
   m_enableAutoSizing: 0
   m_fontSizeMin: 18
@@ -1493,8 +1493,8 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 16
-  m_fontSizeBase: 16
+  m_fontSize: 8
+  m_fontSizeBase: 8
   m_fontWeight: 400
   m_enableAutoSizing: 0
   m_fontSizeMin: 18
@@ -1571,8 +1571,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 1.4109, y: 20.027}
-  m_SizeDelta: {x: 159.11, y: 130.5006}
+  m_AnchoredPosition: {x: 1.4109, y: 16.904991}
+  m_SizeDelta: {x: 159.11, y: 124.2566}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &1161798677481968745
 CanvasRenderer:

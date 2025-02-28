@@ -37,10 +37,10 @@ namespace Kardx.Core
         public int CurrentDefence
         {
             get => currentDefence;
-            private set => currentDefence = Math.Max(0, Math.Min(value, Defense));
+            private set => currentDefence = Math.Max(0, Math.Min(value, Defence));
         }
 
-        public int Defense => cardType.BaseDefence + GetAttributeModifier("defense");
+        public int Defence => cardType.BaseDefence + GetAttributeModifier("defence");
         public int Attack => cardType.BaseAttack + GetAttributeModifier("attack");
         public int CounterAttack =>
             cardType.BaseCounterAttack + GetAttributeModifier("counterAttack");

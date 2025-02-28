@@ -26,7 +26,7 @@ namespace Kardx.Core
 
         // Stats
         [JsonProperty("baseDefence")]
-        private int baseDefence; // Base defense of the card
+        private int baseDefence; // Base defence of the card
         [JsonProperty("baseAttack")]
         private int baseAttack; // Attack power of the card
         [JsonProperty("baseCounterAttack")]

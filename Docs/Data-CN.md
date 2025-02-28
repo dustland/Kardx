@@ -51,7 +51,7 @@ public class Card
     private int currentDefence;
     private string currentAbilityId;
 
-    public int Defense => cardType.BaseDefence + GetAttributeModifier("defense");
+    public int Defence => cardType.BaseDefence + GetAttributeModifier("defence");
     public int Attack => cardType.BaseAttack + GetAttributeModifier("attack");
     public int DeploymentCost => cardType.DeploymentCost;
 }
@@ -308,7 +308,7 @@ public class MatchManager
   "rarity": "Standard",
   "stats": {
     "attack": 2,
-    "defense": 3,
+    "defence": 3,
     "deploymentCost": 2
   },
   "abilities": [
@@ -364,7 +364,7 @@ public class MatchManager
       "rarity": "Standard",
       "stats": {
         "attack": 2,
-        "defense": 3,
+        "defence": 3,
         "deploymentCost": 2
       },
       "abilities": [

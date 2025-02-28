@@ -63,9 +63,6 @@ namespace Kardx.UI.Scenes
         [SerializeField]
         private TextMeshProUGUI opponentCreditsText;
 
-        [Header("Layout Settings")]
-        // Removed cardSpacing as it's no longer needed - layout groups handle spacing
-
         // Non-serialized fields
         private Dictionary<Card, GameObject> cardUIElements = new();
         private Transform[] battlefieldSlots = new Transform[Player.BATTLEFIELD_SLOT_COUNT];
@@ -78,33 +75,6 @@ namespace Kardx.UI.Scenes
 
         private void Awake()
         {
-            // First try to use the serialized reference
-            if (cardDetailView == null)
-            {
-                // Try to find CardPanel in the scene
-                var cardPanel = GameObject.Find("CardPanel");
-                if (cardPanel != null)
-                {
-                    cardDetailView = cardPanel.GetComponent<CardDetailView>();
-                    Debug.Log("[MatchView] Found CardDetailView on CardPanel");
-                }
-
-                // If still not found, try finding it anywhere in the scene
-                if (cardDetailView == null)
-                {
-                    cardDetailView = FindObjectOfType<CardDetailView>(true);
-                    if (cardDetailView == null)
-                    {
-                        Debug.LogError(
-                            "[MatchView] CardDetailView not found in scene. Please ensure CardPanel has CardDetailView component."
-                        );
-                        return;
-                    }
-                }
-            }
-
-            Debug.Log($"[MatchView] Found CardDetailView on: {cardDetailView.gameObject.name}");
-
             // Ensure the CardPanel is initially active so it can run coroutines
             // but immediately hide it
             if (!cardDetailView.gameObject.activeSelf)
@@ -510,10 +480,8 @@ namespace Kardx.UI.Scenes
                 var cardView = cardGO.GetComponent<CardView>();
                 if (cardView != null)
                 {
-                    cardView.SetDraggable(!isOpponent);
+                    cardView.UpdateUI();
                 }
-
-                // No need to manually position - the layout group will handle it
             }
 
             // Update credits display
@@ -769,17 +737,18 @@ namespace Kardx.UI.Scenes
                     // Check if there's already a CardView in this slot
                     bool hasCardView = false;
                     Transform slotTransform = slots[i];
+                    CardView cardView = null;
                     for (int j = 0; j < slotTransform.childCount; j++)
                     {
-                        if (slotTransform.GetChild(j).GetComponent<CardView>() != null)
+                        cardView = slotTransform.GetChild(j).GetComponent<CardView>();
+                        if (cardView != null)
                         {
-                            hasCardView = true;
                             break;
                         }
                     }
 
                     // If there's no UI element for this card, create one
-                    if (!hasCardView)
+                    if (cardView == null)
                     {
                         // Create UI based on the current state of the card
                         var cardGO = CreateCardUI(
@@ -789,14 +758,18 @@ namespace Kardx.UI.Scenes
                         );
                         if (cardGO != null)
                         {
-                            var cardView = cardGO.GetComponent<CardView>();
+                            cardView = cardGO.GetComponent<CardView>();
                             if (cardView != null)
                             {
                                 cardView.transform.localPosition = Vector3.zero;
                                 cardView.transform.localScale = Vector3.one;
-                                cardView.SetDraggable(true); // Enable dragging for battlefield cards to allow abilities
                             }
                         }
+                    }
+                    else
+                    {
+                        // Update the UI to reflect the current state of the card
+                        cardView.UpdateUI();
                     }
                 }
                 // If there's no card in the data model but there's a UI element, remove it
@@ -825,7 +798,7 @@ namespace Kardx.UI.Scenes
                     var cardView = cardGO.GetComponent<CardView>();
                     if (cardView != null)
                     {
-                        cardView.SetDraggable(!isOpponent);
+                        cardView.UpdateUI();
                     }
                 }
                 else
@@ -840,8 +813,7 @@ namespace Kardx.UI.Scenes
                     var cardView = cardGO.GetComponent<CardView>();
                     if (cardView != null)
                     {
-                        cardView.SetFaceDown(card.FaceDown);
-                        cardView.SetDraggable(!isOpponent);
+                        cardView.UpdateUI();
                     }
                 }
 
@@ -851,102 +823,22 @@ namespace Kardx.UI.Scenes
 
         private GameObject CreateCardUI(Card card, Transform parent, bool faceDown)
         {
-            Debug.Log(
-                $"[MatchView] Creating card UI: {card.Title}, FaceDown: {faceDown}, Owner: {card.Owner.Id}"
-            );
             if (cardPrefab == null)
             {
                 Debug.LogError("[MatchView] Card prefab is null");
                 return null;
             }
 
-            var cardGO = Instantiate(cardPrefab, parent);
-            Debug.Log($"[MatchView] Created card UI: {cardGO.name}, Parent: {parent.name}");
-
-            var cardView = cardGO.GetComponent<CardView>();
-            if (cardView == null)
+            // Use the CardView's static factory method
+            var cardView = CardView.CreateCard(card, parent, faceDown, cardPrefab);
+            if (cardView != null)
             {
-                Debug.LogError($"[MatchView] CardView component missing on prefab: {cardGO.name}");
-                return cardGO;
+                // Store the card in our dictionary for later reference
+                cardUIElements[card] = cardView.gameObject;
+                return cardView.gameObject;
             }
 
-            // Initialize card data first, before any other setup
-            Debug.Log($"[MatchView] Initializing card data for {card.Title}");
-            cardView.Initialize(card);
-
-            // Ensure the UI reflects the current state of the card
-            // Note: faceDown parameter is used only for the UI, not to modify the card's state
-            Debug.Log($"[MatchView] Setting face down state to {faceDown} for {card.Title}");
-            cardView.SetFaceDown(faceDown);
-
-            // Ensure the card has required UI components
-            var rectTransform = cardGO.GetComponent<RectTransform>();
-            if (rectTransform == null)
-            {
-                Debug.LogError($"[MatchView] RectTransform missing on card: {cardGO.name}");
-                rectTransform = cardGO.AddComponent<RectTransform>();
-            }
-
-            var image = cardGO.GetComponent<Image>();
-            if (image == null)
-            {
-                Debug.LogError($"[MatchView] Image component missing on card: {cardGO.name}");
-                image = cardGO.AddComponent<Image>();
-            }
-            image.raycastTarget = true;
-            Debug.Log($"[MatchView] Set raycastTarget to true for {card.Title}");
-
-            // Set up the appropriate drag handler based on where the card is
-            bool isInHand = parent == handArea;
-            bool isOnBattlefield = parent == battlefieldArea || parent.IsChildOf(battlefieldArea);
-
-            // For cards in hand, add DeployDragHandler if it doesn't exist
-            if (isInHand)
-            {
-                var deployDragHandler = cardGO.GetComponent<DeployDragHandler>();
-                if (deployDragHandler == null)
-                {
-                    deployDragHandler = cardGO.AddComponent<DeployDragHandler>();
-                    Debug.Log($"[MatchView] Added DeployDragHandler to {card.Title}");
-                }
-                deployDragHandler.enabled = true;
-
-                // Disable AbilityDragHandler for hand cards
-                var abilityDragHandler = cardGO.GetComponent<AbilityDragHandler>();
-                if (abilityDragHandler != null)
-                {
-                    abilityDragHandler.enabled = false;
-                }
-            }
-            // For cards on battlefield, add AbilityDragHandler if it doesn't exist
-            else if (isOnBattlefield)
-            {
-                var abilityDragHandler = cardGO.GetComponent<AbilityDragHandler>();
-                if (abilityDragHandler == null)
-                {
-                    abilityDragHandler = cardGO.AddComponent<AbilityDragHandler>();
-                    Debug.Log($"[MatchView] Added AbilityDragHandler to {card.Title}");
-                }
-                abilityDragHandler.enabled = true;
-
-                // Disable DeployDragHandler for battlefield cards
-                var deployDragHandler = cardGO.GetComponent<DeployDragHandler>();
-                if (deployDragHandler != null)
-                {
-                    deployDragHandler.enabled = false;
-                }
-            }
-
-            // Set draggable state after initialization - this will be handled by the CardView
-            // based on the parent and the card's state
-            cardView.SetDraggable(true);
-            Debug.Log($"[MatchView] Card UI creation complete for {card.Title}");
-
-            // Note: We don't need to manually set the card back sprite here
-            // The CardView component already handles face-down cards with its own cardBackOverlay
-
-            cardUIElements[card] = cardGO;
-            return cardGO;
+            return null;
         }
 
         private void UpdateCreditsDisplay()
