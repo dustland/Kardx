@@ -36,6 +36,9 @@ namespace Kardx.UI.Components
         private TextMeshProUGUI descriptionText;
 
         [SerializeField]
+        private TextMeshProUGUI categoryText;
+
+        [SerializeField]
         private TextMeshProUGUI deploymentCostText;
 
         [SerializeField]
@@ -224,12 +227,17 @@ namespace Kardx.UI.Components
                 var defence = card != null ? card.CurrentDefence : cardType?.BaseDefence ?? 0;
                 var imageUrl = card != null ? card.ImageUrl : cardType?.ImageUrl;
                 var abilities = card != null ? card.CardType?.Abilities : cardType?.Abilities;
+                var categoryMark = card != null ? card.CardType?.Category : cardType?.Category;
+                var categoryString = categoryMark.HasValue ? categoryMark.ToString() : string.Empty;
+                categoryString = !string.IsNullOrEmpty(categoryString) ? categoryString[0].ToString() : string.Empty;
 
                 // Update UI elements safely
                 if (nameText != null)
                     nameText.text = name;
                 if (descriptionText != null)
                     descriptionText.text = description;
+                if (categoryText != null)
+                    categoryText.text = categoryString;
                 if (deploymentCostText != null)
                     deploymentCostText.text = deploymentCost.ToString();
                 if (operationCostText != null)

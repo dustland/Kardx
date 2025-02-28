@@ -202,5 +202,24 @@
       "speed": 1
     },
     "abilities": ["550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440005", "550e8400-e29b-41d4-a716-446655440008"]
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440010",
+    "title": "Strategic Bombardment",
+    "description": "Call in an air strike to deal damage to all enemy units on the battlefield.",
+    "category": "Order",
+    "subtype": "Tactical",
+    "deploymentCost": 4,
+    "operationCost": 0,
+    "baseDefence": 0,
+    "baseAttack": 0,
+    "baseCounterAttack": 0,
+    "rarity": "Limited",
+    "setId": "base_set",
+    "imageUrl": "T_blitzkreig_improved1.png",
+    "attributes": {
+      "area_damage": 2
+    },
+    "abilities": ["550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440006"]
   }
 ]
