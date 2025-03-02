@@ -16,7 +16,7 @@ namespace Kardx.UI.Components
         private float dragOffset = 0.5f;
 
         private CardView cardView;
-        private MatchView matchView;
+        private MatchManager matchManager;
         private Vector3 originalPosition;
         private Transform originalParent;
         private CanvasGroup canvasGroup;
@@ -32,7 +32,12 @@ namespace Kardx.UI.Components
                 canvasGroup = gameObject.AddComponent<CanvasGroup>();
             }
             
-            matchView = GetComponentInParent<MatchView>();
+            // Get the MatchManager through the containing hierarchy
+            var matchView = GetComponentInParent<MatchView>();
+            if (matchView != null)
+            {
+                matchManager = matchView.MatchManager;
+            }
         }
 
         public void OnBeginDrag(PointerEventData eventData)
@@ -50,7 +55,8 @@ namespace Kardx.UI.Components
             // Move to front of UI
             transform.SetParent(transform.root);
             
-            // Highlight valid drop targets
+            // Highlight valid drop targets through MatchView
+            var matchView = GetComponentInParent<MatchView>();
             if (matchView != null)
             {
                 matchView.HighlightValidUnitDropSlots(cardView.Card);
@@ -76,28 +82,75 @@ namespace Kardx.UI.Components
             // Re-enable raycast blocking
             canvasGroup.blocksRaycasts = true;
             
-            // If not dropped on a valid target, return to original position
-            transform.SetParent(originalParent);
-            transform.position = originalPosition;
+            // Check if it was dropped on a valid target
+            bool wasDroppedOnTarget = false;
+            PlayerCardSlot targetSlot = null;
             
-            // Clear highlights
-            if (matchView != null)
+            if (eventData.pointerEnter != null)
             {
-                matchView.ClearAllHighlights();
+                targetSlot = eventData.pointerEnter.GetComponent<PlayerCardSlot>();
+                wasDroppedOnTarget = targetSlot != null;
+            }
+            
+            if (wasDroppedOnTarget && targetSlot != null)
+            {
+                // Get the card
+                Card card = cardView.Card;
+                
+                if (matchManager != null)
+                {
+                    // Try to deploy the card directly in the game state
+                    bool deploySuccess = matchManager.DeployUnitCard(card, targetSlot.SlotIndex);
+                    
+                    // If deployment was successful, the card is removed from hand and will be created 
+                    // in the battlefield by UpdateUI, so we can destroy this instance
+                    if (deploySuccess)
+                    {
+                        Destroy(this.gameObject);
+                    }
+                    else
+                    {
+                        // If deployment failed, return to original position
+                        transform.SetParent(originalParent);
+                        transform.position = originalPosition;
+                    }
+                }
+            }
+            else
+            {
+                // If not dropped on a valid target, return to original position
+                transform.SetParent(originalParent);
+                transform.position = originalPosition;
+            }
+            
+            // Get the parent battlefield view to clear highlights if possible
+            // Otherwise we'll try to find a MatchView to do it
+            var playerBattlefieldView = GetComponentInParent<PlayerBattlefieldView>();
+            if (playerBattlefieldView != null)
+            {
+                playerBattlefieldView.ClearHighlights();
+            }
+            else
+            {
+                var matchView = GetComponentInParent<MatchView>();
+                if (matchView != null)
+                {
+                    matchView.ClearAllHighlights();
+                }
             }
         }
 
         private bool CanDrag()
         {
-            if (cardView == null || cardView.Card == null || matchView == null)
+            if (cardView == null || cardView.Card == null || matchManager == null)
                 return false;
                 
             var card = cardView.Card;
             
             // Only unit cards in player's hand can be dragged during player's turn
             return card.IsUnitCard && 
-                   matchView.IsPlayerTurn() && 
-                   matchView.GetCurrentPlayer().Hand.Contains(card);
+                   matchManager.IsPlayerTurn() && 
+                   matchManager.CurrentPlayer.Hand.Contains(card);
         }
     }
 }

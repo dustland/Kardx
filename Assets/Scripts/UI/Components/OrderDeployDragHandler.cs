@@ -16,7 +16,7 @@ namespace Kardx.UI.Components
         private float dragOffset = 0.5f;
 
         private CardView cardView;
-        private MatchView matchView;
+        private MatchManager matchManager;
         private Vector3 originalPosition;
         private Transform originalParent;
         private CanvasGroup canvasGroup;
@@ -32,7 +32,12 @@ namespace Kardx.UI.Components
                 canvasGroup = gameObject.AddComponent<CanvasGroup>();
             }
             
-            matchView = GetComponentInParent<MatchView>();
+            // Get the MatchManager through the containing hierarchy
+            var matchView = GetComponentInParent<MatchView>();
+            if (matchView != null)
+            {
+                matchManager = matchView.MatchManager;
+            }
         }
 
         public void OnBeginDrag(PointerEventData eventData)
@@ -73,8 +78,26 @@ namespace Kardx.UI.Components
             // Check if the card can be played
             if (CanPlayOrderCard())
             {
-                // Play the order card
-                matchView.DeployOrderCard(cardView.Card);
+                // Get the card
+                Card card = cardView.Card;
+                
+                if (matchManager != null)
+                {
+                    // Play the order card directly through the match manager
+                    bool deploySuccess = matchManager.DeployOrderCard(card);
+                    
+                    // If deployment was successful, the card is removed from hand and we should destroy this instance
+                    if (deploySuccess)
+                    {
+                        Destroy(this.gameObject);
+                    }
+                    else
+                    {
+                        // Return to original position
+                        transform.SetParent(originalParent);
+                        transform.position = originalPosition;
+                    }
+                }
             }
             else
             {
@@ -83,32 +106,47 @@ namespace Kardx.UI.Components
                 transform.position = originalPosition;
             }
             
-            // Clear highlights
-            if (matchView != null)
+            // Get the parent battlefield view to clear highlights if possible
+            // Otherwise we'll try to find a MatchView to do it
+            var playerBattlefieldView = GetComponentInParent<PlayerBattlefieldView>();
+            if (playerBattlefieldView != null)
             {
-                matchView.ClearAllHighlights();
+                playerBattlefieldView.ClearHighlights();
+            }
+            else
+            {
+                var matchView = GetComponentInParent<MatchView>();
+                if (matchView != null)
+                {
+                    matchView.ClearAllHighlights();
+                }
             }
         }
 
         private bool CanPlayOrderCard()
         {
-            if (cardView == null || cardView.Card == null || matchView == null)
-                return false;
-                
-            return matchView.CanDeployOrderCard(cardView.Card);
-        }
-
-        private bool CanDrag()
-        {
-            if (cardView == null || cardView.Card == null || matchView == null)
+            if (cardView == null || cardView.Card == null || matchManager == null)
                 return false;
                 
             var card = cardView.Card;
             
             // Only order cards in player's hand can be dragged during player's turn
             return card.IsOrderCard && 
-                   matchView.IsPlayerTurn() && 
-                   matchView.GetCurrentPlayer().Hand.Contains(card);
+                   matchManager.IsPlayerTurn() && 
+                   matchManager.CurrentPlayer.Hand.Contains(card);
+        }
+
+        private bool CanDrag()
+        {
+            if (cardView == null || cardView.Card == null || matchManager == null)
+                return false;
+                
+            var card = cardView.Card;
+            
+            // Only order cards in player's hand can be dragged during player's turn
+            return card.IsOrderCard && 
+                   matchManager.IsPlayerTurn() && 
+                   matchManager.CurrentPlayer.Hand.Contains(card);
         }
     }
 }

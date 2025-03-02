@@ -15,13 +15,28 @@ namespace Kardx.UI.Components
         
         [SerializeField]
         private Color targetHighlightColor = new Color(1.0f, 1.0f, 0.0f, 0.3f);
-        
-        private MatchView matchView;
-        
-        public void Initialize(MatchView matchView, GameObject cardSlotPrefab)
+
+        private Player opponent;
+        private bool isHighlightingCards = false;
+        private Color validTargetHighlightColor = new Color(1.0f, 1.0f, 0.0f, 0.3f);
+
+        public override void Initialize(MatchManager matchManager)
         {
-            this.matchView = matchView;
+            base.Initialize(matchManager);
             
+            // Ensure matchManager is not null before accessing Opponent
+            if (matchManager != null)
+            {
+                this.opponent = matchManager.Opponent;
+            }
+            else
+            {
+                Debug.LogError("OpponentBattlefieldView: Cannot initialize with null MatchManager");
+            }
+        }
+
+        public void InitializeSlots(GameObject cardSlotPrefab)
+        {
             // Clear existing slots
             foreach (Transform child in transform)
             {
@@ -52,7 +67,44 @@ namespace Kardx.UI.Components
             for (int i = 0; i < cardSlots.Count && i < Player.BATTLEFIELD_SLOT_COUNT; i++)
             {
                 var card = battlefield.GetCardAt(i);
-                cardSlots[i].UpdateCardDisplay(card);
+                UpdateCardInSlot(i, card);
+            }
+        }
+
+        // Method to update a specific card slot with a card
+        public void UpdateCardInSlot(int slotIndex, Card card)
+        {
+            if (slotIndex < 0 || slotIndex >= cardSlots.Count)
+                return;
+
+            var cardSlot = cardSlots[slotIndex];
+
+            // This method should only update visual properties of the slot
+            // based on the card's presence or absence
+
+            // Note: Actual card creation/destruction should be handled by MatchView
+            // The BattlefieldView should not create or destroy card GameObjects directly
+
+            if (card == null)
+            {
+                // No card in this slot, make sure it's not highlighted
+                cardSlot.ClearHighlight();
+            }
+            else
+            {
+                // Card is present, update visual state as needed
+                // but don't create/destroy the card GameObject
+
+                // We might still need to highlight based on state
+                // For example, if this card is targetable by an ability
+                if (isHighlightingCards)
+                {
+                    cardSlot.SetHighlight(validTargetHighlightColor, true);
+                }
+                else
+                {
+                    cardSlot.ClearHighlight();
+                }
             }
         }
         
@@ -89,8 +141,7 @@ namespace Kardx.UI.Components
             // Clear any highlights if present
             foreach (var slot in cardSlots)
             {
-                // If there's highlight functionality in the opponent slots in the future
-                // Add code to clear them here
+                slot.ClearHighlight();
             }
         }
         
@@ -102,10 +153,10 @@ namespace Kardx.UI.Components
             }
             return null;
         }
-        
-        public MatchView GetMatchView()
+
+        public Player GetOpponent()
         {
-            return matchView;
+            return opponent;
         }
     }
 }

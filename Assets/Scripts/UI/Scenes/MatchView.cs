@@ -71,8 +71,17 @@ namespace Kardx.UI.Scenes
 
         private List<CardType> cards = new();
 
+        // Public accessor for MatchManager
+        public MatchManager MatchManager => matchManager;
+
         private void Awake()
         {
+            // Create MatchManager instance first
+            matchManager = new MatchManager(new SimpleLogger("[MatchManager]"));
+            
+            // Initialize the match right away - this creates the board and players
+            matchManager.Initialize();
+            
             // Ensure the CardPanel is initially active so it can run coroutines
             // but immediately hide it
             if (!cardDetailView.gameObject.activeSelf)
@@ -86,8 +95,8 @@ namespace Kardx.UI.Scenes
 
             // Make sure the CardPanel is initially inactive
             cardDetailView.gameObject.SetActive(false);
-
-            // Initialize battlefield views
+            
+            // Now we can initialize battlefield views since players exist
             InitializeBattlefieldViews();
         }
 
@@ -108,7 +117,8 @@ namespace Kardx.UI.Scenes
             // Initialize the battlefield views if they exist
             if (playerBattlefieldView != null)
             {
-                playerBattlefieldView.Initialize(this, playerCardSlotPrefab);
+                playerBattlefieldView.Initialize(MatchManager);
+                playerBattlefieldView.InitializeSlots(playerCardSlotPrefab);
             }
             else
             {
@@ -117,7 +127,8 @@ namespace Kardx.UI.Scenes
 
             if (opponentBattlefieldView != null)
             {
-                opponentBattlefieldView.Initialize(this, opponentCardSlotPrefab);
+                opponentBattlefieldView.Initialize(MatchManager);
+                opponentBattlefieldView.InitializeSlots(opponentCardSlotPrefab);
             }
             else
             {
@@ -133,9 +144,9 @@ namespace Kardx.UI.Scenes
 
         private void SetupMatch()
         {
-            // Create MatchManager instance
-            matchManager = new MatchManager(new SimpleLogger("[MatchManager]"));
-
+            // MatchManager is already created and initialized in Awake()
+            // Battlefield views are also already initialized in Awake()
+            
             // Subscribe to MatchManager events
             SetupEventHandlers();
 
@@ -158,22 +169,11 @@ namespace Kardx.UI.Scenes
                     HandleAttackCompleted(attackerCard, targetCard, damageDealt, remainingHealth);
                 matchManager.OnProcessAITurn += (board, planner, callback) => 
                     HandleProcessAITurn(board, planner, callback);
+                matchManager.OnCardDrawn += HandleCardDrawn;
+                matchManager.OnCardDied += HandleCardDied;
+                matchManager.OnMatchStarted += HandleMatchStarted;
+                matchManager.OnMatchEnded += HandleMatchEnded;
             }
-        }
-
-        private void HandleMatchStarted(string message)
-        {
-            Debug.Log($"[MatchView] Match started: {message}");
-
-            // Do a full UI refresh at the start of the match
-            UpdateUI();
-        }
-
-        private void HandleMatchEnded(string message)
-        {
-            Debug.Log($"[MatchView] Match ended: {message}");
-
-            // Handle match end UI updates if needed
         }
 
         private void HandleTurnStarted(Player player)
@@ -215,21 +215,9 @@ namespace Kardx.UI.Scenes
                 opponentCreditsText.text = $"Credits: {opponent.Credits}";
         }
 
-        private void HandleCardDrawn(Card card)
-        {
-            Debug.Log($"[MatchView] Card drawn: {card.Title}");
-            UpdateUI();
-        }
-
         private void HandleCardDeployed(Card card, int slotIndex)
         {
             Debug.Log($"[MatchView] Card deployed: {card.Title} at slot {slotIndex}");
-            UpdateUI();
-        }
-
-        private void HandleCardDied(Card card)
-        {
-            Debug.Log($"[MatchView] Card died: {card.Title}");
             UpdateUI();
         }
 
@@ -253,7 +241,7 @@ namespace Kardx.UI.Scenes
         }
 
         // Method to update the entire UI
-        private void UpdateUI()
+        public void UpdateUI()
         {
             if (matchManager == null)
                 return;
@@ -692,87 +680,54 @@ namespace Kardx.UI.Scenes
             UpdateUI();
         }
 
-        // Method to handle when a card is dropped on a player card slot
-        public void OnPlayerCardSlotDropped(Card card, int slotIndex)
-        {
-            if (card == null)
-                return;
-                
-            Debug.Log($"[MatchView] Card {card.Title} dropped on player slot {slotIndex}");
-            
-            // Check what type of card it is and handle accordingly
-            if (card.IsUnitCard)
-            {
-                // Handle unit card deployment
-                DeployUnitCard(card, slotIndex);
-            }
-            else if (card.IsOrderCard)
-            {
-                // Handle order card deployment
-                DeployOrderCard(card);
-            }
-            
-            // Clear all highlights
-            ClearAllHighlights();
-        }
-        
-        // Method to handle when a card is targeting an opponent card slot
-        public void OnOpponentCardSlotTargeted(Card sourceCard, int targetIndex)
-        {
-            if (sourceCard == null)
-                return;
-                
-            Debug.Log($"[MatchView] Card {sourceCard.Title} targeting opponent slot {targetIndex}");
-            
-            // Get the target card at the specified index
-            var targetCard = GetOpponent()?.Battlefield.GetCardAt(targetIndex);
-            if (targetCard == null)
-            {
-                Debug.Log("[MatchView] No valid target card found");
-                return;
-            }
-            
-            // Check if this is a valid attack
-            if (CanTargetCard(sourceCard, targetCard))
-            {
-                TargetCard(sourceCard, targetCard);
-            }
-            else
-            {
-                Debug.Log($"[MatchView] Cannot target card {targetCard.Title} with {sourceCard.Title}");
-            }
-            
-            // Clear all highlights
-            ClearAllHighlights();
-            
-            // Update UI
-            UpdateUI();
-        }
-        
-        // Method to get a list of valid targets for a source card
-        public List<Card> GetValidTargets(Card sourceCard)
+        private List<Card> GetValidTargets(Card sourceCard, Player targetPlayer)
         {
             List<Card> validTargets = new List<Card>();
-            
-            if (sourceCard == null || !IsPlayerTurn())
+
+            // Check if this card can attack
+            if (sourceCard == null ||
+                !sourceCard.IsUnitCard ||
+                sourceCard.HasAttackedThisTurn)
                 return validTargets;
-                
-            // Get the opponent's battlefield
-            var opponent = GetOpponent();
-            if (opponent == null)
-                return validTargets;
-                
-            // Check each card on the opponent's battlefield
-            for (int i = 0; i < Player.BATTLEFIELD_SLOT_COUNT; i++)
+
+            // Add valid targets from the target player's battlefield
+            for (int i = 0; i < Battlefield.SLOT_COUNT; i++)
             {
-                var targetCard = opponent.Battlefield.GetCardAt(i);
-                if (targetCard != null && CanTargetCard(sourceCard, targetCard))
+                var targetCard = targetPlayer.Battlefield.GetCardAt(i);
+                if (targetCard != null)
                 {
                     validTargets.Add(targetCard);
                 }
             }
-            
+
             return validTargets;
+        }
+
+        private void HandleMatchStarted(string message)
+        {
+            Debug.Log($"[MatchView] Match started: {message}");
+
+            // Do a full UI refresh at the start of the match
+            UpdateUI();
+        }
+
+        private void HandleMatchEnded(string message)
+        {
+            Debug.Log($"[MatchView] Match ended: {message}");
+
+            // Handle match end UI updates if needed
+        }
+
+        private void HandleCardDrawn(Card card)
+        {
+            Debug.Log($"[MatchView] Card drawn: {card.Title}");
+            UpdateUI();
+        }
+
+        private void HandleCardDied(Card card)
+        {
+            Debug.Log($"[MatchView] Card died: {card.Title}");
+            UpdateUI();
         }
     }
 }

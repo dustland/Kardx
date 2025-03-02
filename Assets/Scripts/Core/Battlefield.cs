@@ -116,6 +116,22 @@ namespace Kardx.Core
             
             return card;
         }
+        
+        public int GetSlotIndex(Card card)
+        {
+            if (card == null) return -1;
+            
+            // Find the slot containing this card
+            for (int i = 0; i < SLOT_COUNT; i++)
+            {
+                if (slots[i].Card == card)
+                {
+                    return i;
+                }
+            }
+            
+            return -1; // Card not found
+        }
     }
     
     public class BattlefieldSlot

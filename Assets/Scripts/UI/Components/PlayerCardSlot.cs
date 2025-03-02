@@ -1,178 +1,132 @@
+using System.Collections;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
+using Kardx.Core;
 
 namespace Kardx.UI.Components
 {
-    using Kardx.Core;
-
     /// <summary>
-    /// Specialized card slot for the player's battlefield.
-    /// Handles card deployment and ability targeting.
+    /// UI component representing a slot in the player's battlefield.
     /// </summary>
     public class PlayerCardSlot : MonoBehaviour, IDropHandler
     {
         [SerializeField]
         private Image highlightImage;
-
+        
         [SerializeField]
         private Transform cardContainer;
-
+        
         private int slotIndex;
         private PlayerBattlefieldView battlefieldView;
         private CardView currentCardView;
-
-        private void Awake()
+        private bool isHighlighted = false;
+        
+        public int SlotIndex => slotIndex;
+        public Transform CardContainer => cardContainer ?? transform;
+        
+        public void Initialize(int slotIndex, PlayerBattlefieldView battlefieldView)
         {
-            if (highlightImage == null)
-                CreateHighlight();
-            else
-                ConfigureHighlightImage();
-
-            // Ensure this GameObject can receive drops
-            var graphic = GetComponent<Graphic>();
-            if (graphic == null)
+            this.slotIndex = slotIndex;
+            this.battlefieldView = battlefieldView;
+            
+            // Initialize highlight
+            if (highlightImage != null)
             {
-                var image = gameObject.AddComponent<Image>();
-                image.color = Color.clear;
-                image.raycastTarget = true;
+                highlightImage.enabled = false;
             }
-
+            
+            // Initialize card container if not set
             if (cardContainer == null)
             {
                 cardContainer = transform;
             }
         }
-
-        public void Initialize(int slotIndex, PlayerBattlefieldView battlefieldView)
+        
+        public void SetHighlight(Color color, bool active)
         {
-            this.slotIndex = slotIndex;
-            this.battlefieldView = battlefieldView;
-        }
-
-        private void ConfigureHighlightImage()
-        {
-            // Ensure the highlight image has proper RectTransform settings
-            var rt = highlightImage.rectTransform;
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.sizeDelta = Vector2.zero;
-            rt.localPosition = Vector3.zero;
-            rt.localScale = Vector3.one;
-
-            // Make sure highlight fills the entire slot
-            rt.offsetMin = Vector2.zero;
-            rt.offsetMax = Vector2.zero;
-
-            // Set default properties
-            highlightImage.color = new Color(0f, 1f, 0f, 0.3f); // Green highlight
-            highlightImage.raycastTarget = false;
-            highlightImage.enabled = false; // Start with highlight disabled
-        }
-
-        private void CreateHighlight()
-        {
-            var go = new GameObject("Highlight");
-            highlightImage = go.AddComponent<Image>();
-            highlightImage.transform.SetParent(transform, false);
-            ConfigureHighlightImage();
-        }
-
-        public void OnDrop(PointerEventData eventData)
-        {
-            Debug.Log($"[PlayerCardSlot] OnDrop called at position {slotIndex}");
-
-            // Get the card view from the dragged object
-            var cardView = eventData.pointerDrag?.GetComponent<CardView>();
-            if (cardView == null)
-            {
-                Debug.Log("[PlayerCardSlot] No CardView found on dropped object");
-                return;
-            }
-
-            // Clear highlight
-            ClearHighlight();
-
-            // Ensure the card's CanvasGroup.blocksRaycasts is set to true
-            var canvasGroup = cardView.GetComponent<CanvasGroup>();
-            if (canvasGroup != null)
-            {
-                canvasGroup.blocksRaycasts = true;
-            }
-
-            // Handle drop via MatchView
-            var matchView = battlefieldView.GetMatchView();
-            if (matchView != null)
-            {
-                matchView.OnPlayerCardSlotDropped(cardView.Card, slotIndex);
-            }
+            isHighlighted = active;
             
-            // Clear all highlights
-            matchView.ClearAllHighlights();
-        }
-
-        public void UpdateCardDisplay(Card card)
-        {
-            // Clear existing card view
-            if (currentCardView != null)
-            {
-                Destroy(currentCardView.gameObject);
-                currentCardView = null;
-            }
-
-            if (card != null)
-            {
-                // Create new card view
-                var matchView = battlefieldView.GetMatchView();
-                var cardViewGO = matchView.CreateCardUI(card, cardContainer);
-                currentCardView = cardViewGO.GetComponent<CardView>();
-                
-                // Configure card view for player battlefield
-                currentCardView.SetInteractable(true);
-                
-                // Add ability drag handler for the card view if it has abilities
-                if (card.Abilities.Count > 0)
-                {
-                    var dragHandler = cardViewGO.AddComponent<AbilityDragHandler>();
-                    dragHandler.Initialize(matchView);
-                }
-            }
-        }
-
-        public void SetHighlight(Color color, bool show)
-        {
             if (highlightImage != null)
             {
                 highlightImage.color = color;
-                highlightImage.enabled = show;
+                highlightImage.enabled = active;
             }
         }
-
+        
         public void ClearHighlight()
         {
+            isHighlighted = false;
+            
             if (highlightImage != null)
             {
                 highlightImage.enabled = false;
             }
         }
-
-        public int GetSlotIndex()
+        
+        public void OnDrop(PointerEventData eventData)
         {
-            return slotIndex;
+            if (!isHighlighted)
+            {
+                Debug.Log("[PlayerCardSlot] Card slot is not a valid drop target");
+                return;
+            }
+            
+            // Get the card view from the dragged object
+            var cardView = eventData.pointerDrag.GetComponent<CardView>();
+            if (cardView == null || cardView.Card == null)
+            {
+                Debug.Log("[PlayerCardSlot] Dropped item is not a valid card");
+                return;
+            }
+
+            // Get access to the match manager directly from battlefield view
+            var matchManager = battlefieldView.GetMatchManager();
+            if (matchManager != null)
+            {
+                Card card = cardView.Card;
+                
+                // Call the appropriate game logic method directly on MatchManager
+                bool success = false;
+                
+                if (card.IsUnitCard)
+                {
+                    // For unit cards, deploy to the specific slot
+                    success = matchManager.DeployUnitCard(card, slotIndex);
+                }
+                else if (card.IsOrderCard)
+                {
+                    // For order cards, just deploy 
+                    success = matchManager.DeployOrderCard(card);
+                }
+                
+                // If deployment was successful, we can destroy the dragged card
+                // The UI will be updated through the OnCardDeployed event from MatchManager
+                if (success && eventData.pointerDrag != null)
+                {
+                    Destroy(eventData.pointerDrag);
+                }
+            }
+            
+            // Clear all highlights - we access this through the battlefield view now 
+            battlefieldView.ClearHighlights();
         }
         
-        /// <summary>
-        /// Checks if the card can be deployed to this slot.
-        /// </summary>
-        /// <param name="card">The card to check</param>
-        /// <returns>True if the card can be deployed to this slot</returns>
-        public bool IsValidDropTarget(Card card)
+        // Method to clear the current card view
+        public void ClearCardView()
         {
-            if (card == null || battlefieldView == null || battlefieldView.GetMatchView() == null)
-                return false;
-                
-            // Check if this is a valid deployment
-            return battlefieldView.GetMatchView().CanDeployUnitCard(card, slotIndex);
+            // CardSlot should not be responsible for destroying GameObjects
+            // It should only update its reference, while actual destruction
+            // should be handled by MatchView
+            
+            // Simply clear the reference to the card
+            currentCardView = null;
+        }
+        
+        // Method to set a new card view
+        public void SetCardView(CardView cardView)
+        {
+            currentCardView = cardView;
         }
     }
 }
