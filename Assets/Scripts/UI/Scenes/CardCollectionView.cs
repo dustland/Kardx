@@ -52,7 +52,7 @@ namespace Kardx.UI.Scenes
                 // If still not found, try finding it anywhere in the scene
                 if (cardDetailView == null)
                 {
-                    cardDetailView = FindObjectOfType<CardDetailView>(true);
+                    cardDetailView = FindAnyObjectByType<CardDetailView>(FindObjectsInactive.Include);
                     if (cardDetailView == null)
                     {
                         Debug.LogError(

@@ -19,25 +19,19 @@ namespace Kardx.UI.Scenes
 
         [Header("Layout Areas")]
         [SerializeField]
-        private Transform handArea;
+        private Transform playerHandArea;
 
         [SerializeField]
-        private Transform battlefieldArea; // Area for player's battlefield with HorizontalLayoutGroup
-
-        [SerializeField]
-        private Transform opponentBattlefieldArea; // Area for opponent's battlefield with HorizontalLayoutGroup
+        private Transform playerBattlefieldArea; // Area for player's battlefield with HorizontalLayoutGroup
 
         [SerializeField]
         private Transform opponentHandArea;
 
         [SerializeField]
-        private Transform discardArea;
+        private Transform opponentBattlefieldArea; // Area for opponent's battlefield with HorizontalLayoutGroup
 
         [SerializeField]
-        private Transform opponentDiscardArea;
-
-        [SerializeField]
-        private Transform headquarter;
+        private Transform playerHeadquarter;
 
         [SerializeField]
         private Transform opponentHeadquarter;
@@ -59,16 +53,14 @@ namespace Kardx.UI.Scenes
         private TextMeshProUGUI turnText;
 
         [SerializeField]
-        private TextMeshProUGUI creditsText;
+        private TextMeshProUGUI playerCreditsText;
 
         [SerializeField]
         private TextMeshProUGUI opponentCreditsText;
 
         [Header("Battlefield Views")]
-        [SerializeField]
+        // References to the actual components - set during initialization
         private PlayerBattlefieldView playerBattlefieldView;
-
-        [SerializeField]
         private OpponentBattlefieldView opponentBattlefieldView;
 
         // Non-serialized fields
@@ -101,27 +93,36 @@ namespace Kardx.UI.Scenes
 
         private void InitializeBattlefieldViews()
         {
-            if (playerBattlefieldView == null)
+            // Get the PlayerBattlefieldView component from the player battlefield area
+            if (playerBattlefieldArea != null)
             {
-                playerBattlefieldView = battlefieldArea.GetComponent<PlayerBattlefieldView>();
-                if (playerBattlefieldView == null)
-                {
-                    playerBattlefieldView = battlefieldArea.gameObject.AddComponent<PlayerBattlefieldView>();
-                }
+                playerBattlefieldView = playerBattlefieldArea.GetComponent<PlayerBattlefieldView>();
             }
 
-            if (opponentBattlefieldView == null)
+            // Get the OpponentBattlefieldView component from the opponent battlefield area
+            if (opponentBattlefieldArea != null)
             {
                 opponentBattlefieldView = opponentBattlefieldArea.GetComponent<OpponentBattlefieldView>();
-                if (opponentBattlefieldView == null)
-                {
-                    opponentBattlefieldView = opponentBattlefieldArea.gameObject.AddComponent<OpponentBattlefieldView>();
-                }
             }
 
-            // Initialize the battlefield views
-            playerBattlefieldView.Initialize(this, playerCardSlotPrefab);
-            opponentBattlefieldView.Initialize(this, opponentCardSlotPrefab);
+            // Initialize the battlefield views if they exist
+            if (playerBattlefieldView != null)
+            {
+                playerBattlefieldView.Initialize(this, playerCardSlotPrefab);
+            }
+            else
+            {
+                Debug.LogError("PlayerBattlefieldView component not found on playerBattlefieldArea");
+            }
+
+            if (opponentBattlefieldView != null)
+            {
+                opponentBattlefieldView.Initialize(this, opponentCardSlotPrefab);
+            }
+            else
+            {
+                Debug.LogError("OpponentBattlefieldView component not found on opponentBattlefieldArea");
+            }
         }
 
         private void Start()
@@ -201,14 +202,14 @@ namespace Kardx.UI.Scenes
 
         private void UpdateCreditsDisplay()
         {
-            if (creditsText == null || opponentCreditsText == null || matchManager == null)
+            if (playerCreditsText == null || opponentCreditsText == null || matchManager == null)
                 return;
 
             var player = matchManager.Player;
             var opponent = matchManager.Opponent;
 
             if (player != null)
-                creditsText.text = $"Credits: {player.Credits}";
+                playerCreditsText.text = $"Credits: {player.Credits}";
 
             if (opponent != null)
                 opponentCreditsText.text = $"Credits: {opponent.Credits}";
@@ -223,12 +224,6 @@ namespace Kardx.UI.Scenes
         private void HandleCardDeployed(Card card, int slotIndex)
         {
             Debug.Log($"[MatchView] Card deployed: {card.Title} at slot {slotIndex}");
-            UpdateUI();
-        }
-
-        private void HandleCardDiscarded(Card card)
-        {
-            Debug.Log($"[MatchView] Card discarded: {card.Title}");
             UpdateUI();
         }
 
@@ -264,16 +259,22 @@ namespace Kardx.UI.Scenes
                 return;
 
             // Update player's hand
-            UpdateHand(matchManager.Player, handArea);
+            UpdateHand(matchManager.Player, playerHandArea);
 
             // Update opponent's hand (face down)
             UpdateHand(matchManager.Opponent, opponentHandArea, true);
 
             // Update player's battlefield
-            UpdateBattlefield(matchManager.Player, playerBattlefieldView);
+            if (playerBattlefieldView != null)
+            {
+                UpdateBattlefield(matchManager.Player, playerBattlefieldView);
+            }
 
             // Update opponent's battlefield
-            UpdateBattlefield(matchManager.Opponent, opponentBattlefieldView);
+            if (opponentBattlefieldView != null)
+            {
+                UpdateBattlefield(matchManager.Opponent, opponentBattlefieldView);
+            }
 
             // Update credits display
             UpdateCreditsDisplay();

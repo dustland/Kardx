@@ -26,14 +26,11 @@ namespace Kardx.Core
         private Hand hand;
         private Battlefield battlefield;
         private Deck deck;
-        private DiscardPile discardPile;
-        private Graveyard graveyard;
         private Card headquartersCard;
         private Board board; // Reference to the game board
 
         // Events
         public event Action<Card> OnCardDrawn;
-        public event Action<Card> OnCardDiscarded;
         public event Action<Card, int> OnCardDeployed;
         public event Action<Card> OnCardDestroyed;
 
@@ -73,14 +70,10 @@ namespace Kardx.Core
             hand = new Hand(this);
             battlefield = new Battlefield(this);
             deck = new Deck(this);
-            discardPile = new DiscardPile(this);
-            graveyard = new Graveyard(this);
 
             // Wire up events
             battlefield.OnCardDeployed += (card, slot) => OnCardDeployed?.Invoke(card, slot);
             hand.OnCardAdded += (card, source) => OnCardDrawn?.Invoke(card);
-            discardPile.OnCardAdded += (card, source) => OnCardDiscarded?.Invoke(card);
-            graveyard.OnCardAdded += (card, source) => OnCardDestroyed?.Invoke(card);
 
             // Initialize deck with initial cards
             foreach (var card in initialDeck)
@@ -118,16 +111,6 @@ namespace Kardx.Core
         /// Gets the player's deck of cards.
         /// </summary>
         public Deck Deck => deck;
-
-        /// <summary>
-        /// Gets the player's discard pile of cards.
-        /// </summary>
-        public DiscardPile DiscardPile => discardPile;
-
-        /// <summary>
-        /// Gets the player's graveyard of destroyed cards.
-        /// </summary>
-        public Graveyard Graveyard => graveyard;
 
         /// <summary>
         /// Gets the player's headquarter card.
@@ -189,7 +172,6 @@ namespace Kardx.Core
             }
 
             hand.RemoveCard(card);
-            discardPile.AddCard(card);
             return true;
         }
 
@@ -275,8 +257,6 @@ namespace Kardx.Core
             SpendCredits(card.CardType.Cost);
 
             // Order cards go directly to the discard pile after being played
-            discardPile.AddCard(card);
-
             return true;
         }
 
@@ -297,7 +277,7 @@ namespace Kardx.Core
         }
 
         /// <summary>
-        /// Destroys a card on the battlefield and moves it to the graveyard.
+        /// Destroys a card on the battlefield.
         /// </summary>
         /// <param name="card">The card to destroy.</param>
         /// <returns>True if the card was destroyed, false otherwise.</returns>
@@ -313,12 +293,12 @@ namespace Kardx.Core
             }
 
             battlefield.RemoveCard(card);
-            graveyard.AddCard(card);
+            // Card is destroyed - we're not keeping track of destroyed cards for now
             return true;
         }
 
         /// <summary>
-        /// Removes a card from the battlefield and places it in the discard pile.
+        /// Removes a card from the battlefield.
         /// </summary>
         /// <param name="card">The card to remove.</param>
         /// <returns>True if the card was removed, false otherwise.</returns>
@@ -336,10 +316,8 @@ namespace Kardx.Core
             // Remove from battlefield
             battlefield.RemoveCard(card);
             
-            // Add to discard pile
-            discardPile.AddCard(card);
-            
-            logger?.Log($"[{playerId}] Card {card.Title} removed from battlefield and added to discard pile");
+            // Card is removed - we're not tracking removed cards for now
+            logger?.Log($"[{playerId}] Card {card.Title} removed from battlefield");
             
             return true;
         }

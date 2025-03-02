@@ -783,7 +783,6 @@ GameObject:
   - component: {fileID: 6973958351508920594}
   - component: {fileID: 6612328422775087875}
   - component: {fileID: 6683015296463405651}
-  - component: {fileID: 2521800211753420202}
   m_Layer: 5
   m_Name: Card
   m_TagString: Untagged
@@ -909,18 +908,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   minDragDistance: 10
---- !u!114 &2521800211753420202
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2520979994167464494}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a4d643d4708b340d284aa9c5951e63bf, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!1 &2567085652576297218
 GameObject:
   m_ObjectHideFlags: 0
