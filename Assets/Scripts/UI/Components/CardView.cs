@@ -229,7 +229,9 @@ namespace Kardx.UI.Components
                 var abilities = card != null ? card.CardType?.Abilities : cardType?.Abilities;
                 var categoryMark = card != null ? card.CardType?.Category : cardType?.Category;
                 var categoryString = categoryMark.HasValue ? categoryMark.ToString() : string.Empty;
-                categoryString = !string.IsNullOrEmpty(categoryString) ? categoryString[0].ToString() : string.Empty;
+                categoryString = !string.IsNullOrEmpty(categoryString)
+                    ? categoryString[0].ToString()
+                    : string.Empty;
 
                 // Update UI elements safely
                 if (nameText != null)

@@ -29,6 +29,7 @@ namespace Kardx.Core
         private readonly Queue<Card> discardPile = new();
         private readonly List<Card> graveyard = new(); // Added a new list to hold destroyed cards
         private Card headquartersCard;
+        private Board board; // Reference to the game board
 
         // Events
         public event Action<Card> OnCardDrawn;
@@ -47,23 +48,26 @@ namespace Kardx.Core
             string playerId,
             List<Card> initialDeck,
             Faction faction = Faction.Neutral,
-            ILogger logger = null
+            ILogger logger = null,
+            Board board = null
         )
         {
-            Initialize(playerId, initialDeck, faction, logger);
+            Initialize(playerId, initialDeck, faction, logger, board);
         }
 
         public void Initialize(
             string playerId,
             List<Card> initialDeck,
             Faction faction = Faction.Neutral,
-            ILogger logger = null
+            ILogger logger = null,
+            Board board = null
         )
         {
             this.playerId = playerId;
             this.logger = logger;
             this.credits = MAX_CREDITS;
             this.faction = faction;
+            this.board = board;
 
             // Initialize deck with initial cards
             foreach (var card in initialDeck)
@@ -118,6 +122,11 @@ namespace Kardx.Core
         /// Gets the player's current credits.
         /// </summary>
         public int Credits => credits;
+
+        /// <summary>
+        /// Gets a value indicating whether the player is an opponent.
+        /// </summary>
+        public bool IsOpponent => board.IsOpponent(this);
 
         // Hand management
         /// <summary>
@@ -217,15 +226,49 @@ namespace Kardx.Core
                 return false;
             }
 
-            // Move card from hand to battlefield and make it face up
+            // Move card from hand
             hand.Remove(card);
             card.SetFaceDown(false); // Card becomes visible when deployed
             card.SetOwner(this); // Set the owner of the card
-            battlefield[position] = card;
 
-            logger?.Log($"[{playerId}] Deployed card {card.Title} to battlefield slot {position}");
-            OnCardDeployed?.Invoke(card, position);
-            return true;
+            // Check if this is an Order card
+            if (card.CardType.Category == CardCategory.Order)
+            {
+                // For Order cards, we trigger their effect and then discard them
+                logger?.Log($"[{playerId}] Deployed Order card {card.Title} - activating effect");
+
+                // Process the order card effect
+                if (board != null)
+                {
+                    // Use the board reference to process the order card effect
+                    board.ProcessOrderCardEffect(card, this);
+                }
+                else
+                {
+                    // Fallback if board reference is not available
+                    card.ActivateAllAbilities();
+                }
+
+                // Notify about deployment (needed for UI updates and ability activations)
+                OnCardDeployed?.Invoke(card, position);
+
+                // Add to discard pile after effect is processed
+                discardPile.Enqueue(card);
+
+                logger?.Log($"[{playerId}] Order card {card.Title} discarded after use");
+                return true;
+            }
+            else
+            {
+                // For regular cards, place them on the battlefield
+                battlefield[position] = card;
+
+                logger?.Log(
+                    $"[{playerId}] Deployed card {card.Title} to battlefield slot {position}"
+                );
+                OnCardDeployed?.Invoke(card, position);
+                return true;
+            }
         }
 
         /// <summary>
@@ -348,6 +391,15 @@ namespace Kardx.Core
                 // Notify listeners about the card being destroyed
                 OnCardDestroyed?.Invoke(card);
             }
+        }
+
+        /// <summary>
+        /// Sets the board reference for this player.
+        /// </summary>
+        /// <param name="board">The board reference</param>
+        public void SetBoard(Board board)
+        {
+            this.board = board;
         }
     }
 }

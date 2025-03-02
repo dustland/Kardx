@@ -37,7 +37,7 @@ namespace Kardx.Core
         public int CurrentDefence
         {
             get => currentDefence;
-            private set => currentDefence = Math.Max(0, Math.Min(value, Defence));
+            private set => currentDefence = Math.Max(0, value);
         }
 
         public int Defence => cardType.BaseDefence + GetAttributeModifier("defence");
@@ -143,6 +143,70 @@ namespace Kardx.Core
             UnityEngine.Debug.Log(
                 $"[Card] {Title} took {amount} damage. Defence reduced from {previousDefence} to {CurrentDefence}"
             );
+        }
+
+        // Heal damage
+        public void Heal(int amount)
+        {
+            if (amount <= 0)
+                return;
+
+            int previousDefence = CurrentDefence;
+            CurrentDefence = Math.Min(CurrentDefence + amount, Defence);
+
+            // Log the healing
+            UnityEngine.Debug.Log(
+                $"[Card] {Title} healed {amount} points. Defence increased from {previousDefence} to {CurrentDefence}"
+            );
+        }
+
+        /// <summary>
+        /// Activates all abilities of the card at once.
+        /// This is primarily used for Order cards that trigger their effect and then are discarded.
+        /// </summary>
+        /// <param name="targets">Optional targets for the abilities, if required</param>
+        /// <returns>True if at least one ability was activated successfully</returns>
+        public bool ActivateAllAbilities(List<Card> targets = null)
+        {
+            bool anyActivated = false;
+
+            // Create ability instances for each ability type
+            foreach (var abilityType in CardType.Abilities)
+            {
+                var ability = new Ability(abilityType, this);
+
+                // Check if the ability can be used
+                if (ability.CanUse())
+                {
+                    // For abilities that require targets but none were provided
+                    if (
+                        ability.AbilityType.Targeting != TargetingType.None
+                        && ability.AbilityType.Targeting != TargetingType.Self
+                        && (targets == null || targets.Count == 0)
+                    )
+                    {
+                        UnityEngine.Debug.LogWarning(
+                            $"[Card] Ability {ability.AbilityType.Name} requires targets but none were provided"
+                        );
+                        continue;
+                    }
+
+                    // For self-targeting abilities
+                    if (ability.AbilityType.Targeting == TargetingType.Self)
+                    {
+                        ability.Use(new List<Card> { this });
+                        anyActivated = true;
+                    }
+                    // For abilities that target other cards
+                    else if (targets != null && targets.Count > 0)
+                    {
+                        ability.Use(targets);
+                        anyActivated = true;
+                    }
+                }
+            }
+
+            return anyActivated;
         }
 
         // Event handlers

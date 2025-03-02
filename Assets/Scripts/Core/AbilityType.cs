@@ -50,13 +50,16 @@ namespace Kardx.Core
 
         // Effect Parameters
         [JsonProperty("effect")]
-        private EffectType effect;
+        private EffectCategory effect;
 
         [JsonProperty("effectValue")]
         private int effectValue;
 
         [JsonProperty("effectDuration")]
         private int effectDuration;
+
+        [JsonProperty("effectAttribute")]
+        private string effectAttribute;
 
         // Special Parameters
         [JsonProperty("specialEffectId")]
@@ -79,9 +82,10 @@ namespace Kardx.Core
         public TargetingType Targeting => targeting;
         public RangeType Range => range;
         public bool CanTargetFaceDown => canTargetFaceDown;
-        public EffectType Effect => effect;
+        public EffectCategory Effect => effect;
         public int EffectValue => effectValue;
         public int EffectDuration => effectDuration;
+        public string EffectAttribute => effectAttribute;
         public string SpecialEffectId => specialEffectId;
         public IReadOnlyDictionary<string, object> CustomParameters => customParameters;
 
@@ -112,6 +116,7 @@ namespace Kardx.Core
             this.canTargetFaceDown = false;
             this.effectValue = 0;
             this.effectDuration = 0;
+            this.effectAttribute = string.Empty;
             this.specialEffectId = string.Empty;
         }
 
@@ -128,11 +133,12 @@ namespace Kardx.Core
         }
 
         // Set Effect Parameters
-        public void SetEffectParameters(EffectType effect, int effectValue, int effectDuration = 0)
+        public void SetEffectParameters(EffectCategory effect, int effectValue, int effectDuration = 0, string effectAttribute = "")
         {
             this.effect = effect;
             this.effectValue = effectValue;
             this.effectDuration = Math.Max(0, effectDuration);
+            this.effectAttribute = effectAttribute;
         }
 
         // Set Special Effect ID
@@ -189,7 +195,7 @@ namespace Kardx.Core
             );
 
             clone.SetTargetingParameters(targeting, range, canTargetFaceDown);
-            clone.SetEffectParameters(effect, effectValue, effectDuration);
+            clone.SetEffectParameters(effect, effectValue, effectDuration, effectAttribute);
             clone.SetSpecialEffectId(specialEffectId);
             clone.SetIconPath(iconPath);
 

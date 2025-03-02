@@ -29,6 +29,10 @@ namespace Kardx.Core
             turnNumber = 1;
             currentPlayerId = player.Id;
             this.logger = logger;
+
+            // Set the board reference in the player objects
+            player.SetBoard(this);
+            opponent.SetBoard(this);
         }
 
         // State management methods
@@ -92,6 +96,62 @@ namespace Kardx.Core
         public void ClearExpiredEffects()
         {
             activeEffects.RemoveAll(e => !e.IsActive());
+        }
+
+        /// <summary>
+        /// Processes the effects of an Order card when it is deployed.
+        /// </summary>
+        /// <param name="orderCard">The Order card to process</param>
+        /// <param name="player">The player who deployed the card</param>
+        /// <param name="targets">Optional targets for the card's abilities</param>
+        /// <returns>True if the card's effects were processed successfully</returns>
+        public bool ProcessOrderCardEffect(Card orderCard, Player player, List<Card> targets = null)
+        {
+            if (orderCard == null || player == null)
+            {
+                logger?.Log("[Board] Cannot process null order card or player");
+                return false;
+            }
+
+            if (orderCard.CardType.Category != CardCategory.Order)
+            {
+                logger?.Log($"[Board] Card {orderCard.Title} is not an Order card");
+                return false;
+            }
+
+            logger?.Log($"[Board] Processing Order card {orderCard.Title} effects");
+
+            // If no targets were provided, try to find appropriate targets based on the abilities
+            if (targets == null || targets.Count == 0)
+            {
+                targets = new List<Card>();
+
+                // Get the opponent of the player who played the card
+                Player opponent = player.Id == Player.Id ? Opponent : Player;
+
+                // Add all opponent's cards on the battlefield as potential targets
+                foreach (var card in opponent.GetCardsInPlay())
+                {
+                    if (card != null)
+                    {
+                        targets.Add(card);
+                    }
+                }
+            }
+
+            // Activate all abilities of the order card
+            bool effectsProcessed = orderCard.ActivateAllAbilities(targets);
+
+            if (effectsProcessed)
+            {
+                logger?.Log($"[Board] Order card {orderCard.Title} effects processed successfully");
+            }
+            else
+            {
+                logger?.Log($"[Board] Failed to process Order card {orderCard.Title} effects");
+            }
+
+            return effectsProcessed;
         }
 
         /// <summary>
@@ -159,6 +219,8 @@ namespace Kardx.Core
         {
             return duration == -1 || duration > 0;
         }
+
+        public bool IsOpponent(Player player) => player.Id == Opponent.Id;
 
         public virtual void OnTurnStart(int turnNumber)
         {

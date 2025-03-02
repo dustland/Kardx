@@ -234,7 +234,7 @@ namespace Kardx.Core
             logger?.Log($"Match ended after {TurnNumber} turns");
         }
 
-        public bool CanDeployCard(Card card)
+        public bool CanDeployUnitCard(Card card)
         {
             if (!IsMatchInProgress || card == null)
             {
@@ -249,6 +249,13 @@ namespace Kardx.Core
                 return false;
             }
 
+            // Check if it's a unit card
+            if (card.CardType.Category != CardCategory.Unit)
+            {
+                logger?.LogError("[MatchManager] Cannot deploy card: not a unit card");
+                return false;
+            }
+
             // Count non-null slots in the battlefield instead of using Count
             var occupiedSlots = currentPlayer.Battlefield.Count(c => c != null);
 
@@ -257,79 +264,124 @@ namespace Kardx.Core
                 && occupiedSlots < Player.BATTLEFIELD_SLOT_COUNT;
         }
 
-        public bool DeployCard(Card card, int position)
+        public bool CanDeployOrderCard(Card card)
         {
-            if (!CanDeployCard(card))
+            if (!IsMatchInProgress || card == null)
+            {
+                logger?.LogError("[MatchManager] Cannot deploy order card: card is null");
+                return false;
+            }
+
+            var currentPlayer = board.CurrentPlayer;
+            if (currentPlayer == null)
+            {
+                logger?.LogError("[MatchManager] Cannot deploy order card: current player is null");
+                return false;
+            }
+
+            // Check if it's an order card
+            if (card.CardType.Category != CardCategory.Order)
+            {
+                logger?.LogError("[MatchManager] Cannot deploy card: not an order card");
+                return false;
+            }
+
+            // Order cards just need to be in hand and have enough credits
+            return currentPlayer.Hand.Contains(card)
+                && currentPlayer.Credits >= card.DeploymentCost;
+        }
+
+        // For backward compatibility
+        public bool CanDeployCard(Card card)
+        {
+            if (card == null)
+                return false;
+
+            return card.CardType.Category == CardCategory.Unit ? CanDeployUnitCard(card)
+                : card.CardType.Category == CardCategory.Order ? CanDeployOrderCard(card)
+                : false;
+        }
+
+        public bool DeployUnitCard(Card card, int position)
+        {
+            if (!CanDeployUnitCard(card))
             {
                 // Add more detailed logging to help diagnose the issue
                 var player = board.CurrentPlayer;
                 if (card == null)
                 {
-                    logger?.LogError("[MatchManager] Cannot deploy card: card is null");
+                    logger?.LogError("[MatchManager] Cannot deploy unit card: card is null");
                 }
                 else if (!player.Hand.Contains(card))
                 {
                     logger?.LogError(
-                        $"[MatchManager] Cannot deploy card {card.Title}: not in player's hand"
+                        $"[MatchManager] Cannot deploy unit card {card.Title}: not in player's hand"
                     );
                 }
                 else if (player.Credits < card.DeploymentCost)
                 {
                     logger?.LogError(
-                        $"[MatchManager] Cannot deploy card {card.Title}: insufficient credits (has {player.Credits}, needs {card.DeploymentCost})"
+                        $"[MatchManager] Cannot deploy unit card {card.Title}: insufficient credits (has {player.Credits}, needs {card.DeploymentCost})"
                     );
                 }
                 else if (position < 0 || position >= Player.BATTLEFIELD_SLOT_COUNT)
                 {
                     logger?.LogError(
-                        $"[MatchManager] Cannot deploy card {card.Title}: invalid position {position}"
+                        $"[MatchManager] Cannot deploy unit card {card.Title}: invalid position {position}"
                     );
                 }
                 else if (player.Battlefield[position] != null)
                 {
                     logger?.LogError(
-                        $"[MatchManager] Cannot deploy card {card.Title}: position {position} is already occupied"
-                    );
-                }
-                else
-                {
-                    logger?.LogError(
-                        $"[MatchManager] Cannot deploy card {card.Title}: unknown reason"
+                        $"[MatchManager] Cannot deploy unit card {card.Title}: position {position} is already occupied"
                     );
                 }
                 return false;
             }
 
             var currentPlayer = board.CurrentPlayer;
-
-            // Try to deploy the card
-            if (!currentPlayer.DeployCard(card, position))
-                return false;
-
-            // The Player.DeployCard method already sets the card to face-up
-            // No need to set it again here
-
-            // Notify listeners
-            OnCardDeployed?.Invoke(card, position);
-            logger?.Log($"[{CurrentPlayerId}] Card deployed: {card.Title} at position {position}");
-
-            return true;
+            return currentPlayer.DeployCard(card, position);
         }
 
-        private void SubscribeToStrategyPlannerEvents(StrategyPlanner planner)
+        public bool DeployOrderCard(Card card)
         {
-            if (planner == null)
-                return;
+            if (!CanDeployOrderCard(card))
+            {
+                // Add more detailed logging to help diagnose the issue
+                var player = board.CurrentPlayer;
+                if (card == null)
+                {
+                    logger?.LogError("[MatchManager] Cannot deploy order card: card is null");
+                }
+                else if (!player.Hand.Contains(card))
+                {
+                    logger?.LogError(
+                        $"[MatchManager] Cannot deploy order card {card.Title}: not in player's hand"
+                    );
+                }
+                else if (player.Credits < card.DeploymentCost)
+                {
+                    logger?.LogError(
+                        $"[MatchManager] Cannot deploy order card {card.Title}: insufficient credits (has {player.Credits}, needs {card.DeploymentCost})"
+                    );
+                }
+                return false;
+            }
 
-            // Since we're now using matchManager.DeployCard directly in the StrategyPlanner,
-            // we don't need to handle card deployments here anymore as the OnCardDeployed event
-            // will be triggered automatically by the DeployCard method.
+            var currentPlayer = board.CurrentPlayer;
+            // Use a special position value (-1) for order cards
+            return currentPlayer.DeployCard(card, -1);
+        }
 
-            // We can still handle other decision types here if needed
-            planner.OnDecisionExecuted += (decision) => {
-                // Handle other decision types if needed
-                // For example, card discards, attacks, etc.
-            };
+        // For backward compatibility
+        public bool DeployCard(Card card, int position)
+        {
+            if (card == null)
+                return false;
+
+            return card.CardType.Category == CardCategory.Unit ? DeployUnitCard(card, position)
+                : card.CardType.Category == CardCategory.Order ? DeployOrderCard(card)
+                : false;
         }
 
         /// <summary>
@@ -445,6 +497,22 @@ namespace Kardx.Core
                 // Fire event to notify UI
                 OnCardDied?.Invoke(card);
             }
+        }
+
+        private void SubscribeToStrategyPlannerEvents(StrategyPlanner planner)
+        {
+            if (planner == null)
+                return;
+
+            // Since we're now using matchManager.DeployCard directly in the StrategyPlanner,
+            // we don't need to handle card deployments here anymore as the OnCardDeployed event
+            // will be triggered automatically by the DeployCard method.
+
+            // We can still handle other decision types here if needed
+            planner.OnDecisionExecuted += (decision) => {
+                // Handle other decision types if needed
+                // For example, card discards, attacks, etc.
+            };
         }
     }
 }

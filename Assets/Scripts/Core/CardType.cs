@@ -9,32 +9,40 @@ namespace Kardx.Core
         // Identity
         [JsonProperty("id")]
         private string id; // Unique identifier (GUID or slug)
+
         [JsonProperty("title")]
         private string title; // Localization key for the card name
+
         [JsonProperty("description")]
         private string description; // Localization key for the card description
+
         [JsonProperty("category")]
         private CardCategory category; // e.g., Unit, Order, Countermeasure
+
         [JsonProperty("subtype")]
         private string subtype; // Archetype (e.g., Warrior, Mage)
 
         // Costs
         [JsonProperty("deploymentCost")]
         private int deploymentCost; // Resource cost to play the card
+
         [JsonProperty("operationCost")]
         private int operationCost; // Resource cost to use abilities
 
         // Stats
         [JsonProperty("baseDefence")]
         private int baseDefence; // Base defence of the card
+
         [JsonProperty("baseAttack")]
         private int baseAttack; // Attack power of the card
+
         [JsonProperty("baseCounterAttack")]
         private int baseCounterAttack; // Power used for counterattacks
 
         // Metadata
         [JsonProperty("rarity")]
         private CardRarity rarity; // Card rarity level
+
         [JsonProperty("setId")]
         private string setId; // Card edition or set identifier
 
@@ -45,6 +53,7 @@ namespace Kardx.Core
         // Attributes & Abilities
         [JsonProperty("attributes")]
         private SerializableDictionary<string, int> attributes = new();
+
         [JsonProperty("abilities")]
         private List<AbilityType> abilities = new();
 
@@ -56,8 +65,18 @@ namespace Kardx.Core
         public string Subtype => subtype;
         public int DeploymentCost => deploymentCost;
         public int OperationCost => operationCost;
-        public int BaseDefence => baseDefence;
-        public int BaseAttack => baseAttack;
+        public int BaseDefence
+        {
+            get => baseDefence;
+            private set => baseDefence = Math.Max(1, value);
+        }
+
+        public int BaseAttack
+        {
+            get => baseAttack;
+            private set => baseAttack = Math.Max(0, value);
+        }
+
         public int BaseCounterAttack => baseCounterAttack;
         public CardRarity Rarity => rarity;
         public string SetId => setId;
@@ -84,7 +103,7 @@ namespace Kardx.Core
                 setId = setId,
                 imageUrl = imageUrl,
                 attributes = new SerializableDictionary<string, int>(attributes),
-                abilities = new List<AbilityType>(abilities)
+                abilities = new List<AbilityType>(abilities),
             };
         }
 
@@ -159,8 +178,10 @@ namespace Kardx.Core
     // Helper class for serializing dictionaries
     public class SerializableDictionary<TKey, TValue> : Dictionary<TKey, TValue>
     {
-        public SerializableDictionary() : base() { }
+        public SerializableDictionary()
+            : base() { }
 
-        public SerializableDictionary(IDictionary<TKey, TValue> dictionary) : base(dictionary) { }
+        public SerializableDictionary(IDictionary<TKey, TValue> dictionary)
+            : base(dictionary) { }
     }
 }
