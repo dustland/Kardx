@@ -128,6 +128,23 @@ namespace Kardx.UI.Components
             sourceTransform = null;
             targetTransform = null;
         }
+        
+        public void CancelDrawing()
+        {
+            // Cancel the current drawing operation
+            isActive = false;
+            lineRenderer.enabled = false;
+            targetTransform = null;
+        }
+        
+        public void StopDrawing()
+        {
+            // Stop drawing and hide the arrow
+            isActive = false;
+            lineRenderer.enabled = false;
+            sourceTransform = null;
+            targetTransform = null;
+        }
 
         private Vector3 GetCanvasPosition(Vector3 worldPosition)
         {

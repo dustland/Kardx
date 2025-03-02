@@ -4,7 +4,7 @@ using UnityEngine.UI;
 
 namespace Kardx.UI.Components
 {
-    using Card = Kardx.Core.Card;
+    using Kardx.Core;
 
     /// <summary>
     /// Specialized card slot for the player's battlefield.
@@ -16,17 +16,18 @@ namespace Kardx.UI.Components
         private Image highlightImage;
 
         [SerializeField]
-        private int position; // 0-4 for the five positions
+        private Transform cardContainer;
 
-        private Kardx.UI.Scenes.MatchView matchView;
+        private int slotIndex;
+        private PlayerBattlefieldView battlefieldView;
+        private CardView currentCardView;
 
         private void Awake()
         {
-            matchView = GetComponentInParent<Kardx.UI.Scenes.MatchView>();
-            if (!highlightImage)
+            if (highlightImage == null)
                 CreateHighlight();
             else
-                ConfigureHighlightImage(); // Configure the prefab-assigned highlight image
+                ConfigureHighlightImage();
 
             // Ensure this GameObject can receive drops
             var graphic = GetComponent<Graphic>();
@@ -36,6 +37,17 @@ namespace Kardx.UI.Components
                 image.color = Color.clear;
                 image.raycastTarget = true;
             }
+
+            if (cardContainer == null)
+            {
+                cardContainer = transform;
+            }
+        }
+
+        public void Initialize(int slotIndex, PlayerBattlefieldView battlefieldView)
+        {
+            this.slotIndex = slotIndex;
+            this.battlefieldView = battlefieldView;
         }
 
         private void ConfigureHighlightImage()
@@ -53,7 +65,7 @@ namespace Kardx.UI.Components
             rt.offsetMax = Vector2.zero;
 
             // Set default properties
-            highlightImage.color = new Color(1f, 1f, 0f, 0.3f);
+            highlightImage.color = new Color(0f, 1f, 0f, 0.3f); // Green highlight
             highlightImage.raycastTarget = false;
             highlightImage.enabled = false; // Start with highlight disabled
         }
@@ -62,13 +74,13 @@ namespace Kardx.UI.Components
         {
             var go = new GameObject("Highlight");
             highlightImage = go.AddComponent<Image>();
-            highlightImage.transform.SetParent(transform, false); // Set worldPositionStays to false
+            highlightImage.transform.SetParent(transform, false);
             ConfigureHighlightImage();
         }
 
         public void OnDrop(PointerEventData eventData)
         {
-            Debug.Log($"[PlayerCardSlot] OnDrop called at position {position}");
+            Debug.Log($"[PlayerCardSlot] OnDrop called at position {slotIndex}");
 
             // Get the card view from the dragged object
             var cardView = eventData.pointerDrag?.GetComponent<CardView>();
@@ -78,150 +90,89 @@ namespace Kardx.UI.Components
                 return;
             }
 
+            // Clear highlight
+            ClearHighlight();
+
             // Ensure the card's CanvasGroup.blocksRaycasts is set to true
             var canvasGroup = cardView.GetComponent<CanvasGroup>();
             if (canvasGroup != null)
             {
                 canvasGroup.blocksRaycasts = true;
-                Debug.Log(
-                    "[PlayerCardSlot] Ensuring CanvasGroup.blocksRaycasts is true for dropped card"
-                );
             }
 
-            // Check if this is a valid drop target for the card
-            if (!IsValidDropTarget(cardView.Card))
+            // Handle drop via MatchView
+            var matchView = battlefieldView.GetMatchView();
+            if (matchView != null)
             {
-                Debug.Log($"[PlayerCardSlot] Invalid drop target for card {cardView.Card.Title}");
-                return;
+                matchView.OnPlayerCardSlotDropped(cardView.Card, slotIndex);
             }
-
-            // Deploy the card to this slot
-            if (matchView == null || !matchView.DeployUnitCard(cardView.Card, position))
-            {
-                Debug.Log(
-                    $"[PlayerCardSlot] Failed to deploy card {cardView.Card.Title} at position {position}"
-                );
-            }
-            else
-            {
-                Debug.Log($"[PlayerCardSlot] Card deployed successfully at position {position}");
-            }
+            
+            // Clear all highlights
+            matchView.ClearAllHighlights();
         }
 
-        // Helper method to check if a card is in the player's hand
-        private bool IsCardInHand(Card card)
+        public void UpdateCardDisplay(Card card)
         {
-            if (card == null || card.Owner == null)
-                return false;
-
-            var handCards = card.Owner.Hand;
-            foreach (var handCard in handCards)
+            // Clear existing card view
+            if (currentCardView != null)
             {
-                if (handCard == card)
-                    return true;
+                Destroy(currentCardView.gameObject);
+                currentCardView = null;
             }
-            return false;
+
+            if (card != null)
+            {
+                // Create new card view
+                var matchView = battlefieldView.GetMatchView();
+                var cardViewGO = matchView.CreateCardUI(card, cardContainer);
+                currentCardView = cardViewGO.GetComponent<CardView>();
+                
+                // Configure card view for player battlefield
+                currentCardView.SetInteractable(true);
+                
+                // Add ability drag handler for the card view if it has abilities
+                if (card.Abilities.Count > 0)
+                {
+                    var dragHandler = cardViewGO.AddComponent<AbilityDragHandler>();
+                    dragHandler.Initialize(matchView);
+                }
+            }
         }
 
-        // Helper method to check if a card is on the battlefield
-        private bool IsCardOnBattlefield(Card card)
+        public void SetHighlight(Color color, bool show)
         {
-            if (card == null || card.Owner == null)
-                return false;
-
-            // Check if the card is in the battlefield
-            var battlefield = card.Owner.Battlefield;
-            foreach (var battlefieldCard in battlefield)
+            if (highlightImage != null)
             {
-                if (battlefieldCard == card)
-                    return true;
+                highlightImage.color = color;
+                highlightImage.enabled = show;
             }
-            return false;
         }
 
+        public void ClearHighlight()
+        {
+            if (highlightImage != null)
+            {
+                highlightImage.enabled = false;
+            }
+        }
+
+        public int GetSlotIndex()
+        {
+            return slotIndex;
+        }
+        
         /// <summary>
         /// Checks if the card can be deployed to this slot.
         /// </summary>
+        /// <param name="card">The card to check</param>
+        /// <returns>True if the card can be deployed to this slot</returns>
         public bool IsValidDropTarget(Card card)
         {
-            if (matchView == null || card == null)
-            {
-                Debug.Log("[PlayerCardSlot] Invalid drop target: matchView or card is null");
+            if (card == null || battlefieldView == null || battlefieldView.GetMatchView() == null)
                 return false;
-            }
-
-            // Only Unit cards can be deployed to battlefield slots
-            if (card.CardType.Category != Kardx.Core.CardCategory.Unit)
-            {
-                Debug.Log($"[PlayerCardSlot] Invalid drop target: {card.Title} is not a Unit card");
-                return false;
-            }
-
-            // Check if the card is in the player's hand
-            if (!IsCardInHand(card))
-            {
-                Debug.Log(
-                    $"[PlayerCardSlot] Invalid drop target: {card.Title} is not in player's hand"
-                );
-                return false;
-            }
-
-            // Check if the card can be deployed according to game rules
-            if (!matchView.CanDeployUnitCard(card))
-            {
-                Debug.Log(
-                    $"[PlayerCardSlot] Invalid drop target: {card.Title} cannot be deployed (game rules)"
-                );
-                return false;
-            }
-
-            // Check if the slot is empty
-            var currentPlayer = matchView.GetCurrentPlayer();
-            if (currentPlayer == null)
-            {
-                Debug.Log("[PlayerCardSlot] Invalid drop target: current player is null");
-                return false;
-            }
-
-            // Ensure position is within bounds
-            if (position < 0 || position >= Kardx.Core.Player.BATTLEFIELD_SLOT_COUNT)
-            {
-                Debug.Log(
-                    $"[PlayerCardSlot] Invalid drop target: position {position} is out of bounds"
-                );
-                return false;
-            }
-
-            // Check if the slot is already occupied
-            bool isEmpty = currentPlayer.Battlefield[position] == null;
-            if (!isEmpty)
-            {
-                Debug.Log(
-                    $"[PlayerCardSlot] Invalid drop target: position {position} is already occupied"
-                );
-            }
-            return isEmpty;
-        }
-
-        public void SetHighlight(bool show)
-        {
-            if (highlightImage)
-                highlightImage.enabled = show;
-        }
-
-        // For editor setup
-        public void SetPosition(int position)
-        {
-            this.position = Mathf.Clamp(position, 0, 4);
-        }
-
-        /// <summary>
-        /// Gets the position of this slot.
-        /// </summary>
-        /// <returns>The position index of this slot.</returns>
-        public int GetPosition()
-        {
-            return position;
+                
+            // Check if this is a valid deployment
+            return battlefieldView.GetMatchView().CanDeployUnitCard(card, slotIndex);
         }
     }
 }

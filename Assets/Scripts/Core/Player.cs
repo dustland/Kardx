@@ -23,11 +23,11 @@ namespace Kardx.Core
         private Faction faction;
 
         // Card collections
-        private readonly List<Card> hand = new();
-        private readonly Card[] battlefield = new Card[BATTLEFIELD_SLOT_COUNT];
-        private readonly Stack<Card> deck = new();
-        private readonly Queue<Card> discardPile = new();
-        private readonly List<Card> graveyard = new(); // Added a new list to hold destroyed cards
+        private Hand hand;
+        private Battlefield battlefield;
+        private Deck deck;
+        private DiscardPile discardPile;
+        private Graveyard graveyard;
         private Card headquartersCard;
         private Board board; // Reference to the game board
 
@@ -38,7 +38,7 @@ namespace Kardx.Core
         public event Action<Card> OnCardDestroyed;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="PlayerState"/> class.
+        /// Initializes a new instance of the <see cref="Player"/> class.
         /// </summary>
         /// <param name="playerId">The player's ID.</param>
         /// <param name="initialDeck">The player's initial deck of cards.</param>
@@ -69,15 +69,31 @@ namespace Kardx.Core
             this.faction = faction;
             this.board = board;
 
+            // Initialize collections
+            hand = new Hand(this);
+            battlefield = new Battlefield(this);
+            deck = new Deck(this);
+            discardPile = new DiscardPile(this);
+            graveyard = new Graveyard(this);
+
+            // Wire up events
+            battlefield.OnCardDeployed += (card, slot) => OnCardDeployed?.Invoke(card, slot);
+            hand.OnCardAdded += (card, source) => OnCardDrawn?.Invoke(card);
+            discardPile.OnCardAdded += (card, source) => OnCardDiscarded?.Invoke(card);
+            graveyard.OnCardAdded += (card, source) => OnCardDestroyed?.Invoke(card);
+
             // Initialize deck with initial cards
             foreach (var card in initialDeck)
             {
                 card.SetOwner(this); // Set the owner of the card
-                deck.Push(card);
+                deck.AddCard(card);
             }
+
+            // Shuffle the deck
+            deck.Shuffle();
         }
 
-        // Public properties - all collections are read-only to prevent external modification
+        // Public properties
         /// <summary>
         /// Gets the player's ID.
         /// </summary>
@@ -91,27 +107,27 @@ namespace Kardx.Core
         /// <summary>
         /// Gets the player's hand of cards.
         /// </summary>
-        public IReadOnlyList<Card> Hand => hand;
+        public Hand Hand => hand;
 
         /// <summary>
-        /// Gets the player's battlefield of cards, preserving slot positions.
+        /// Gets the player's battlefield.
         /// </summary>
-        public IReadOnlyList<Card> Battlefield => Array.AsReadOnly(battlefield);
+        public Battlefield Battlefield => battlefield;
 
         /// <summary>
         /// Gets the player's deck of cards.
         /// </summary>
-        public IReadOnlyList<Card> Deck => deck.ToList();
+        public Deck Deck => deck;
 
         /// <summary>
         /// Gets the player's discard pile of cards.
         /// </summary>
-        public IReadOnlyList<Card> DiscardPile => discardPile.ToList();
+        public DiscardPile DiscardPile => discardPile;
 
         /// <summary>
         /// Gets the player's graveyard of destroyed cards.
         /// </summary>
-        public IReadOnlyList<Card> Graveyard => graveyard; // Added a new property to access the graveyard
+        public Graveyard Graveyard => graveyard;
 
         /// <summary>
         /// Gets the player's headquarter card.
@@ -136,7 +152,7 @@ namespace Kardx.Core
         /// <returns>The drawn card, or null if no cards could be drawn.</returns>
         public Card DrawCard(bool faceDown = false)
         {
-            if (hand.Count >= MAX_HAND_SIZE)
+            if (hand.IsFull)
             {
                 logger?.Log(
                     $"[{playerId}] Cannot draw card - hand is full ({MAX_HAND_SIZE} cards)"
@@ -144,18 +160,15 @@ namespace Kardx.Core
                 return null;
             }
 
-            if (deck.Count == 0)
+            var card = deck.DrawCard();
+            if (card == null)
             {
                 logger?.Log($"[{playerId}] Cannot draw card - deck is empty");
                 return null;
             }
 
-            var card = deck.Pop();
             card.SetFaceDown(faceDown);
-            card.SetOwner(this); // Set the owner of the card
-            hand.Add(card);
-            logger?.Log($"[{playerId}] Drew card: {card.Title}");
-            OnCardDrawn?.Invoke(card);
+            hand.AddCard(card);
             return card;
         }
 
@@ -163,243 +176,272 @@ namespace Kardx.Core
         /// Discards a card from the player's hand.
         /// </summary>
         /// <param name="card">The card to discard.</param>
-        /// <returns>True if the card was discarded successfully, false otherwise.</returns>
-        public bool DiscardFromHand(Card card)
+        /// <returns>True if the card was discarded, false otherwise.</returns>
+        public bool DiscardCard(Card card)
         {
+            if (card == null)
+                return false;
+
             if (!hand.Contains(card))
             {
-                logger?.Log($"[{playerId}] Cannot discard card that is not in hand");
+                logger?.Log($"[{playerId}] Cannot discard card - card not in hand");
                 return false;
             }
 
-            hand.Remove(card);
-            discardPile.Enqueue(card);
-            logger?.Log($"[{playerId}] Discarded card: {card.Title}");
-            OnCardDiscarded?.Invoke(card);
+            hand.RemoveCard(card);
+            discardPile.AddCard(card);
             return true;
         }
 
         /// <summary>
-        /// Deploys a card from the player's hand to the battlefield.
+        /// Deploys a unit card to the battlefield.
         /// </summary>
         /// <param name="card">The card to deploy.</param>
-        /// <returns>True if the card was deployed successfully, false otherwise.</returns>
+        /// <param name="slotIndex">The slot index to deploy the card to.</param>
+        /// <returns>True if the card was deployed, false otherwise.</returns>
+        public bool DeployUnitCard(Card card, int slotIndex)
+        {
+            if (card == null)
+                return false;
+
+            if (!hand.Contains(card))
+            {
+                logger?.Log($"[{playerId}] Cannot deploy card - card not in hand");
+                return false;
+            }
+
+            if (card.CardType.Category != CardCategory.Unit)
+            {
+                logger?.Log($"[{playerId}] Cannot deploy card - not a unit card");
+                return false;
+            }
+
+            if (credits < card.CardType.Cost)
+            {
+                logger?.Log($"[{playerId}] Cannot deploy card - not enough credits");
+                return false;
+            }
+
+            if (!battlefield.IsSlotEmpty(slotIndex))
+            {
+                logger?.Log($"[{playerId}] Cannot deploy card - slot {slotIndex} is not empty");
+                return false;
+            }
+
+            // Remove from hand
+            hand.RemoveCard(card);
+
+            // Pay the cost
+            SpendCredits(card.CardType.Cost);
+
+            // Deploy to battlefield
+            battlefield.DeployCard(card, slotIndex);
+
+            return true;
+        }
+
+        /// <summary>
+        /// Deploys an order card.
+        /// </summary>
+        /// <param name="card">The card to deploy.</param>
+        /// <returns>True if the card was deployed, false otherwise.</returns>
+        public bool DeployOrderCard(Card card)
+        {
+            if (card == null)
+                return false;
+
+            if (!hand.Contains(card))
+            {
+                logger?.Log($"[{playerId}] Cannot deploy card - card not in hand");
+                return false;
+            }
+
+            if (card.CardType.Category != CardCategory.Order)
+            {
+                logger?.Log($"[{playerId}] Cannot deploy card - not an order card");
+                return false;
+            }
+
+            if (credits < card.CardType.Cost)
+            {
+                logger?.Log($"[{playerId}] Cannot deploy card - not enough credits");
+                return false;
+            }
+
+            // Remove from hand
+            hand.RemoveCard(card);
+
+            // Pay the cost
+            SpendCredits(card.CardType.Cost);
+
+            // Order cards go directly to the discard pile after being played
+            discardPile.AddCard(card);
+
+            return true;
+        }
+
+        /// <summary>
+        /// Deploys a card (for backward compatibility).
+        /// </summary>
+        /// <param name="card">The card to deploy.</param>
+        /// <param name="position">The position to deploy to (ignored for order cards).</param>
+        /// <returns>True if the card was deployed, false otherwise.</returns>
         public bool DeployCard(Card card, int position)
         {
             if (card == null)
-            {
-                logger?.Log($"[{playerId}] Cannot deploy null card");
                 return false;
-            }
-
-            if (!hand.Contains(card))
-            {
-                logger?.Log($"[{playerId}] Cannot deploy card {card.Title} - not in hand");
-                return false;
-            }
-
-            if (credits < card.DeploymentCost)
-            {
-                logger?.Log($"[{playerId}] Cannot deploy card {card.Title} - insufficient credits");
-                return false;
-            }
-
-            // Find the first empty slot in the battlefield
-            if (position < 0 || position >= BATTLEFIELD_SLOT_COUNT)
-            {
-                logger?.Log($"[{playerId}] Invalid battlefield position: {position}");
-                return false;
-            }
-
-            if (battlefield[position] != null)
-            {
-                logger?.Log(
-                    $"[{playerId}] Cannot deploy card {card.Title} - slot {position} is already occupied"
-                );
-                return false;
-            }
-
-            // Spend credits first
-            if (!SpendCredits(card.DeploymentCost))
-            {
-                logger?.Log($"[{playerId}] Cannot deploy card {card.Title} - insufficient credits");
-                return false;
-            }
-
-            // Move card from hand
-            hand.Remove(card);
-            card.SetFaceDown(false); // Card becomes visible when deployed
-            card.SetOwner(this); // Set the owner of the card
-
-            // Check if this is an Order card
-            if (card.CardType.Category == CardCategory.Order)
-            {
-                // For Order cards, we trigger their effect and then discard them
-                logger?.Log($"[{playerId}] Deployed Order card {card.Title} - activating effect");
-
-                // Process the order card effect
-                if (board != null)
-                {
-                    // Use the board reference to process the order card effect
-                    board.ProcessOrderCardEffect(card, this);
-                }
-                else
-                {
-                    // Fallback if board reference is not available
-                    card.ActivateAllAbilities();
-                }
-
-                // Notify about deployment (needed for UI updates and ability activations)
-                OnCardDeployed?.Invoke(card, position);
-
-                // Add to discard pile after effect is processed
-                discardPile.Enqueue(card);
-
-                logger?.Log($"[{playerId}] Order card {card.Title} discarded after use");
-                return true;
-            }
-            else
-            {
-                // For regular cards, place them on the battlefield
-                battlefield[position] = card;
-
-                logger?.Log(
-                    $"[{playerId}] Deployed card {card.Title} to battlefield slot {position}"
-                );
-                OnCardDeployed?.Invoke(card, position);
-                return true;
-            }
+                
+            return card.CardType.Category == CardCategory.Unit ? DeployUnitCard(card, position)
+                : card.CardType.Category == CardCategory.Order ? DeployOrderCard(card)
+                : false;
         }
 
         /// <summary>
-        /// Removes a card from the battlefield.
+        /// Destroys a card on the battlefield and moves it to the graveyard.
         /// </summary>
-        /// <param name="card">The card to remove.</param>
-        /// <returns>True if the card was removed successfully, false otherwise.</returns>
-        public bool RemoveFromBattlefield(Card card)
+        /// <param name="card">The card to destroy.</param>
+        /// <returns>True if the card was destroyed, false otherwise.</returns>
+        public bool DestroyCard(Card card)
         {
             if (card == null)
+                return false;
+
+            if (!battlefield.Contains(card))
             {
-                logger?.Log($"[{playerId}] Cannot remove null card from battlefield");
+                logger?.Log($"[{playerId}] Cannot destroy card - card not on battlefield");
                 return false;
             }
 
-            int slotIndex = Array.FindIndex(battlefield, slot => slot == card);
-            if (slotIndex == -1)
-            {
-                logger?.Log(
-                    $"[{playerId}] Failed to remove card {card.Title} from battlefield - not found"
-                );
-                return false;
-            }
-
-            battlefield[slotIndex] = null;
-            discardPile.Enqueue(card); // Add to discard pile when removed
-            logger?.Log(
-                $"[{playerId}] Removed card {card.Title} from battlefield slot {slotIndex}"
-            );
+            battlefield.RemoveCard(card);
+            graveyard.AddCard(card);
             return true;
         }
 
-        // Resource management
         /// <summary>
-        /// Spends credits from the player's current credits.
+        /// Removes a card from the battlefield and places it in the discard pile.
         /// </summary>
-        /// <param name="amount">The amount of credits to spend.</param>
-        /// <returns>True if the credits were spent successfully, false otherwise.</returns>
-        public bool SpendCredits(int amount)
+        /// <param name="card">The card to remove.</param>
+        /// <returns>True if the card was removed, false otherwise.</returns>
+        public bool RemoveFromBattlefield(Card card)
         {
-            if (amount < 0)
+            if (card == null)
+                return false;
+                
+            if (!battlefield.Contains(card))
             {
-                logger?.Log($"[{playerId}] Cannot spend negative credits: {amount}");
+                logger?.Log($"[{playerId}] Cannot remove card from battlefield - card not on battlefield");
                 return false;
             }
+            
+            // Remove from battlefield
+            battlefield.RemoveCard(card);
+            
+            // Add to discard pile
+            discardPile.AddCard(card);
+            
+            logger?.Log($"[{playerId}] Card {card.Title} removed from battlefield and added to discard pile");
+            
+            return true;
+        }
+
+        /// <summary>
+        /// Spends credits.
+        /// </summary>
+        /// <param name="amount">The amount of credits to spend.</param>
+        /// <returns>True if the credits were spent, false otherwise.</returns>
+        public bool SpendCredits(int amount)
+        {
+            if (amount <= 0)
+                return false;
 
             if (credits < amount)
             {
-                logger?.Log($"[{playerId}] Not enough credits. Have: {credits}, Need: {amount}");
+                logger?.Log($"[{playerId}] Cannot spend {amount} credits - only have {credits}");
                 return false;
             }
 
             credits -= amount;
-            logger?.Log($"[{playerId}] Spent {amount} credits. Remaining: {credits}");
             return true;
         }
 
         /// <summary>
-        /// Adds credits to the player's account.
+        /// Adds credits.
         /// </summary>
         /// <param name="amount">The amount of credits to add.</param>
         public void AddCredits(int amount)
         {
-            if (amount < 0)
-            {
-                logger?.Log($"[{playerId}] Cannot add negative credits: {amount}");
-                return;
-            }
-
-            credits = Math.Min(credits + amount, MAX_CREDITS);
-            logger?.Log($"[{playerId}] Added {amount} credits. Current: {credits}");
-        }
-
-        /// <summary>
-        /// Gets all cards currently in play for this player (on the battlefield).
-        /// </summary>
-        /// <returns>A list of cards currently in play, excluding null slots.</returns>
-        public List<Card> GetCardsInPlay()
-        {
-            return battlefield.Where(card => card != null).ToList();
-        }
-
-        // Reset all cards' attack status at the start of a turn
-        public void ResetCardAttackStatus()
-        {
-            // Reset attack status for all cards on the battlefield
-            foreach (var card in battlefield)
-            {
-                if (card != null)
-                {
-                    card.HasAttackedThisTurn = false;
-                }
-            }
-        }
-
-        // Destroy a card and move it to the graveyard
-        public void DestroyCard(Card card)
-        {
-            if (card == null)
+            if (amount <= 0)
                 return;
 
-            // Find the card in the battlefield
-            int slotIndex = -1;
-            for (int i = 0; i < battlefield.Length; i++)
+            credits += amount;
+            if (credits > MAX_CREDITS)
             {
-                if (battlefield[i] == card)
-                {
-                    slotIndex = i;
-                    break;
-                }
-            }
-
-            // If found, remove it and add to graveyard
-            if (slotIndex >= 0)
-            {
-                battlefield[slotIndex] = null;
-                // Add the card to the graveyard
-                graveyard.Add(card);
-
-                // Notify listeners about the card being destroyed
-                OnCardDestroyed?.Invoke(card);
+                credits = MAX_CREDITS;
             }
         }
 
         /// <summary>
-        /// Sets the board reference for this player.
+        /// Sets the board reference.
         /// </summary>
-        /// <param name="board">The board reference</param>
+        /// <param name="board">The board reference.</param>
         public void SetBoard(Board board)
         {
             this.board = board;
+        }
+
+        /// <summary>
+        /// Gets all cards currently in play (on the battlefield and headquarters).
+        /// </summary>
+        /// <returns>A list of all cards in play for this player.</returns>
+        public List<Card> GetCardsInPlay()
+        {
+            var result = new List<Card>();
+
+            // Add cards from the battlefield
+            if (battlefield != null)
+            {
+                result.AddRange(battlefield.Cards);
+            }
+
+            // Add headquarters card if it exists
+            if (headquartersCard != null)
+            {
+                result.Add(headquartersCard);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Sets the headquarters card.
+        /// </summary>
+        /// <param name="card">The headquarters card.</param>
+        public void SetHeadquarters(Card card)
+        {
+            if (card == null || card.CardType.Category != CardCategory.Headquarters)
+                return;
+
+            headquartersCard = card;
+            card.SetOwner(this);
+        }
+
+        /// <summary>
+        /// Resets the attack status for all cards on the battlefield.
+        /// </summary>
+        public void ResetCardAttackStatus()
+        {
+            foreach (var card in battlefield.Cards)
+            {
+                // Reset the card's attack status for the new turn
+                if (card is Card unitCard)
+                {
+                    // Reset hasAttackedThisTurn flag (this property might be internal to the Card class)
+                    // Call a method on the card to reset its attack status
+                    unitCard.ProcessStartOfTurnEffects(); // This should reset hasAttackedThisTurn
+                }
+            }
+            
+            logger?.Log($"[{playerId}] Reset attack status for all cards on the battlefield");
         }
     }
 }

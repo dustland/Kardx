@@ -138,13 +138,8 @@ namespace Kardx.UI.Components
             if (card == null || card.Owner == null)
                 return false;
 
-            var handCards = card.Owner.Hand;
-            foreach (var handCard in handCards)
-            {
-                if (handCard == card)
-                    return true;
-            }
-            return false;
+            var hand = card.Owner.Hand;
+            return hand.Contains(card);
         }
 
         // Helper method to check if a card is on the battlefield
@@ -155,12 +150,7 @@ namespace Kardx.UI.Components
                 
             // Check if the card is in the battlefield
             var battlefield = card.Owner.Battlefield;
-            foreach (var battlefieldCard in battlefield)
-            {
-                if (battlefieldCard == card)
-                    return true;
-            }
-            return false;
+            return battlefield.Contains(card);
         }
 
         public bool IsValidDropTarget(Card card)

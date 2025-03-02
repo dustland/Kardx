@@ -76,23 +76,23 @@ namespace Kardx.Core.Planning
             var strategy = new Strategy("Make simple moves based on available cards and credits");
 
             // Get the current player from the board
-            Player currentPlayer = board.CurrentPlayer;
+            Player currentPlayer = board.CurrentTurnPlayer;
 
             // Create a simulated state for planning without modifying the actual player state
             int simulatedCredits = currentPlayer.Credits;
-            bool[] simulatedOccupiedSlots = new bool[Player.BATTLEFIELD_SLOT_COUNT];
+            bool[] simulatedOccupiedSlots = new bool[Battlefield.SLOT_COUNT];
 
             // Initialize the simulated occupied slots based on the current battlefield state
-            for (int i = 0; i < currentPlayer.Battlefield.Count; i++)
+            for (int i = 0; i < Battlefield.SLOT_COUNT; i++)
             {
-                simulatedOccupiedSlots[i] = currentPlayer.Battlefield[i] != null;
+                simulatedOccupiedSlots[i] = !currentPlayer.Battlefield.IsSlotEmpty(i);
             }
 
             // Check if the player has cards in hand
             if (currentPlayer.Hand.Count > 0)
             {
                 // Sort cards by deployment cost (cheapest first)
-                var sortedCards = currentPlayer.Hand.OrderBy(c => c.DeploymentCost).ToList();
+                var sortedCards = currentPlayer.Hand.Cards.OrderBy(c => c.DeploymentCost).ToList();
 
                 // Try to deploy cards that the player can afford
                 foreach (var card in sortedCards)

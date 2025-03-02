@@ -1,238 +1,166 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using Kardx.Utils;
+using UnityEngine;
 
 namespace Kardx.Core
 {
+    /// <summary>
+    /// Represents the game board that manages players and game state.
+    /// </summary>
     public class Board
     {
-        private Player[] players = new Player[2];
-        private List<GameEffect> activeEffects = new();
+        private Player player;
+        private Player opponent;
+        private Player currentTurnPlayer;
         private int turnNumber;
-        private string currentPlayerId;
-        private ILogger logger;
-
-        // Public properties
-        public Player Player => players[0];
-        public Player Opponent => players[1];
-        public int TurnNumber => turnNumber;
-        public string CurrentPlayerId => currentPlayerId;
-        public Player CurrentPlayer => currentPlayerId == players[0].Id ? players[0] : players[1];
-        public Player Player1 => players[0];
-        public Player Player2 => players[1];
-
-        public Board(Player player, Player opponent, ILogger logger = null)
+        
+        // Events
+        public event Action<Player> OnTurnStarted;
+        public event Action<Player> OnTurnEnded;
+        
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Board"/> class.
+        /// </summary>
+        /// <param name="player">The player.</param>
+        /// <param name="opponent">The opponent.</param>
+        public Board(Player player, Player opponent)
         {
-            players[0] = player;
-            players[1] = opponent;
-            turnNumber = 1;
-            currentPlayerId = player.Id;
-            this.logger = logger;
-
-            // Set the board reference in the player objects
+            this.player = player;
+            this.opponent = opponent;
+            
+            // Set board reference in players
             player.SetBoard(this);
             opponent.SetBoard(this);
+            
+            // Start with player's turn
+            currentTurnPlayer = player;
+            turnNumber = 1;
         }
-
-        // State management methods
-
+        
         /// <summary>
-        /// Sets the current player ID.
+        /// Gets the player.
         /// </summary>
-        /// <param name="playerId">The ID of the player to set as current.</param>
-        public void SetCurrentPlayer(string playerId)
+        public Player Player => player;
+        
+        /// <summary>
+        /// Gets the opponent.
+        /// </summary>
+        public Player Opponent => opponent;
+        
+        /// <summary>
+        /// Gets the current turn player.
+        /// </summary>
+        public Player CurrentTurnPlayer => currentTurnPlayer;
+        
+        /// <summary>
+        /// Gets the current turn number.
+        /// </summary>
+        public int TurnNumber => turnNumber;
+        
+        /// <summary>
+        /// Checks if a player is the opponent.
+        /// </summary>
+        /// <param name="player">The player to check.</param>
+        /// <returns>True if the player is the opponent, false otherwise.</returns>
+        public bool IsOpponent(Player player)
         {
-            if (playerId == Player.Id || playerId == Opponent.Id)
+            return player == opponent;
+        }
+        
+        /// <summary>
+        /// Checks if it's the player's turn.
+        /// </summary>
+        /// <returns>True if it's the player's turn, false otherwise.</returns>
+        public bool IsPlayerTurn()
+        {
+            return currentTurnPlayer == player;
+        }
+        
+        /// <summary>
+        /// Starts a new turn for the next player.
+        /// </summary>
+        public void StartNextTurn()
+        {
+            // End current turn
+            OnTurnEnded?.Invoke(currentTurnPlayer);
+            
+            // Switch current player
+            currentTurnPlayer = (currentTurnPlayer == player) ? opponent : player;
+            
+            // Increment turn number if it's the player's turn
+            if (currentTurnPlayer == player)
             {
-                currentPlayerId = playerId;
+                turnNumber++;
             }
-            else
+            
+            // Add credits for the new turn
+            currentTurnPlayer.AddCredits(Player.CREDITS_PER_TURN);
+            
+            // Draw a card for the new turn
+            currentTurnPlayer.DrawCard();
+            
+            // Notify turn started
+            OnTurnStarted?.Invoke(currentTurnPlayer);
+        }
+        
+        /// <summary>
+        /// Gets the other player.
+        /// </summary>
+        /// <param name="player">The current player.</param>
+        /// <returns>The other player.</returns>
+        public Player GetOtherPlayer(Player player)
+        {
+            return player == this.player ? opponent : this.player;
+        }
+        
+        /// <summary>
+        /// Processes end of turn effects for all cards in play.
+        /// </summary>
+        public void ProcessEndOfTurnEffects()
+        {
+            // Process all cards in play to check for end of turn effects
+            foreach (var card in player.GetCardsInPlay())
             {
-                throw new ArgumentException($"Invalid player ID: {playerId}");
+                card.ProcessEndOfTurnEffects();
+            }
+            
+            foreach (var card in opponent.GetCardsInPlay())
+            {
+                card.ProcessEndOfTurnEffects();
             }
         }
-
+        
+        /// <summary>
+        /// Processes start of turn effects for all cards in play.
+        /// </summary>
+        public void ProcessStartOfTurnEffects()
+        {
+            // Process all cards in play to check for start of turn effects
+            foreach (var card in player.GetCardsInPlay())
+            {
+                card.ProcessStartOfTurnEffects();
+            }
+            
+            foreach (var card in opponent.GetCardsInPlay())
+            {
+                card.ProcessStartOfTurnEffects();
+            }
+        }
+        
+        /// <summary>
+        /// Switches the current player to the other player.
+        /// </summary>
+        public void SwitchCurrentPlayer()
+        {
+            currentTurnPlayer = GetOtherPlayer(currentTurnPlayer);
+        }
+        
         /// <summary>
         /// Increments the turn number.
         /// </summary>
         public void IncrementTurnNumber()
         {
             turnNumber++;
-        }
-
-        /// <summary>
-        /// Switches the current player to the other player.
-        /// </summary>
-        public void SwitchCurrentPlayer()
-        {
-            currentPlayerId = currentPlayerId == Player.Id ? Opponent.Id : Player.Id;
-        }
-
-        /// <summary>
-        /// Gets the ID of the next player (the player who is not the current player).
-        /// </summary>
-        /// <returns>The ID of the next player.</returns>
-        public string GetNextPlayerId()
-        {
-            // Simple two-player implementation
-            return currentPlayerId == Player.Id ? Opponent.Id : Player.Id;
-        }
-
-        // Effect management
-        public void AddGameEffect(GameEffect effect)
-        {
-            if (effect != null)
-            {
-                activeEffects.Add(effect);
-            }
-        }
-
-        public void RemoveGameEffect(GameEffect effect)
-        {
-            activeEffects.Remove(effect);
-        }
-
-        public void ClearExpiredEffects()
-        {
-            activeEffects.RemoveAll(e => !e.IsActive());
-        }
-
-        /// <summary>
-        /// Processes the effects of an Order card when it is deployed.
-        /// </summary>
-        /// <param name="orderCard">The Order card to process</param>
-        /// <param name="player">The player who deployed the card</param>
-        /// <param name="targets">Optional targets for the card's abilities</param>
-        /// <returns>True if the card's effects were processed successfully</returns>
-        public bool ProcessOrderCardEffect(Card orderCard, Player player, List<Card> targets = null)
-        {
-            if (orderCard == null || player == null)
-            {
-                logger?.Log("[Board] Cannot process null order card or player");
-                return false;
-            }
-
-            if (orderCard.CardType.Category != CardCategory.Order)
-            {
-                logger?.Log($"[Board] Card {orderCard.Title} is not an Order card");
-                return false;
-            }
-
-            logger?.Log($"[Board] Processing Order card {orderCard.Title} effects");
-
-            // If no targets were provided, try to find appropriate targets based on the abilities
-            if (targets == null || targets.Count == 0)
-            {
-                targets = new List<Card>();
-
-                // Get the opponent of the player who played the card
-                Player opponent = player.Id == Player.Id ? Opponent : Player;
-
-                // Add all opponent's cards on the battlefield as potential targets
-                foreach (var card in opponent.GetCardsInPlay())
-                {
-                    if (card != null)
-                    {
-                        targets.Add(card);
-                    }
-                }
-            }
-
-            // Activate all abilities of the order card
-            bool effectsProcessed = orderCard.ActivateAllAbilities(targets);
-
-            if (effectsProcessed)
-            {
-                logger?.Log($"[Board] Order card {orderCard.Title} effects processed successfully");
-            }
-            else
-            {
-                logger?.Log($"[Board] Failed to process Order card {orderCard.Title} effects");
-            }
-
-            return effectsProcessed;
-        }
-
-        /// <summary>
-        /// Processes effects that occur at the end of a turn.
-        /// </summary>
-        public void ProcessEndOfTurnEffects()
-        {
-            // Process game effects
-            foreach (var effect in activeEffects.ToList())
-            {
-                effect.OnTurnEnd(turnNumber);
-                if (!effect.IsActive())
-                {
-                    activeEffects.Remove(effect);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Processes effects that occur at the start of a turn.
-        /// </summary>
-        public void ProcessStartOfTurnEffects()
-        {
-            // Process game effects
-            foreach (var effect in activeEffects)
-            {
-                effect.OnTurnStart(turnNumber);
-            }
-        }
-
-        // Reset state
-        public void Reset()
-        {
-            // Reset players
-            players[0] = null;
-            players[1] = null;
-
-            // Clear effects
-            activeEffects.Clear();
-
-            // Reset turn state
-            turnNumber = 1;
-            currentPlayerId = players[0].Id;
-        }
-    }
-
-    public class GameEffect
-    {
-        private string id;
-        private string description;
-        private int duration; // -1 for permanent effects
-
-        public string Id => id;
-        public string Description => description;
-        public int Duration => duration;
-
-        public GameEffect(string id, string description, int duration)
-        {
-            this.id = id;
-            this.description = description;
-            this.duration = duration;
-        }
-
-        public bool IsActive()
-        {
-            return duration == -1 || duration > 0;
-        }
-
-        public bool IsOpponent(Player player) => player.Id == Opponent.Id;
-
-        public virtual void OnTurnStart(int turnNumber)
-        {
-            // Override in derived classes
-        }
-
-        public virtual void OnTurnEnd(int turnNumber)
-        {
-            if (duration > 0)
-            {
-                duration--;
-            }
         }
     }
 }

@@ -145,14 +145,14 @@ namespace Kardx.Core.Planning
                 throw new ArgumentNullException(nameof(board));
 
             // Get the current player from the board
-            Player currentPlayer = board.CurrentPlayer;
+            Player currentPlayer = board.CurrentTurnPlayer;
 
             // Execute the action based on its type
             switch (action.Type)
             {
                 case DecisionType.DeployCard:
                     // Find the card in the player's hand
-                    Card cardToDeploy = FindCardById(currentPlayer.Hand, action.TargetCardId);
+                    Card cardToDeploy = FindCardById(currentPlayer.Hand.Cards, action.TargetCardId);
                     if (cardToDeploy != null)
                     {
                         // Use the target slot from the decision
@@ -176,9 +176,9 @@ namespace Kardx.Core.Planning
                             {
                                 // Fall back to direct method if MatchManager is not available
                                 logger?.LogWarning(
-                                    "MatchManager not available, using direct Player.DeployCard method which won't update UI"
+                                    "MatchManager not available, using direct Player.DeployUnitCard method which won't update UI"
                                 );
-                                success = currentPlayer.DeployCard(cardToDeploy, targetSlot);
+                                success = currentPlayer.DeployUnitCard(cardToDeploy, targetSlot);
                                 logger?.Log(
                                     $"Deployed card {cardToDeploy.Title} to slot {targetSlot} directly, success: {success}"
                                 );
@@ -233,10 +233,10 @@ namespace Kardx.Core.Planning
 
                 case DecisionType.DiscardCard:
                     // Find the card in the player's hand
-                    Card cardToDiscard = FindCardById(currentPlayer.Hand, action.TargetCardId);
+                    Card cardToDiscard = FindCardById(currentPlayer.Hand.Cards, action.TargetCardId);
                     if (cardToDiscard != null)
                     {
-                        currentPlayer.DiscardFromHand(cardToDiscard);
+                        currentPlayer.DiscardCard(cardToDiscard);
                         logger?.Log($"Discarded card: {cardToDiscard.Title}");
                     }
                     break;

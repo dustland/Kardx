@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using Kardx.UI.Scenes;
 
 namespace Kardx.UI.Components
 {
-    using Kardx.UI.Scenes;
-    using Card = Kardx.Core.Card;
+    using Kardx.Core;
 
     [RequireComponent(typeof(CardView))]
     public class AbilityDragHandler
@@ -23,7 +23,7 @@ namespace Kardx.UI.Components
         private AttackArrow attackArrow;
         private Canvas canvas;
         private CanvasGroup canvasGroup;
-        private DeployDragHandler deployDragHandler;
+        private UnitDeployDragHandler deployDragHandler;
         private MatchView matchView;
         private Vector2 pointerStartPosition;
         private bool isDragging = false;
@@ -34,14 +34,14 @@ namespace Kardx.UI.Components
         // Event to notify when an attack is initiated
         public event Action<Card, Card> OnAttackInitiated;
 
-        // Events for drag state (similar to DeployDragHandler)
+        // Events for drag state
         public event Action OnDragStarted;
         public event Action<bool> OnDragEnded;
 
         private void Awake()
         {
             cardView = GetComponent<CardView>();
-            deployDragHandler = GetComponent<DeployDragHandler>();
+            deployDragHandler = GetComponent<UnitDeployDragHandler>();
 
             // Find Canvas
             canvas = GetComponentInParent<Canvas>();
@@ -52,15 +52,14 @@ namespace Kardx.UI.Components
             }
 
             // Find CanvasGroup
-            canvasGroup = GetComponentInParent<CanvasGroup>();
+            canvasGroup = GetComponent<CanvasGroup>();
             if (canvasGroup == null)
             {
-                Debug.LogError("[AbilityDragHandler] No CanvasGroup found in parents.");
-                return;
+                canvasGroup = gameObject.AddComponent<CanvasGroup>();
             }
 
             // Find MatchView
-            matchView = FindObjectOfType<MatchView>();
+            matchView = GetComponentInParent<MatchView>();
             if (matchView == null)
             {
                 Debug.LogError("[AbilityDragHandler] No MatchView found in the scene.");
@@ -82,54 +81,106 @@ namespace Kardx.UI.Components
                 attackArrow = arrowObj.AddComponent<AttackArrow>();
             }
         }
-
-        private void OnEnable()
+        
+        // Additional initialization method
+        public void Initialize(MatchView matchView)
         {
-            // Check if this component should be enabled based on card state
+            this.matchView = matchView;
+            
+            // Find Canvas if not already set
+            if (canvas == null)
+            {
+                canvas = GetComponentInParent<Canvas>();
+            }
+            
+            // Verify we have arrow reference
+            if (attackArrow == null)
+            {
+                GameObject arrowObj = GameObject.Find("AttackArrow");
+                if (arrowObj != null)
+                {
+                    attackArrow = arrowObj.GetComponent<AttackArrow>();
+                }
+            }
+            
+            // Set component state appropriately
             UpdateComponentState();
         }
 
-        private void Update()
+        private void OnEnable()
         {
-            // We don't need to update component state every frame
-            // UpdateComponentState will be called when needed:
-            // - When the component is enabled (OnEnable)
-            // - When explicitly requested via SendMessage
-            // - When game state changes (turn changes, card state changes)
+            // Subscribe to events
         }
 
+        private void OnDisable()
+        {
+            // Unsubscribe from events
+            if (isDragging)
+            {
+                EndDragging();
+            }
+        }
+        
+        // Helper method to cleanly end the dragging state
+        private void EndDragging()
+        {
+            isDragging = false;
+            
+            if (attackArrow != null)
+            {
+                attackArrow.StopDrawing();
+            }
+            
+            // Clear any highlights
+            if (matchView != null)
+            {
+                matchView.ClearAllHighlights();
+            }
+            
+            OnDragEnded?.Invoke(false);
+        }
+        
+        // Updates component state based on card abilities
         private void UpdateComponentState()
         {
+            if (cardView == null || cardView.Card == null)
+            {
+                enabled = false;
+                return;
+            }
+            
+            // Only enable this drag handler if the card has abilities and can attack
             bool shouldBeEnabled = CanCardAttack();
-
-            // Debug log to help diagnose issues with enabling/disabling
-            // Debug.Log(
-            //     $"[AbilityDragHandler] Card {(cardView?.Card?.Title ?? "unknown")} CanCardAttack: {shouldBeEnabled}"
-            // );
-
-            // Enable this component only when the card can attack
             enabled = shouldBeEnabled;
-
-            // If we have a DeployDragHandler, make sure it's disabled when this component is enabled
+            
+            // If we have a deploy drag handler, make sure it's disabled when this component is enabled
             if (deployDragHandler != null)
             {
-                // Only enable DeployDragHandler when this card is in hand, not on battlefield
-                bool isInHand = false;
-                if (cardView.Card != null && cardView.Card.Owner != null)
-                {
-                    var handCards = cardView.Card.Owner.Hand;
-                    foreach (var card in handCards)
-                    {
-                        if (card == cardView.Card)
-                        {
-                            isInHand = true;
-                            break;
-                        }
-                    }
-                }
-
-                deployDragHandler.enabled = isInHand && !shouldBeEnabled;
+                deployDragHandler.enabled = !shouldBeEnabled;
             }
+        }
+        
+        // Determines if the card can attack (is on battlefield, player's turn, etc.)
+        private bool CanCardAttack()
+        {
+            if (cardView == null || cardView.Card == null || matchView == null)
+                return false;
+                
+            var card = cardView.Card;
+            
+            // Check if it's the player's turn
+            if (!matchView.IsPlayerTurn())
+                return false;
+                
+            // Check if the card is on the player's battlefield
+            if (!matchView.GetPlayer().Battlefield.Contains(card))
+                return false;
+                
+            // Check if the card has already attacked this turn
+            if (card.HasAttackedThisTurn)
+                return false;
+                
+            return true;
         }
 
         public void OnPointerDown(PointerEventData eventData)
@@ -199,240 +250,38 @@ namespace Kardx.UI.Components
 
                     // Initiate the attack
                     InitiateAttack(cardView.Card, targetCard);
-
-                    // Hide the arrow after a short delay
-                    Invoke("HideArrow", 0.5f);
-                }
-                else
-                {
-                    HideArrow();
                 }
             }
             else
             {
-                HideArrow();
+                // Cancel the attack
+                attackArrow.CancelDrawing();
             }
 
-            // Clear any highlights
-            ClearHighlights();
+            // Clear all highlights
+            ClearAllHighlights();
         }
 
         public void OnBeginDrag(PointerEventData eventData)
         {
-            Debug.Log(
-                $"[AbilityDragHandler] OnBeginDrag called for {(cardView?.Card?.Title ?? "unknown")}"
-            );
-
-            // Store original state for resetting after drag
-            originalParent = transform.parent;
-            originalPosition = transform.position;
-
-            // Disable blocksRaycasts during drag
-            if (canvasGroup != null)
-            {
-                canvasGroup.blocksRaycasts = false;
-                Debug.Log("[AbilityDragHandler] Disabled blocksRaycasts for drag");
-            }
-
-            // Show the attack arrow
-            ShowArrow();
-
-            // Highlight valid targets
-            HighlightValidTargets(eventData);
-
-            OnDragStarted?.Invoke();
-        }
-
-        public void OnEndDrag(PointerEventData eventData)
-        {
-            Debug.Log($"[AbilityDragHandler] OnEndDrag called for {cardView.Card.Title}");
-
-            // Re-enable blocksRaycasts to allow the card to be clicked again
-            canvasGroup.blocksRaycasts = true;
-
-            // Clear all highlights
-            ClearHighlights();
-
-            // Check if we dropped on a valid target
-            var raycastResults = new System.Collections.Generic.List<RaycastResult>();
-            EventSystem.current.RaycastAll(eventData, raycastResults);
-
-            bool wasSuccessful = false;
-            Card targetCard = null;
-
-            foreach (var hit in raycastResults)
-            {
-                var opponentSlot = hit.gameObject.GetComponent<OpponentCardSlot>();
-                if (opponentSlot != null)
-                {
-                    // Get the card at this position
-                    var cardAtSlot = GetCardAtOpponentSlot(opponentSlot);
-                    if (cardAtSlot != null && IsValidAttackTarget(cardAtSlot))
-                    {
-                        targetCard = cardAtSlot;
-                        wasSuccessful = true;
-                        Debug.Log($"[AbilityDragHandler] Valid target found: {targetCard.Title}");
-                        break;
-                    }
-                }
-            }
-
-            // Return to original position
-            transform.SetParent(originalParent);
-            transform.position = originalPosition;
-
-            // If we found a valid target, initiate the attack
-            if (wasSuccessful && targetCard != null)
-            {
-                Debug.Log(
-                    $"[AbilityDragHandler] Initiating attack from {cardView.Card.Title} to {targetCard.Title}"
-                );
-                OnAttackInitiated?.Invoke(cardView.Card, targetCard);
-            }
-
-            OnDragEnded?.Invoke(wasSuccessful);
-        }
-
-        private void HideArrow()
-        {
-            attackArrow.Hide();
-        }
-
-        private void ShowArrow()
-        {
-            if (attackArrow != null)
-            {
-                attackArrow.SetSource(transform);
-                attackArrow.StartDrawing();
-                Debug.Log("[AbilityDragHandler] Attack arrow shown");
-            }
-            else
-            {
-                Debug.LogWarning("[AbilityDragHandler] Attack arrow is null, cannot show");
-            }
-        }
-
-        private bool CanCardAttack()
-        {
-            // Check if this card is on the battlefield and belongs to the player
-            if (cardView == null || cardView.Card == null || cardView.Card.Owner == null)
-            {
-                Debug.Log("[AbilityDragHandler] Card or owner is null, can't attack");
-                return false;
-            }
-
-            // Check if this card is on the battlefield
-            var battlefieldCards = cardView.Card.Owner.Battlefield;
-            bool isOnBattlefield = false;
-            foreach (var card in battlefieldCards)
-            {
-                if (card == cardView.Card)
-                {
-                    isOnBattlefield = true;
-                    break;
-                }
-            }
-            if (!isOnBattlefield)
-            {
-                Debug.Log($"[AbilityDragHandler] Card {cardView.Card.Title} is not on battlefield");
-                return false;
-            }
-
-            // Check if this card is the current player's card
-            bool isCurrentPlayer = cardView.Card.Owner == matchView.GetCurrentPlayer();
-            if (!isCurrentPlayer)
-            {
-                Debug.Log(
-                    $"[AbilityDragHandler] Card {cardView.Card.Title} is not owned by current player"
-                );
-                return false;
-            }
-
-            // Check if the card has already attacked this turn
-            if (cardView.Card.HasAttackedThisTurn)
-            {
-                Debug.Log(
-                    $"[AbilityDragHandler] Card {cardView.Card.Title} has already attacked this turn"
-                );
-                return false;
-            }
-
-            // Debug.Log($"[AbilityDragHandler] Card {cardView.Card.Title} can attack");
-            return true;
+            // This is required for the interface but we handle drag start in OnDrag
         }
 
         private void HighlightValidTargets(PointerEventData eventData)
         {
-            // Find all valid target slots (opponent card slots)
-            var opponentSlots = canvas.GetComponentsInChildren<OpponentCardSlot>(true);
+            if (matchView == null || cardView.Card == null)
+                return;
 
-            foreach (var slot in opponentSlots)
-            {
-                // Get the card at this position
-                var targetCard = GetCardAtOpponentSlot(slot);
-                if (targetCard != null && IsValidAttackTarget(targetCard))
-                {
-                    slot.SetHighlight(true);
-                }
-                else
-                {
-                    slot.SetHighlight(false);
-                }
-            }
+            // Ask the match view to highlight valid targets
+            matchView.HighlightValidTargets(cardView.Card);
         }
 
-        private void ClearHighlights()
+        private void ClearAllHighlights()
         {
-            // Clear highlights from opponent slots
-            var opponentSlots = canvas.GetComponentsInChildren<OpponentCardSlot>(true);
-            foreach (var slot in opponentSlots)
+            if (matchView != null)
             {
-                slot.SetHighlight(false);
+                matchView.ClearAllHighlights();
             }
-        }
-
-        private Card GetCardAtOpponentSlot(OpponentCardSlot slot)
-        {
-            if (matchView == null)
-                return null;
-
-            var opponent = matchView.GetOpponent();
-            if (opponent == null)
-                return null;
-
-            int position = slot.GetPosition();
-            if (position < 0 || position >= opponent.Battlefield.Count)
-                return null;
-
-            return opponent.Battlefield[position];
-        }
-
-        private bool IsValidAttackTarget(Card targetCard)
-        {
-            if (targetCard == null || targetCard.Owner == null || cardView.Card == null)
-                return false;
-
-            // Can't attack own cards
-            if (targetCard.Owner == cardView.Card.Owner)
-                return false;
-
-            // Can only attack cards on the battlefield
-            var battlefieldCards = targetCard.Owner.Battlefield;
-            bool isOnBattlefield = false;
-            foreach (var card in battlefieldCards)
-            {
-                if (card == targetCard)
-                {
-                    isOnBattlefield = true;
-                    break;
-                }
-            }
-            if (!isOnBattlefield)
-                return false;
-
-            // Add any other attack validation rules here
-
-            return true;
         }
 
         private Card FindTargetCardUnderPointer(PointerEventData eventData)
@@ -441,16 +290,17 @@ namespace Kardx.UI.Components
             List<RaycastResult> results = new List<RaycastResult>();
             EventSystem.current.RaycastAll(eventData, results);
 
-            foreach (RaycastResult result in results)
+            foreach (var result in results)
             {
-                // Skip the current card
+                // Skip this card itself
                 if (result.gameObject == gameObject)
                     continue;
 
-                CardView cv = result.gameObject.GetComponent<CardView>();
-                if (cv != null && cv.Card != null)
+                // Look for a CardView component
+                CardView targetCardView = result.gameObject.GetComponent<CardView>();
+                if (targetCardView != null && targetCardView.Card != null)
                 {
-                    return cv.Card;
+                    return targetCardView.Card;
                 }
             }
 
@@ -459,31 +309,45 @@ namespace Kardx.UI.Components
 
         private CardView FindCardViewForCard(Card card)
         {
-            // Find all CardViews in the scene
-            CardView[] allCardViews = canvas.GetComponentsInChildren<CardView>(true);
+            if (card == null)
+                return null;
 
-            foreach (CardView cv in allCardViews)
+            // Find all CardViews in the scene
+            CardView[] cardViews = FindObjectsByType<CardView>(FindObjectsSortMode.None);
+            foreach (var cv in cardViews)
             {
                 if (cv.Card == card)
-                {
                     return cv;
-                }
             }
 
             return null;
         }
 
-        private void InitiateAttack(Card attackerCard, Card defenderCard)
+        private bool IsValidAttackTarget(Card targetCard)
         {
-            Debug.Log(
-                $"[AbilityDragHandler] Initiating attack from {attackerCard.Title} to {defenderCard.Title}"
-            );
+            if (cardView.Card == null || targetCard == null || matchView == null)
+                return false;
+
+            // Check if this is a valid attack target
+            return matchView.CanTargetCard(cardView.Card, targetCard);
+        }
+
+        private void InitiateAttack(Card attackerCard, Card targetCard)
+        {
+            if (attackerCard == null || targetCard == null || matchView == null)
+                return;
 
             // Notify listeners about the attack
-            OnAttackInitiated?.Invoke(attackerCard, defenderCard);
+            OnAttackInitiated?.Invoke(attackerCard, targetCard);
 
-            // Call the MatchView to handle the attack
-            matchView.AttackCard(attackerCard, defenderCard);
+            // Use the match view to handle the attack
+            matchView.TargetCard(attackerCard, targetCard);
+
+            // Mark the card as having attacked this turn
+            attackerCard.HasAttackedThisTurn = true;
+
+            // Update the component state
+            UpdateComponentState();
         }
     }
 }

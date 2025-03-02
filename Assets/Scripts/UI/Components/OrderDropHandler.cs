@@ -126,7 +126,7 @@ namespace Kardx.UI.Components
             if (currentPlayer == null)
                 return false;
 
-            return currentPlayer.Hand.Any(c => c == card);
+            return currentPlayer.Hand.Cards.Any(c => c == card);
         }
 
         /// <summary>

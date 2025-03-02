@@ -20,12 +20,12 @@ namespace Kardx.Core
 
         // Public properties
         public bool IsMatchInProgress { get; private set; }
-        public string CurrentPlayerId => board.CurrentPlayerId;
+        public string CurrentPlayerId => board?.CurrentTurnPlayer?.Id;
         public int TurnNumber => board.TurnNumber;
         public Player Player => board.Player;
         public Player Opponent => board.Opponent;
         public Board Board => board;
-        public Player CurrentPlayer => board.CurrentPlayer;
+        public Player CurrentPlayer => board.CurrentTurnPlayer;
 
         // Essential events for UI updates
         public event Action<Card, int> OnCardDeployed;
@@ -102,7 +102,7 @@ namespace Kardx.Core
             if (board == null)
                 throw new InvalidOperationException("Match not started");
 
-            var currentPlayer = board.CurrentPlayer;
+            var currentPlayer = board.CurrentTurnPlayer;
             logger?.Log($"[MatchManager] Starting first turn for player {currentPlayer.Id}");
 
             // Initialize the player for the first turn
@@ -128,7 +128,7 @@ namespace Kardx.Core
             currentPlayer.ResetCardAttackStatus();
 
             // If it's the opponent's turn, process it automatically
-            if (currentPlayer.Id == board.Player2.Id)
+            if (currentPlayer.Id == board.Opponent.Id)
             {
                 ProcessOpponentTurn();
             }
@@ -143,7 +143,7 @@ namespace Kardx.Core
                 throw new InvalidOperationException("Match not started");
 
             // End the current turn
-            var currentPlayer = board.CurrentPlayer;
+            var currentPlayer = board.CurrentTurnPlayer;
             logger?.Log($"[MatchManager] Ending turn for player {currentPlayer.Id}");
 
             // Process end of turn effects
@@ -157,7 +157,7 @@ namespace Kardx.Core
             board.SwitchCurrentPlayer();
             board.IncrementTurnNumber();
 
-            var nextPlayer = board.CurrentPlayer;
+            var nextPlayer = board.CurrentTurnPlayer;
             logger?.Log(
                 $"[MatchManager] Starting turn {board.TurnNumber} for player {nextPlayer.Id}"
             );
@@ -169,7 +169,7 @@ namespace Kardx.Core
             logger?.Log($"[MatchManager] Added {creditsToAdd} credits to player {nextPlayer.Id}");
 
             // Draw a card for the player
-            Card drawnCard = nextPlayer.DrawCard(nextPlayer.Id == board.Player2.Id);
+            Card drawnCard = nextPlayer.DrawCard(nextPlayer.Id == board.Opponent.Id);
             if (drawnCard != null)
             {
                 OnCardDrawn?.Invoke(drawnCard);
@@ -183,11 +183,11 @@ namespace Kardx.Core
             OnTurnStarted?.Invoke(this, nextPlayer);
 
             // Reset card attack status for both players
-            board.Player1.ResetCardAttackStatus();
-            board.Player2.ResetCardAttackStatus();
+            board.Player.ResetCardAttackStatus();
+            board.Opponent.ResetCardAttackStatus();
 
             // If it's the opponent's turn, process it automatically
-            if (nextPlayer.Id == board.Player2.Id)
+            if (nextPlayer.Id == board.Opponent.Id)
             {
                 ProcessOpponentTurn();
             }
@@ -242,7 +242,7 @@ namespace Kardx.Core
                 return false;
             }
 
-            var currentPlayer = board.CurrentPlayer;
+            var currentPlayer = board.CurrentTurnPlayer;
             if (currentPlayer == null)
             {
                 logger?.LogError("[MatchManager] Cannot deploy card: current player is null");
@@ -256,12 +256,18 @@ namespace Kardx.Core
                 return false;
             }
 
-            // Count non-null slots in the battlefield instead of using Count
-            var occupiedSlots = currentPlayer.Battlefield.Count(c => c != null);
+            int occupiedSlots = 0;
+            for (int i = 0; i < Battlefield.SLOT_COUNT; i++)
+            {
+                if (!currentPlayer.Battlefield.IsSlotEmpty(i))
+                {
+                    occupiedSlots++;
+                }
+            }
 
             return currentPlayer.Hand.Contains(card)
                 && currentPlayer.Credits >= card.DeploymentCost
-                && occupiedSlots < Player.BATTLEFIELD_SLOT_COUNT;
+                && occupiedSlots < Battlefield.SLOT_COUNT;
         }
 
         public bool CanDeployOrderCard(Card card)
@@ -272,7 +278,7 @@ namespace Kardx.Core
                 return false;
             }
 
-            var currentPlayer = board.CurrentPlayer;
+            var currentPlayer = board.CurrentTurnPlayer;
             if (currentPlayer == null)
             {
                 logger?.LogError("[MatchManager] Cannot deploy order card: current player is null");
@@ -307,7 +313,7 @@ namespace Kardx.Core
             if (!CanDeployUnitCard(card))
             {
                 // Add more detailed logging to help diagnose the issue
-                var player = board.CurrentPlayer;
+                var player = board.CurrentTurnPlayer;
                 if (card == null)
                 {
                     logger?.LogError("[MatchManager] Cannot deploy unit card: card is null");
@@ -324,13 +330,13 @@ namespace Kardx.Core
                         $"[MatchManager] Cannot deploy unit card {card.Title}: insufficient credits (has {player.Credits}, needs {card.DeploymentCost})"
                     );
                 }
-                else if (position < 0 || position >= Player.BATTLEFIELD_SLOT_COUNT)
+                else if (position < 0 || position >= Battlefield.SLOT_COUNT)
                 {
                     logger?.LogError(
                         $"[MatchManager] Cannot deploy unit card {card.Title}: invalid position {position}"
                     );
                 }
-                else if (player.Battlefield[position] != null)
+                else if (!player.Battlefield.IsSlotEmpty(position))
                 {
                     logger?.LogError(
                         $"[MatchManager] Cannot deploy unit card {card.Title}: position {position} is already occupied"
@@ -339,8 +345,8 @@ namespace Kardx.Core
                 return false;
             }
 
-            var currentPlayer = board.CurrentPlayer;
-            return currentPlayer.DeployCard(card, position);
+            var currentPlayer = board.CurrentTurnPlayer;
+            return currentPlayer.DeployUnitCard(card, position);
         }
 
         public bool DeployOrderCard(Card card)
@@ -348,7 +354,7 @@ namespace Kardx.Core
             if (!CanDeployOrderCard(card))
             {
                 // Add more detailed logging to help diagnose the issue
-                var player = board.CurrentPlayer;
+                var player = board.CurrentTurnPlayer;
                 if (card == null)
                 {
                     logger?.LogError("[MatchManager] Cannot deploy order card: card is null");
@@ -368,9 +374,9 @@ namespace Kardx.Core
                 return false;
             }
 
-            var currentPlayer = board.CurrentPlayer;
+            var currentPlayer = board.CurrentTurnPlayer;
             // Use a special position value (-1) for order cards
-            return currentPlayer.DeployCard(card, -1);
+            return currentPlayer.DeployOrderCard(card);
         }
 
         // For backward compatibility

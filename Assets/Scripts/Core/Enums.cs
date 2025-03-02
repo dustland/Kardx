@@ -5,7 +5,7 @@ namespace Kardx.Core
         Unit, // Represents a deployable unit
         Order, // Trigger a one-time effect and are then discarded
         Countermeasure, // can be activated to cancel out opponent Orders
-        Headquarter, // Headquarter is a special card that can be deployed on the battlefield and is not a unit
+        Headquarters, // Headquarters is a special card that can be deployed on the battlefield and is not a unit
     }
 
     public enum Faction

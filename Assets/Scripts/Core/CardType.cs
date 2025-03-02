@@ -65,6 +65,8 @@ namespace Kardx.Core
         public string Subtype => subtype;
         public int DeploymentCost => deploymentCost;
         public int OperationCost => operationCost;
+        // For backward compatibility
+        public int Cost => DeploymentCost;
         public int BaseDefence
         {
             get => baseDefence;

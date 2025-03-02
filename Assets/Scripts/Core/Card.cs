@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using UnityEngine;
 
 namespace Kardx.Core
 {
@@ -16,6 +17,9 @@ namespace Kardx.Core
         private string currentAbilityId; // Current applied ability, should be one of the abilities in the card type
         private Player owner; // Reference to the Player who owns this card
         private bool hasAttackedThisTurn; // Whether this card has attacked this turn
+
+        // Events
+        public event Action<Card> OnDeath;
 
         // Public properties
         public Guid InstanceId => instanceId;
@@ -33,12 +37,28 @@ namespace Kardx.Core
         }
 
         // Computed properties
+        public bool IsUnitCard => CardType.Category == CardCategory.Unit;
+        public bool IsOrderCard => CardType.Category == CardCategory.Order;
+        public bool IsAlive => CurrentDefence > 0;
+        public int Cost => CardType.Cost;
         // When current defence is 0, the card is destroyed
         public int CurrentDefence
         {
             get => currentDefence;
-            private set => currentDefence = Math.Max(0, value);
+            set
+            {
+                bool wasAlive = IsAlive;
+                currentDefence = Math.Max(0, value);
+                if (wasAlive && !IsAlive)
+                {
+                    Debug.Log($"[Card] {Title} has been destroyed!");
+                    OnDeath?.Invoke(this);
+                }
+            }
         }
+
+        // Property to access card abilities
+        public IReadOnlyList<AbilityType> Abilities => CardType.Abilities;
 
         public int Defence => cardType.BaseDefence + GetAttributeModifier("defence");
         public int Attack => cardType.BaseAttack + GetAttributeModifier("attack");
@@ -207,6 +227,34 @@ namespace Kardx.Core
             }
 
             return anyActivated;
+        }
+
+        /// <summary>
+        /// Processes end of turn effects for this card.
+        /// </summary>
+        public void ProcessEndOfTurnEffects()
+        {
+            // Process any end of turn effects
+            // This could include processing modifiers, abilities, etc.
+            
+            // Example: Remove temporary modifiers that expire at end of turn
+            var expiredModifiers = modifiers.Where(m => m.ExpiresAtEndOfTurn).ToList();
+            foreach (var modifier in expiredModifiers)
+            {
+                RemoveModifier(modifier);
+            }
+        }
+        
+        /// <summary>
+        /// Processes start of turn effects for this card.
+        /// </summary>
+        public void ProcessStartOfTurnEffects()
+        {
+            // Process any start of turn effects
+            // This could include processing abilities that trigger at the start of a turn
+            
+            // Reset attack status for the new turn
+            hasAttackedThisTurn = false;
         }
 
         // Event handlers

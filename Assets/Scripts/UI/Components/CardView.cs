@@ -325,7 +325,7 @@ namespace Kardx.UI.Components
                     break;
                 case CardCategory.Countermeasure:
                     break;
-                case CardCategory.Headquarter:
+                case CardCategory.Headquarters:
                     break;
             }
         }
@@ -485,6 +485,21 @@ namespace Kardx.UI.Components
                 );
             }
         }
+        
+        // Method to set card interactable state
+        public void SetInteractable(bool interactable)
+        {
+            // Enable/disable canvas group interactivity
+            if (canvasGroup != null)
+            {
+                canvasGroup.interactable = interactable;
+                canvasGroup.blocksRaycasts = interactable;
+                canvasGroup.alpha = interactable ? 1f : 0.7f;
+            }
+            
+            // Update draggable state
+            SetDraggable(interactable && isDraggable);
+        }
 
         // Helper method to check if a card is on the battlefield
         private bool IsCardOnBattlefield()
@@ -503,7 +518,8 @@ namespace Kardx.UI.Components
             if (card == null || card.Owner == null)
                 return false;
 
-            var handCards = card.Owner.Hand;
+            // Use the Cards property instead of trying to iterate the Hand directly
+            var handCards = card.Owner.Hand.Cards;
             foreach (var handCard in handCards)
             {
                 if (handCard == card)
@@ -527,15 +543,26 @@ namespace Kardx.UI.Components
             ShowCardBack(faceDown);
         }
 
-        public void Initialize(Card card)
+        // Initialize the card with a Card object
+        public void Initialize(Card card, bool faceDown = false)
         {
             this.card = card;
             this.cardType = card?.CardType;
-
-            // Update the UI to reflect the card's current state
+            
+            // Set face down state
+            SetFaceDown(faceDown);
+            
+            // Update the UI
             UpdateUI();
         }
+        
+        // Method to set a card on this view
+        public void SetCard(Card card, bool faceDown = false)
+        {
+            Initialize(card, faceDown);
+        }
 
+        // Alternative initialization with CardType only
         public void Initialize(CardType cardType)
         {
             this.card = null;

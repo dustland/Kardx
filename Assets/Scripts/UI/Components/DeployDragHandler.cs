@@ -109,7 +109,7 @@ namespace Kardx.UI.Components
             // Check if the card can be deployed based on its type
             bool canDeploy =
                 cardView.Card.CardType.Category == CardCategory.Unit
-                    ? matchView.CanDeployUnitCard(cardView.Card)
+                    ? matchView.CanDeployUnitCard(cardView.Card, -1) // Pass a default value, actual slot is determined when dropping
                 : cardView.Card.CardType.Category == CardCategory.Order
                     ? matchView.CanDeployOrderCard(cardView.Card)
                 : false;
@@ -145,7 +145,7 @@ namespace Kardx.UI.Components
             // Update the card's position to follow the mouse/touch
             transform.position = eventData.position;
 
-            // For Order cards, we don't need to highlight any slots
+            // For Order cards, highlight the order drop zone
             if (cardView.Card.CardType.Category == CardCategory.Order)
             {
                 // Find and highlight the OrderDropHandler if it exists
@@ -157,7 +157,7 @@ namespace Kardx.UI.Components
                     // Clear any previously highlighted unit slot
                     if (lastHighlightedSlot != null)
                     {
-                        lastHighlightedSlot.SetHighlight(false);
+                        lastHighlightedSlot.SetHighlight(Color.clear, false);
                         lastHighlightedSlot = null;
                     }
                 }
@@ -171,7 +171,7 @@ namespace Kardx.UI.Components
             // Clear previous highlight
             if (lastHighlightedSlot != null)
             {
-                lastHighlightedSlot.SetHighlight(false);
+                lastHighlightedSlot.SetHighlight(Color.clear, false);
                 lastHighlightedSlot = null;
             }
 
@@ -181,7 +181,7 @@ namespace Kardx.UI.Components
                 var slot = hit.gameObject.GetComponent<PlayerCardSlot>();
                 if (slot != null && slot.IsValidDropTarget(cardView.Card))
                 {
-                    slot.SetHighlight(true);
+                    slot.SetHighlight(Color.green, true);
                     lastHighlightedSlot = slot;
                     break;
                 }
@@ -200,7 +200,7 @@ namespace Kardx.UI.Components
             // Clear any remaining highlight
             if (lastHighlightedSlot != null)
             {
-                lastHighlightedSlot.SetHighlight(false);
+                lastHighlightedSlot.SetHighlight(Color.clear, false);
                 lastHighlightedSlot = null;
             }
 
@@ -246,7 +246,7 @@ namespace Kardx.UI.Components
             if (currentPlayer == null)
                 return false;
 
-            return currentPlayer.Hand.Any(c => c == card);
+            return currentPlayer.Hand.Cards.Any(c => c == card);
         }
     }
 }

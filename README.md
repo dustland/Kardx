@@ -36,7 +36,9 @@ Install these packages to work with the project:
    - Install from Git URL: `https://github.com/Asuta/com.unity.ide.windsurf.git.windsurf.git`
    - Windsurf offers better performance than Cursor IDE
 
-2. **NewtonSoft JSON**
+1. **Unity extension**: It is strongly recommended to install the Unity extension for VSCode in Windsurf. Since it did not release as open-vsx, you should open this extension (and also C# and C# DevKit) in VSCode and download it as vsx file and then manually install in Windsurf.
+
+1. **NewtonSoft JSON**
    - Add from Package Manager: `com.unity.nuget.newtonsoft-json`
    - Used for JSON serialization/deserialization
 
