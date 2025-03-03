@@ -257,18 +257,20 @@ namespace Kardx.Core
                 return false;
             }
 
-            int occupiedSlots = 0;
+            // Check if there's at least one empty slot on the battlefield
+            bool hasEmptySlot = false;
             for (int i = 0; i < Battlefield.SLOT_COUNT; i++)
             {
-                if (!currentPlayer.Battlefield.IsSlotEmpty(i))
+                if (currentPlayer.Battlefield.IsSlotEmpty(i))
                 {
-                    occupiedSlots++;
+                    hasEmptySlot = true;
+                    break;
                 }
             }
 
             return currentPlayer.Hand.Contains(card)
                 && currentPlayer.Credits >= card.DeploymentCost
-                && occupiedSlots < Battlefield.SLOT_COUNT;
+                && hasEmptySlot;
         }
 
         public bool CanDeployOrderCard(Card card)
@@ -309,26 +311,27 @@ namespace Kardx.Core
                 : false;
         }
 
-        public bool DeployUnitCard(Card card, int position)
+        private bool DeployUnitCard(Card card, int position)
         {
+            var currentPlayer = board.CurrentTurnPlayer;
+
             if (!CanDeployUnitCard(card))
             {
                 // Add more detailed logging to help diagnose the issue
-                var player = board.CurrentTurnPlayer;
                 if (card == null)
                 {
                     logger?.LogError("[MatchManager] Cannot deploy unit card: card is null");
                 }
-                else if (!player.Hand.Contains(card))
+                else if (!currentPlayer.Hand.Contains(card))
                 {
                     logger?.LogError(
                         $"[MatchManager] Cannot deploy unit card {card.Title}: not in player's hand"
                     );
                 }
-                else if (player.Credits < card.DeploymentCost)
+                else if (currentPlayer.Credits < card.DeploymentCost)
                 {
                     logger?.LogError(
-                        $"[MatchManager] Cannot deploy unit card {card.Title}: insufficient credits (has {player.Credits}, needs {card.DeploymentCost})"
+                        $"[MatchManager] Cannot deploy unit card {card.Title}: insufficient credits (has {currentPlayer.Credits}, needs {card.DeploymentCost})"
                     );
                 }
                 else if (position < 0 || position >= Battlefield.SLOT_COUNT)
@@ -337,7 +340,7 @@ namespace Kardx.Core
                         $"[MatchManager] Cannot deploy unit card {card.Title}: invalid position {position}"
                     );
                 }
-                else if (!player.Battlefield.IsSlotEmpty(position))
+                else if (!currentPlayer.Battlefield.IsSlotEmpty(position))
                 {
                     logger?.LogError(
                         $"[MatchManager] Cannot deploy unit card {card.Title}: position {position} is already occupied"
@@ -346,12 +349,11 @@ namespace Kardx.Core
                 return false;
             }
 
-            var currentPlayer = board.CurrentTurnPlayer;
             bool success = currentPlayer.DeployUnitCard(card, position);
             return success;
         }
 
-        public bool DeployOrderCard(Card card)
+        private bool DeployOrderCard(Card card)
         {
             if (!CanDeployOrderCard(card))
             {

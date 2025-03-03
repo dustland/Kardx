@@ -22,28 +22,17 @@ namespace Kardx.UI
         public override void Initialize(MatchManager matchManager)
         {
             base.Initialize(matchManager);
-        }
-
-        public void InitializeSlots(GameObject cardSlotPrefab)
-        {
-            // Clear existing slots
-            foreach (Transform child in transform)
-            {
-                Destroy(child.gameObject);
-            }
+            
+            // Find all card slots in children
             cardSlots.Clear();
-
-            // Create card slots
-            for (int i = 0; i < Player.BATTLEFIELD_SLOT_COUNT; i++)
+            cardSlots.AddRange(GetComponentsInChildren<PlayerCardSlot>());
+            
+            // Initialize all card slots with their index and reference to this view
+            for (int i = 0; i < cardSlots.Count; i++)
             {
-                var slotGO = Instantiate(cardSlotPrefab, transform);
-                slotGO.name = $"PlayerCardSlot_{i}";
-
-                var cardSlot = slotGO.GetComponent<PlayerCardSlot>();
-                if (cardSlot != null)
+                if (cardSlots[i] != null)
                 {
-                    cardSlot.Initialize(i, this);
-                    cardSlots.Add(cardSlot);
+                    cardSlots[i].Initialize(i, this);
                 }
             }
         }

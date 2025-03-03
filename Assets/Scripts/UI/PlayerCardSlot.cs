@@ -203,13 +203,13 @@ namespace Kardx.UI
                 {
                     // For unit cards, deploy to the specific slot
                     Debug.Log($"[PlayerCardSlot] Deploying unit card to slot {slotIndex}");
-                    success = matchManager.DeployUnitCard(card, slotIndex);
+                    success = matchManager.DeployCard(card, slotIndex);
                 }
                 else if (card.IsOrderCard)
                 {
                     // For order cards, just deploy 
                     Debug.Log("[PlayerCardSlot] Deploying order card");
-                    success = matchManager.DeployOrderCard(card);
+                    success = matchManager.DeployCard(card, -1);
                 }
 
                 Debug.Log($"[PlayerCardSlot] Deployment {(success ? "succeeded" : "failed")}");

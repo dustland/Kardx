@@ -23,6 +23,19 @@ namespace Kardx.UI
         public override void Initialize(MatchManager matchManager)
         {
             base.Initialize(matchManager);
+            
+            // Find all card slots in children
+            cardSlots.Clear();
+            cardSlots.AddRange(GetComponentsInChildren<OpponentCardSlot>());
+            
+            // Initialize all card slots with their index and reference to this view
+            for (int i = 0; i < cardSlots.Count; i++)
+            {
+                if (cardSlots[i] != null)
+                {
+                    cardSlots[i].Initialize(i, this);
+                }
+            }
         }
 
         private void OnDestroy()
@@ -44,30 +57,6 @@ namespace Kardx.UI
         //         Debug.Log($"[OpponentBattlefieldView] Opponent card deployment {(handled ? "succeeded" : "not needed")}");
         //     }
         // }
-
-        public void InitializeSlots(GameObject cardSlotPrefab)
-        {
-            // Clear existing slots
-            foreach (Transform child in transform)
-            {
-                Destroy(child.gameObject);
-            }
-            cardSlots.Clear();
-
-            // Create card slots
-            for (int i = 0; i < Player.BATTLEFIELD_SLOT_COUNT; i++)
-            {
-                var slotGO = Instantiate(cardSlotPrefab, transform);
-                slotGO.name = $"OpponentCardSlot_{i}";
-
-                var cardSlot = slotGO.GetComponent<OpponentCardSlot>();
-                if (cardSlot != null)
-                {
-                    cardSlot.Initialize(i, this);
-                    cardSlots.Add(cardSlot);
-                }
-            }
-        }
 
         public override void UpdateBattlefield(Battlefield battlefield)
         {
@@ -297,8 +286,8 @@ namespace Kardx.UI
             // Look for CardViews at the root level that match our card
             foreach (CardView cardView in FindObjectsByType<CardView>(FindObjectsSortMode.None))
             {
-                // Check if this card view represents our card and is likely detached (at the root)
-                if (cardView.Card == card && cardView.transform.parent == cardView.transform.root)
+                // Check if this card view represents our card
+                if (cardView.Card == card)
                 {
                     detachedCardView = cardView;
                     break;

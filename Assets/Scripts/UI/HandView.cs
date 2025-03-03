@@ -241,32 +241,6 @@ namespace Kardx.UI
         }
 
         /// <summary>
-        /// DEPRECATED: This method mixes UI and game logic and should be replaced
-        /// with separate calls to MatchManager.DeployOrderCard() and HandleOrderCardDeployed()
-        /// </summary>
-        public bool DeployOrderCard(Card card)
-        {
-            if (matchManager == null || card == null || isOpponentHand)
-                return false;
-
-            // Attempt to deploy the card using the match manager
-            bool success = matchManager.DeployOrderCard(card);
-
-            if (success)
-            {
-                // The card will be removed from the hand by the game model
-                // and the UI will be updated through the match view
-                Debug.Log($"[HandView] Successfully deployed order card: {card.Title}");
-            }
-            else
-            {
-                Debug.Log($"[HandView] Failed to deploy order card: {card.Title}");
-            }
-
-            return success;
-        }
-
-        /// <summary>
         /// Clears any highlights on the hand cards or other UI elements
         /// </summary>
         public void ClearHighlights()

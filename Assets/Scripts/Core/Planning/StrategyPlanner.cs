@@ -149,13 +149,8 @@ namespace Kardx.Core.Planning
                             }
                             else
                             {
-                                // Fall back to direct method if MatchManager is not available
-                                logger?.LogWarning(
+                                logger?.LogError(
                                     "MatchManager not available, using direct Player.DeployUnitCard method which won't update UI"
-                                );
-                                success = currentPlayer.DeployUnitCard(cardToDeploy, targetSlot);
-                                logger?.Log(
-                                    $"Deployed card {cardToDeploy.Title} to slot {targetSlot} directly, success: {success}"
                                 );
                             }
                         }

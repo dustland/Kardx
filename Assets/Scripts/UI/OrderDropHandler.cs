@@ -138,7 +138,7 @@ namespace Kardx.UI
                 return;
             }
 
-            if (!matchManager.DeployOrderCard(cardView.Card))
+            if (!matchManager.DeployCard(cardView.Card, -1))
             {
                 Debug.Log($"[OrderDropHandler] Failed to deploy Order card {cardView.Card.Title}");
             }

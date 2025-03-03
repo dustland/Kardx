@@ -39,14 +39,6 @@ namespace Kardx.UI
         private Transform orderArea;
 
         [Header("UI Elements")]
-        [SerializeField]
-        private GameObject playerCardSlotPrefab;
-
-        [SerializeField]
-        private GameObject opponentCardSlotPrefab;
-
-        [SerializeField]
-        private GameObject cardPrefab;
 
         [SerializeField]
         private TextMeshProUGUI turnText;
@@ -105,7 +97,6 @@ namespace Kardx.UI
                 if (playerBattlefieldView != null)
                 {
                     playerBattlefieldView.Initialize(matchManager);
-                    playerBattlefieldView.InitializeSlots(playerCardSlotPrefab);
                 }
                 else
                 {
@@ -119,7 +110,6 @@ namespace Kardx.UI
                 if (opponentBattlefieldView != null)
                 {
                     opponentBattlefieldView.Initialize(matchManager);
-                    opponentBattlefieldView.InitializeSlots(opponentCardSlotPrefab);
                 }
                 else
                 {
