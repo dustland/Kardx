@@ -125,23 +125,16 @@ namespace Kardx.UI.Components
             }
         }
         
+        /// <summary>
+        /// Highlight empty slots in the battlefield.
+        /// </summary>
         public void HighlightEmptySlots(Battlefield battlefield)
         {
-            if (battlefield == null)
-                return;
-
-            isHighlightingEmptySlots = true;
-
             for (int i = 0; i < cardSlots.Count; i++)
             {
-                bool isEmpty = battlefield.GetCardAt(i) == null;
-                if (isEmpty)
+                if (battlefield.GetCardAt(i) == null)
                 {
-                    cardSlots[i].SetHighlight(validDropHighlightColor, true);
-                }
-                else
-                {
-                    cardSlots[i].ClearHighlight();
+                    cardSlots[i].SetHighlightState(PlayerCardSlot.HighlightType.Available);
                 }
             }
         }
@@ -156,11 +149,14 @@ namespace Kardx.UI.Components
             }
         }
         
+        /// <summary>
+        /// Clear all highlights in the battlefield.
+        /// </summary>
         public void ClearHighlights()
         {
             foreach (var slot in cardSlots)
             {
-                slot.ClearHighlight();
+                slot.SetHighlightState(PlayerCardSlot.HighlightType.None);
             }
         }
         
@@ -176,6 +172,11 @@ namespace Kardx.UI.Components
         public Player GetPlayer()
         {
             return player;
+        }
+
+        public Color GetValidDropHighlightColor()
+        {
+            return validDropHighlightColor;
         }
     }
 }

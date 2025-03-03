@@ -10,11 +10,10 @@ using UnityEngine.UI;
 
 namespace Kardx.UI.Components
 {
-    using Card = Kardx.Core.Card;
-
     public class CardView : MonoBehaviour, IPointerClickHandler
     {
         [Header("Card Data")]
+        public bool autoUpdateUI = true;
         [SerializeField]
         private Card card;
 
@@ -79,6 +78,7 @@ namespace Kardx.UI.Components
         private CanvasGroup canvasGroup;
         private bool isDraggable = true;
         private bool isDragging = false;
+        private bool isHighlighted = false;
 
         private static CardDetailView sharedDetailView;
 
@@ -279,9 +279,11 @@ namespace Kardx.UI.Components
                 // This ensures the image is ready when the card is flipped
                 LoadCardImage();
 
-                // After all UI elements are initialized, check if the card should be face down
-                // Show or hide the card back overlay based on the card's face down state
-                ShowCardBack(card?.FaceDown ?? false);
+                // Use the card's FaceDown property to control the visual state
+                if (card != null)
+                {
+                    ShowCardBack(card.FaceDown);
+                }
 
                 if (card != null)
                 {
@@ -383,6 +385,7 @@ namespace Kardx.UI.Components
 
         public void SetHighlight(bool isHighlighted)
         {
+            this.isHighlighted = isHighlighted;
             if (highlightEffect != null)
             {
                 highlightEffect.SetActive(isHighlighted);
@@ -455,7 +458,9 @@ namespace Kardx.UI.Components
             {
                 canvasGroup.interactable = interactable;
                 canvasGroup.blocksRaycasts = interactable;
-                canvasGroup.alpha = interactable ? 1f : 0.7f;
+
+                // Always keep the alpha at 1.0 - we don't need visual differentiation for interactable state
+                canvasGroup.alpha = 1.0f;
             }
             
             // Update draggable state
@@ -473,23 +478,6 @@ namespace Kardx.UI.Components
             return battlefield.Contains(card);
         }
 
-        // Helper method to check if a card is in the player's hand
-        private bool IsCardInHand(Card card)
-        {
-            if (card == null || card.Owner == null)
-                return false;
-
-            // Use the Cards property instead of trying to iterate the Hand directly
-            var handCards = card.Owner.Hand.Cards;
-            foreach (var handCard in handCards)
-            {
-                if (handCard == card)
-                    return true;
-            }
-
-            return false;
-        }
-
         public void ResetDraggingState()
         {
             isDragging = false;
@@ -500,7 +488,13 @@ namespace Kardx.UI.Components
 
         public void SetFaceDown(bool faceDown)
         {
-            // Only update the UI state, don't modify the card's state
+            // Update the card model if it exists
+            if (card != null)
+            {
+                card.SetFaceDown(faceDown);
+            }
+            
+            // Always update the UI state
             ShowCardBack(faceDown);
         }
 
@@ -510,8 +504,11 @@ namespace Kardx.UI.Components
             this.card = card;
             this.cardType = card?.CardType;
             
-            // Set face down state
-            SetFaceDown(faceDown);
+            // Set face down state on the card model
+            if (card != null)
+            {
+                card.SetFaceDown(faceDown);
+            }
             
             // Update the UI
             UpdateUI();
@@ -614,6 +611,7 @@ namespace Kardx.UI.Components
                         $"[CardView] Successfully loaded card back sprite for faction {card.OwnerFaction}"
                     );
                     cardBackOverlay.sprite = cardBackSprite;
+
                     cardBackOverlay.gameObject.SetActive(true);
                 }
                 else
@@ -631,6 +629,7 @@ namespace Kardx.UI.Components
                     {
                         Debug.Log($"[CardView] Successfully loaded card back from fallback path");
                         cardBackOverlay.sprite = cardBackSprite;
+
                         cardBackOverlay.gameObject.SetActive(true);
                     }
                     else
@@ -648,11 +647,6 @@ namespace Kardx.UI.Components
                             );
                             // Skip placeholder creation
                             cardBackOverlay.gameObject.SetActive(false);
-                        }
-                        else
-                        {
-                            cardBackOverlay.sprite = cardBackSprite;
-                            cardBackOverlay.gameObject.SetActive(true);
                         }
                     }
                 }

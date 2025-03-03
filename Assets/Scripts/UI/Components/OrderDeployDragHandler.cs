@@ -38,6 +38,19 @@ namespace Kardx.UI.Components
             {
                 matchManager = matchView.MatchManager;
             }
+            else
+            {
+                // If we can't find it directly, try finding it in the scene
+                matchView = FindAnyObjectByType<MatchView>();
+                if (matchView != null)
+                {
+                    matchManager = matchView.MatchManager;
+                }
+                else
+                {
+                    Debug.LogError("OrderDeployDragHandler: Cannot find MatchView in hierarchy or scene");
+                }
+            }
         }
 
         public void OnBeginDrag(PointerEventData eventData)
@@ -115,10 +128,15 @@ namespace Kardx.UI.Components
             }
             else
             {
-                var matchView = GetComponentInParent<MatchView>();
+                // Try to find the MatchView directly in the scene
+                var matchView = FindAnyObjectByType<MatchView>();
                 if (matchView != null)
                 {
                     matchView.ClearAllHighlights();
+                }
+                else
+                {
+                    Debug.LogError("OrderDeployDragHandler: Cannot find MatchView for clearing highlights");
                 }
             }
         }

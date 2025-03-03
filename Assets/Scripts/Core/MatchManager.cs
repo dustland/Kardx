@@ -128,7 +128,7 @@ namespace Kardx.Core
             logger?.Log($"[MatchManager] Added {creditsToAdd} credits to player {board.Player.Id}");
 
             // Draw a card for the player
-            Card drawnCard = board.Player.DrawCard();
+            Card drawnCard = board.Player.DrawCard(false); // Player cards are face up
             if (drawnCard != null)
             {
                 OnCardDrawn?.Invoke(drawnCard);
@@ -142,7 +142,7 @@ namespace Kardx.Core
             logger?.Log($"[MatchManager] Added {creditsToAdd} credits to player {board.Opponent.Id}");
 
             // Draw a card for the opponent
-            drawnCard = board.Opponent.DrawCard();
+            drawnCard = board.Opponent.DrawCard(true); // Opponent cards are face down
             if (drawnCard != null)
             {
                 OnCardDrawn?.Invoke(drawnCard);

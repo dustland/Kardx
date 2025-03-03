@@ -17,10 +17,12 @@ namespace Kardx.UI.Components
 
         private CardView cardView;
         private MatchManager matchManager;
+        private PlayerBattlefieldView playerBattlefieldView;
         private Vector3 originalPosition;
         private Transform originalParent;
         private CanvasGroup canvasGroup;
         private bool isDragging = false;
+        private PlayerCardSlot currentHoverSlot;
 
         private void Awake()
         {
@@ -37,6 +39,30 @@ namespace Kardx.UI.Components
             if (matchView != null)
             {
                 matchManager = matchView.MatchManager;
+                playerBattlefieldView = matchView.GetComponentInChildren<PlayerBattlefieldView>();
+            }
+            else
+            {
+                // If we can't find it directly, try finding it in the scene
+                matchView = FindAnyObjectByType<MatchView>();
+                if (matchView != null)
+                {
+                    matchManager = matchView.MatchManager;
+                    playerBattlefieldView = matchView.GetComponentInChildren<PlayerBattlefieldView>();
+                }
+                else
+                {
+                    Debug.LogError("UnitDeployDragHandler: Cannot find MatchView in hierarchy or scene");
+                }
+            }
+            
+            if (playerBattlefieldView == null)
+            {
+                playerBattlefieldView = FindAnyObjectByType<PlayerBattlefieldView>();
+                if (playerBattlefieldView == null)
+                {
+                    Debug.LogError("UnitDeployDragHandler: Cannot find PlayerBattlefieldView");
+                }
             }
         }
 
@@ -48,6 +74,7 @@ namespace Kardx.UI.Components
             isDragging = true;
             originalPosition = transform.position;
             originalParent = transform.parent;
+            currentHoverSlot = null;
 
             // Disable raycast blocking so we can detect drop targets underneath
             canvasGroup.blocksRaycasts = false;
@@ -55,11 +82,23 @@ namespace Kardx.UI.Components
             // Move to front of UI
             transform.SetParent(transform.root);
             
-            // Highlight valid drop targets through MatchView
-            var matchView = GetComponentInParent<MatchView>();
-            if (matchView != null)
+            // Highlight valid drop targets directly using PlayerBattlefieldView
+            if (playerBattlefieldView != null && matchManager != null)
             {
-                matchView.HighlightValidUnitDropSlots(cardView.Card);
+                playerBattlefieldView.HighlightEmptySlots(matchManager.Player.Battlefield);
+            }
+            else
+            {
+                // Fallback to the MatchView if we couldn't find PlayerBattlefieldView
+                var matchView = FindAnyObjectByType<MatchView>();
+                if (matchView != null)
+                {
+                    matchView.HighlightValidUnitDropSlots(cardView.Card);
+                }
+                else
+                {
+                    Debug.LogError("UnitDeployDragHandler: Cannot find MatchView for highlighting");
+                }
             }
         }
 
@@ -70,6 +109,47 @@ namespace Kardx.UI.Components
 
             // Move the card with the cursor
             transform.position = eventData.position + new Vector2(0, dragOffset);
+            
+            // Check if we're hovering over a card slot
+            if (eventData.pointerCurrentRaycast.gameObject != null)
+            {
+                PlayerCardSlot hoveredSlot = eventData.pointerCurrentRaycast.gameObject.GetComponent<PlayerCardSlot>();
+                
+                // If we've changed which slot we're hovering over
+                if (hoveredSlot != currentHoverSlot)
+                {
+                    // Reset any enhanced highlight on the previous slot
+                    if (currentHoverSlot != null)
+                    {
+                        // Set back to normal "Available" highlight
+                        currentHoverSlot.SetHighlightState(PlayerCardSlot.HighlightType.Available);
+                    }
+                    
+                    // Set enhanced highlight for the new slot if it's valid
+                    if (hoveredSlot != null)
+                    {
+                        // Check if the slot is empty
+                        if (matchManager != null && 
+                            matchManager.Player != null && 
+                            matchManager.Player.Battlefield.GetCardAt(hoveredSlot.SlotIndex) == null)
+                        {
+                            // Set to "DropTarget" highlight state
+                            hoveredSlot.SetHighlightState(PlayerCardSlot.HighlightType.DropTarget);
+                            currentHoverSlot = hoveredSlot;
+                        }
+                    }
+                    else
+                    {
+                        currentHoverSlot = null;
+                    }
+                }
+            }
+            else if (currentHoverSlot != null)
+            {
+                // We're no longer hovering over any slot, reset to "Available"
+                currentHoverSlot.SetHighlightState(PlayerCardSlot.HighlightType.Available);
+                currentHoverSlot = null;
+            }
         }
 
         public void OnEndDrag(PointerEventData eventData)
@@ -123,21 +203,27 @@ namespace Kardx.UI.Components
                 transform.position = originalPosition;
             }
             
-            // Get the parent battlefield view to clear highlights if possible
-            // Otherwise we'll try to find a MatchView to do it
-            var playerBattlefieldView = GetComponentInParent<PlayerBattlefieldView>();
+            // Clear highlights directly through PlayerBattlefieldView if possible
             if (playerBattlefieldView != null)
             {
                 playerBattlefieldView.ClearHighlights();
             }
             else
             {
-                var matchView = GetComponentInParent<MatchView>();
+                // Try to find the MatchView directly in the scene
+                var matchView = FindAnyObjectByType<MatchView>();
                 if (matchView != null)
                 {
                     matchView.ClearAllHighlights();
                 }
+                else
+                {
+                    Debug.LogError("UnitDeployDragHandler: Cannot find MatchView for clearing highlights");
+                }
             }
+            
+            // Reset current hover slot
+            currentHoverSlot = null;
         }
 
         private bool CanDrag()
