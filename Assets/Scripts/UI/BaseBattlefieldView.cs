@@ -1,7 +1,7 @@
 using UnityEngine;
 using Kardx.Core;
 
-namespace Kardx.UI.Components
+namespace Kardx.UI
 {
     /// <summary>
     /// Base class for battlefield views.

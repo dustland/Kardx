@@ -29,11 +29,6 @@ namespace Kardx.Core
         private Card headquartersCard;
         private Board board; // Reference to the game board
 
-        // Events
-        public event Action<Card> OnCardDrawn;
-        public event Action<Card, int> OnCardDeployed;
-        public event Action<Card> OnCardDestroyed;
-
         /// <summary>
         /// Initializes a new instance of the <see cref="Player"/> class.
         /// </summary>
@@ -70,10 +65,6 @@ namespace Kardx.Core
             hand = new Hand(this);
             battlefield = new Battlefield(this);
             deck = new Deck(this);
-
-            // Wire up events
-            battlefield.OnCardDeployed += (card, slot) => OnCardDeployed?.Invoke(card, slot);
-            hand.OnCardAdded += (card, source) => OnCardDrawn?.Invoke(card);
 
             // Initialize deck with initial cards
             foreach (var card in initialDeck)
@@ -217,9 +208,7 @@ namespace Kardx.Core
             SpendCredits(card.CardType.Cost);
 
             // Deploy to battlefield
-            battlefield.DeployCard(card, slotIndex);
-
-            return true;
+            return battlefield.DeployCard(card, slotIndex);
         }
 
         /// <summary>
@@ -266,15 +255,15 @@ namespace Kardx.Core
         /// <param name="card">The card to deploy.</param>
         /// <param name="position">The position to deploy to (ignored for order cards).</param>
         /// <returns>True if the card was deployed, false otherwise.</returns>
-        public bool DeployCard(Card card, int position)
-        {
-            if (card == null)
-                return false;
-                
-            return card.CardType.Category == CardCategory.Unit ? DeployUnitCard(card, position)
-                : card.CardType.Category == CardCategory.Order ? DeployOrderCard(card)
-                : false;
-        }
+        // public bool DeployCard(Card card, int position)
+        // {
+        //     if (card == null)
+        //         return false;
+
+        //     return card.CardType.Category == CardCategory.Unit ? DeployUnitCard(card, position)
+        //         : card.CardType.Category == CardCategory.Order ? DeployOrderCard(card)
+        //         : false;
+        // }
 
         /// <summary>
         /// Destroys a card on the battlefield.

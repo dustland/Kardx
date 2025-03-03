@@ -10,11 +10,7 @@ namespace Kardx.Core
     {
         public const int SLOT_COUNT = 5;
         private BattlefieldSlot[] slots;
-        
-        public event Action<Card, int> OnCardDeployed;
-        public new event Action<Card, CardCollection> OnCardAdded;
-        public new event Action<Card, CardCollection> OnCardRemoved;
-        
+
         public Battlefield(Player owner) : base(owner)
         {
             slots = new BattlefieldSlot[SLOT_COUNT];
@@ -25,7 +21,8 @@ namespace Kardx.Core
         }
         
         public IReadOnlyList<BattlefieldSlot> Slots => Array.AsReadOnly(slots);
-        
+        public int SlotCount => slots.Length;
+
         public Card GetCardAt(int slotIndex)
         {
             if (slotIndex < 0 || slotIndex >= SLOT_COUNT)
@@ -68,10 +65,7 @@ namespace Kardx.Core
                 }
                 
                 card.SetOwner(owner);
-                
-                OnCardDeployed?.Invoke(card, slotIndex);
-                OnCardAdded?.Invoke(card, this);
-                
+
                 return true;
             }
             
@@ -89,10 +83,6 @@ namespace Kardx.Core
                 {
                     slots[i].RemoveCard();
                     bool removed = cards.Remove(card);
-                    if (removed)
-                    {
-                        OnCardRemoved?.Invoke(card, this);
-                    }
                     return removed;
                 }
             }
@@ -111,7 +101,6 @@ namespace Kardx.Core
             if (card != null)
             {
                 cards.Remove(card);
-                OnCardRemoved?.Invoke(card, this);
             }
             
             return card;

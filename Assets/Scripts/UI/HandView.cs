@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Kardx.Core;
 
-namespace Kardx.UI.Components
+namespace Kardx.UI
 {
     /// <summary>
     /// Manages a player or opponent's hand visualization including hand updates and card creation.
@@ -13,17 +13,17 @@ namespace Kardx.UI.Components
     {
         [SerializeField]
         private GameObject cardPrefab;
-        
+
         [SerializeField]
         [Tooltip("Set to true if this is the opponent's hand")]
         private bool isOpponentHand = false;
-        
+
         [Tooltip("Reference to the MatchManager - assigned at runtime during initialization")]
         private MatchManager matchManager;
-        
+
         private Player player;
         private Transform handTransform;
-        
+
         /// <summary>
         /// Initializes the hand view with the match manager reference
         /// </summary>
@@ -31,7 +31,7 @@ namespace Kardx.UI.Components
         {
             this.matchManager = matchManager;
             this.handTransform = transform;
-            
+
             // Determine which player this hand belongs to
             if (isOpponentHand)
             {
@@ -41,13 +41,13 @@ namespace Kardx.UI.Components
             {
                 player = matchManager.Player;
             }
-            
+
             if (cardPrefab == null)
             {
                 Debug.LogError($"[HandView] Card prefab is not assigned. Please assign it in the Unity Editor.");
             }
         }
-        
+
         /// <summary>
         /// Updates the visual representation of the hand
         /// </summary>
@@ -55,20 +55,20 @@ namespace Kardx.UI.Components
         {
             if (player == null || handTransform == null)
                 return;
-                
+
             bool faceDown = isOpponentHand;
-            
+
             // Clear existing cards
             foreach (Transform child in handTransform)
             {
                 Destroy(child.gameObject);
             }
-            
+
             // Add cards from player's hand
             foreach (var card in player.Hand.GetCards())
             {
                 var cardGO = CreateCardUI(card, faceDown);
-                
+
                 // Add appropriate drag handlers based on card type 
                 // Only add to player's hand, not opponent
                 if (!faceDown && !isOpponentHand)
@@ -94,7 +94,7 @@ namespace Kardx.UI.Components
                 }
             }
         }
-        
+
         /// <summary>
         /// Updates the hand with a specific hand object
         /// </summary>
@@ -102,20 +102,20 @@ namespace Kardx.UI.Components
         {
             if (hand == null || handTransform == null)
                 return;
-                
+
             bool faceDown = isOpponentHand;
-            
+
             // Clear existing cards
             foreach (Transform child in handTransform)
             {
                 Destroy(child.gameObject);
             }
-            
+
             // Add cards from hand
             foreach (var card in hand.GetCards())
             {
                 var cardGO = CreateCardUI(card, faceDown);
-                
+
                 // Add appropriate drag handlers based on card type
                 // Only add to player's hand, not opponent
                 if (!faceDown && !isOpponentHand)
@@ -141,7 +141,7 @@ namespace Kardx.UI.Components
                 }
             }
         }
-        
+
         /// <summary>
         /// Adds a single card to the hand visualization without recreating the entire hand.
         /// More efficient than UpdateHand when just adding one card.
@@ -151,12 +151,12 @@ namespace Kardx.UI.Components
         {
             if (card == null || handTransform == null)
                 return;
-                
+
             bool faceDown = isOpponentHand;
-            
+
             // Create and add just the new card
             var cardGO = CreateCardUI(card, faceDown);
-            
+
             // Add appropriate drag handlers based on card type 
             // Only add to player's hand, not opponent
             if (!faceDown && !isOpponentHand)
@@ -180,10 +180,10 @@ namespace Kardx.UI.Components
                     }
                 }
             }
-            
+
             Debug.Log($"[HandView] Added card {card.Title} to hand visualization");
         }
-        
+
         /// <summary>
         /// Creates a card UI element
         /// </summary>
@@ -191,10 +191,10 @@ namespace Kardx.UI.Components
         {
             if (card == null || cardPrefab == null)
                 return null;
-                
+
             var cardGO = Instantiate(cardPrefab, handTransform);
             cardGO.name = $"Card_{card.Title}";
-            
+
             var cardView = cardGO.GetComponent<CardView>();
             if (cardView != null)
             {
@@ -206,10 +206,10 @@ namespace Kardx.UI.Components
                 Destroy(cardGO);
                 return null;
             }
-            
+
             return cardGO;
         }
-        
+
         /// <summary>
         /// Handles the UI visualization when an order card is deployed from this hand
         /// This is a UI-only method and should be called AFTER game state has been updated
@@ -221,7 +221,7 @@ namespace Kardx.UI.Components
         {
             if (card == null || isOpponentHand)
                 return;
-                
+
             if (success)
             {
                 // The card will be removed from the hand by the game model
@@ -239,7 +239,7 @@ namespace Kardx.UI.Components
                 UpdateHand();
             }
         }
-        
+
         /// <summary>
         /// DEPRECATED: This method mixes UI and game logic and should be replaced
         /// with separate calls to MatchManager.DeployOrderCard() and HandleOrderCardDeployed()
@@ -248,10 +248,10 @@ namespace Kardx.UI.Components
         {
             if (matchManager == null || card == null || isOpponentHand)
                 return false;
-                
+
             // Attempt to deploy the card using the match manager
             bool success = matchManager.DeployOrderCard(card);
-            
+
             if (success)
             {
                 // The card will be removed from the hand by the game model
@@ -262,10 +262,10 @@ namespace Kardx.UI.Components
             {
                 Debug.Log($"[HandView] Failed to deploy order card: {card.Title}");
             }
-            
+
             return success;
         }
-        
+
         /// <summary>
         /// Clears any highlights on the hand cards or other UI elements
         /// </summary>
@@ -273,7 +273,7 @@ namespace Kardx.UI.Components
         {
             // Clear any highlights on the hand that might be active
             Debug.Log("[HandView] Clearing highlights");
-            
+
             // If more specific highlight clearing is needed, add it here
         }
     }

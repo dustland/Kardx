@@ -1,16 +1,13 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Kardx.UI.Components
+namespace Kardx.UI
 {
     [RequireComponent(typeof(LineRenderer))]
     public class AttackArrow : MonoBehaviour
     {
         [SerializeField]
         private LineRenderer lineRenderer;
-
-        [SerializeField]
-        private float arrowHeadSize = 20f;
 
         [SerializeField]
         private float arrowWidth = 5f;
@@ -128,7 +125,7 @@ namespace Kardx.UI.Components
             sourceTransform = null;
             targetTransform = null;
         }
-        
+
         public void CancelDrawing()
         {
             // Cancel the current drawing operation
@@ -136,7 +133,7 @@ namespace Kardx.UI.Components
             lineRenderer.enabled = false;
             targetTransform = null;
         }
-        
+
         public void StopDrawing()
         {
             // Stop drawing and hide the arrow

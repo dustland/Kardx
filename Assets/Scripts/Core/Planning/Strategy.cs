@@ -205,23 +205,6 @@ namespace Kardx.Core.Planning
         }
 
         /// <summary>
-        /// Adds a return card to hand decision to the strategy.
-        /// </summary>
-        /// <param name="cardId">The ID of the card to return to hand.</param>
-        /// <param name="reason">The reason for returning this card to hand.</param>
-        public void AddReturnCardToHandAction(string cardId, string reason = null)
-        {
-            Decisions.Add(
-                new Decision
-                {
-                    Type = DecisionType.ReturnCardToHand,
-                    TargetCardId = cardId,
-                    Reasoning = reason,
-                }
-            );
-        }
-
-        /// <summary>
         /// Adds an end turn decision to the strategy.
         /// </summary>
         /// <param name="reason">The reason for ending the turn.</param>

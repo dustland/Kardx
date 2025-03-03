@@ -5,7 +5,7 @@ using UnityEngine.EventSystems;
 using Kardx.Core;
 using System.Linq;
 
-namespace Kardx.UI.Components
+namespace Kardx.UI
 {
     /// <summary>
     /// Specialized drag handler for deploying unit cards.
@@ -26,7 +26,7 @@ namespace Kardx.UI.Components
         {
             cardView = GetComponent<CardView>();
             canvasGroup = GetComponent<CanvasGroup>();
-            
+
             if (canvasGroup == null)
             {
                 canvasGroup = gameObject.AddComponent<CanvasGroup>();
@@ -105,7 +105,7 @@ namespace Kardx.UI.Components
                 return;
 
             isDragging = false;
-            
+
             // Re-enable raycast blocking
             canvasGroup.blocksRaycasts = true;
 

@@ -4,13 +4,12 @@ using System.Collections.Generic;
 using System.Linq;
 using Kardx.Core;
 using Kardx.Core.Planning;
-using Kardx.UI.Components;
 using Kardx.Utils;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Kardx.UI.Scenes
+namespace Kardx.UI
 {
     public class MatchView : MonoBehaviour
     {
@@ -67,7 +66,7 @@ namespace Kardx.UI.Scenes
 
         [SerializeField]
         private CardDetailView cardDetailView;
-        
+
         // Public accessor for MatchManager
         public MatchManager MatchManager => matchManager;
 
@@ -75,10 +74,10 @@ namespace Kardx.UI.Scenes
         {
             // Create MatchManager instance first
             matchManager = new MatchManager(new SimpleLogger("[MatchManager]"));
-            
+
             // Initialize the match right away - this creates the board and players
             matchManager.Initialize();
-            
+
             // Ensure the CardPanel is initially active so it can run coroutines
             // but immediately hide it
             if (!cardDetailView.gameObject.activeSelf)
@@ -92,7 +91,7 @@ namespace Kardx.UI.Scenes
 
             // Make sure the CardPanel is initially inactive
             cardDetailView.gameObject.SetActive(false);
-            
+
             // Now we can initialize all view components
             InitializeViewComponents();
         }
@@ -127,7 +126,7 @@ namespace Kardx.UI.Scenes
                     Debug.LogError("OpponentBattlefieldView component not found on opponentBattlefieldArea. Please add this component in the Unity Editor.");
                 }
             }
-            
+
             // Initialize hand views - should be set up in Unity Editor
             if (playerHandArea != null)
             {
@@ -141,7 +140,7 @@ namespace Kardx.UI.Scenes
                     Debug.LogError("HandView component not found on playerHandArea. Please add this component in the Unity Editor.");
                 }
             }
-            
+
             if (opponentHandArea != null)
             {
                 opponentHandView = opponentHandArea.GetComponent<HandView>();
@@ -232,38 +231,22 @@ namespace Kardx.UI.Scenes
         private void HandleCardDeployed(Card card, int slotIndex)
         {
             Debug.Log($"[MatchView] Card deployed: {card.Title} at slot {slotIndex}");
-            
-            // For player cards deployed on the battlefield, attempt to place any detached card view
-            if (card.Owner == matchManager.Player && playerBattlefieldView != null)
+
+            if (playerBattlefieldView != null && card.Owner == matchManager.Player)
             {
-                bool handled = playerBattlefieldView.DeployCard(card, slotIndex);
-                Debug.Log($"[MatchView] Card deployment {(handled ? "succeeded" : "not needed")}");
-                
-                // Update player's hand to reflect the card being removed
-                if (playerHandView != null)
-                {
-                    playerHandView.UpdateHand(matchManager.Player.Hand);
-                }
+                playerBattlefieldView.OnCardDeployed(card, slotIndex);
             }
-            else if (card.Owner == matchManager.Opponent && opponentBattlefieldView != null)
+
+            if (opponentBattlefieldView != null && card.Owner == matchManager.Opponent)
             {
-                // Update the opponent's battlefield
-                opponentBattlefieldView.UpdateBattlefield(matchManager.Opponent.Battlefield);
-                
-                // Update opponent's hand to reflect the card being removed
-                if (opponentHandView != null)
-                {
-                    opponentHandView.UpdateHand(matchManager.Opponent.Hand);
-                }
+                opponentBattlefieldView.OnCardDeployed(card, slotIndex);
             }
-            
-            // No need for UpdateUI() as we've made the specific updates needed
         }
 
         private void HandleAttackCompleted(Card attackerCard, Card targetCard, int damageDealt, int remainingHealth)
         {
             Debug.Log($"[MatchView] Attack completed: {attackerCard.Title} -> {targetCard.Title} - Damage: {damageDealt} - Remaining Health: {remainingHealth}");
-            
+
             // Update only the battlefields that were affected
             if (attackerCard.Owner == matchManager.Player && playerBattlefieldView != null)
             {
@@ -273,7 +256,7 @@ namespace Kardx.UI.Scenes
             {
                 opponentBattlefieldView.UpdateBattlefield(matchManager.Opponent.Battlefield);
             }
-            
+
             if (targetCard.Owner == matchManager.Player && playerBattlefieldView != null)
             {
                 playerBattlefieldView.UpdateBattlefield(matchManager.Player.Battlefield);
@@ -282,43 +265,30 @@ namespace Kardx.UI.Scenes
             {
                 opponentBattlefieldView.UpdateBattlefield(matchManager.Opponent.Battlefield);
             }
-            
+
             // No need for UpdateUI() as we've made the specific updates needed
         }
 
-        private void HandleProcessAITurn(Board board, StrategyPlanner planner, Action callback)
+        private void HandleProcessAITurn(Board board, StrategyPlanner planner)
         {
             Debug.Log("[MatchView] Processing AI turn");
-            
-            // AI turn is handled by the MatchManager
-            // After AI processing is complete, invoke the callback
-            callback?.Invoke();
-            
-            // Update specific UI components after AI turn
-            
-            // Update opponent battlefield
-            if (opponentBattlefieldView != null)
-            {
-                opponentBattlefieldView.UpdateBattlefield(matchManager.Opponent.Battlefield);
-            }
-            
-            // Update player battlefield (in case AI affected it)
-            if (playerBattlefieldView != null)
-            {
-                playerBattlefieldView.UpdateBattlefield(matchManager.Player.Battlefield);
-            }
-            
-            // Update opponent hand
-            if (opponentHandView != null)
-            {
-                opponentHandView.UpdateHand(matchManager.Opponent.Hand);
-            }
-            
+
+            // Execute the AI strategy directly without coroutine
+            ExecuteAIStrategy(board, planner);
+        }
+
+        private void ExecuteAIStrategy(Board board, StrategyPlanner planner)
+        {
+            Debug.Log("[MatchView] Executing AI strategy");
+
+            // Execute the AI's strategy synchronously
+            planner.ExecuteNextStrategy(board);
+
+            Debug.Log("[MatchView] AI strategy execution completed");
+
             // Update turn and credits display
             UpdateTurnDisplay();
             UpdateCreditsDisplay();
-            
-            // No need for UpdateUI() as we've made the specific updates needed
         }
 
         // Method to update the entire UI - this is now thinner because each component handles its own updates
@@ -332,7 +302,7 @@ namespace Kardx.UI.Scenes
             {
                 playerHandView.UpdateHand();
             }
-            
+
             if (opponentHandView != null)
             {
                 opponentHandView.UpdateHand();
@@ -375,52 +345,37 @@ namespace Kardx.UI.Scenes
                 return;
 
             matchManager.NextTurn();
-            
-            // Update specific UI components that change on turn end
-            
-            // Update each battlefield
-            if (playerBattlefieldView != null)
-            {
-                playerBattlefieldView.UpdateBattlefield(matchManager.Player.Battlefield);
-            }
-            
-            if (opponentBattlefieldView != null)
-            {
-                opponentBattlefieldView.UpdateBattlefield(matchManager.Opponent.Battlefield);
-            }
-            
+
             // Update turn and credits display
             UpdateTurnDisplay();
             UpdateCreditsDisplay();
-            
-            // No need to call UpdateUI() as we've made specific updates
         }
 
         private void HandleMatchStarted(string message)
         {
             Debug.Log($"[MatchView] Match started: {message}");
-            
+
             // Update specific UI components based on their initial state
             if (playerBattlefieldView != null)
             {
                 playerBattlefieldView.UpdateBattlefield(matchManager.Player.Battlefield);
             }
-            
+
             if (opponentBattlefieldView != null)
             {
                 opponentBattlefieldView.UpdateBattlefield(matchManager.Opponent.Battlefield);
             }
-            
+
             if (playerHandView != null)
             {
                 playerHandView.UpdateHand(matchManager.Player.Hand);
             }
-            
+
             if (opponentHandView != null)
             {
                 opponentHandView.UpdateHand(matchManager.Opponent.Hand);
             }
-            
+
             // Update turn display
             UpdateTurnDisplay();
         }
@@ -433,7 +388,7 @@ namespace Kardx.UI.Scenes
         private void HandleCardDrawn(Card card)
         {
             Debug.Log($"[MatchView] Card drawn: {card.Title}");
-            
+
             // For cards drawn by the player, update the player's hand
             if (card.Owner == matchManager.Player && playerHandView != null)
             {
@@ -447,14 +402,14 @@ namespace Kardx.UI.Scenes
                 opponentHandView.AddCardToHand(card);
                 Debug.Log($"[MatchView] Added card to opponent hand: {card.Title}");
             }
-            
+
             // We don't need to call UpdateUI() since we've made the specific updates needed
         }
 
         private void HandleCardDied(Card card)
         {
             Debug.Log($"[MatchView] Card died: {card.Title}");
-            
+
             // Update only the specific battlefield that contained the card
             if (card.Owner == matchManager.Player && playerBattlefieldView != null)
             {
@@ -468,8 +423,25 @@ namespace Kardx.UI.Scenes
                 opponentBattlefieldView.UpdateBattlefield(matchManager.Opponent.Battlefield);
                 Debug.Log($"[MatchView] Updated opponent battlefield after card death: {card.Title}");
             }
-            
+
             // No need for UpdateUI() as we've made the specific updates needed
+        }
+
+        private void OnDestroy()
+        {
+            // Unsubscribe from MatchManager events to prevent memory leaks
+            if (matchManager != null)
+            {
+                matchManager.OnCardDeployed -= HandleCardDeployed;
+                matchManager.OnTurnStarted -= HandleTurnStarted;
+                matchManager.OnTurnEnded -= HandleTurnEnded;
+                matchManager.OnAttackCompleted -= HandleAttackCompleted;
+                matchManager.OnProcessAITurn -= HandleProcessAITurn;
+                matchManager.OnCardDrawn -= HandleCardDrawn;
+                matchManager.OnCardDied -= HandleCardDied;
+                matchManager.OnMatchStarted -= HandleMatchStarted;
+                matchManager.OnMatchEnded -= HandleMatchEnded;
+            }
         }
     }
 }

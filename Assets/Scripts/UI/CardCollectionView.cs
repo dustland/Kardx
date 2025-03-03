@@ -3,13 +3,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Kardx.Core;
-using Kardx.UI.Components;
 using Kardx.Utils;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Kardx.UI.Scenes
+namespace Kardx.UI
 {
     [System.Serializable]
     public class CardListWrapper

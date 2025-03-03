@@ -1,5 +1,3 @@
-using System.Collections;
-
 namespace Kardx.Core.Planning
 {
     /// <summary>
@@ -17,7 +15,7 @@ namespace Kardx.Core.Planning
         /// Gets the next strategy for the player based on the current game state.
         /// </summary>
         /// <param name="board">The current game board.</param>
-        /// <returns>A coroutine that yields a strategy containing a sequence of decisions to execute.</returns>
-        IEnumerator GetNextStrategy(Board board);
+        /// <returns>A strategy containing a sequence of decisions to execute.</returns>
+        Strategy GetNextStrategy(Board board);
     }
 }

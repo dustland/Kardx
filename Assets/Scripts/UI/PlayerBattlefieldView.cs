@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Kardx.Core;
 
-namespace Kardx.UI.Components
+namespace Kardx.UI
 {
     /// <summary>
     /// View component for the player's battlefield.
@@ -12,7 +12,7 @@ namespace Kardx.UI.Components
     {
         [SerializeField]
         private List<PlayerCardSlot> cardSlots = new List<PlayerCardSlot>();
-        
+
         [SerializeField]
         private Color validDropHighlightColor = new Color(0.0f, 1.0f, 0.0f, 0.3f);
 
@@ -22,22 +22,6 @@ namespace Kardx.UI.Components
         public override void Initialize(MatchManager matchManager)
         {
             base.Initialize(matchManager);
-            
-            // Ensure matchManager is not null before accessing Player
-            if (matchManager != null)
-            {
-                this.player = matchManager.Player;
-                
-                // Subscribe to player events
-                if (player != null)
-                {
-                    player.OnCardDeployed += OnCardDeployed;
-                }
-            }
-            else
-            {
-                Debug.LogError("PlayerBattlefieldView: Cannot initialize with null MatchManager");
-            }
         }
 
         public void InitializeSlots(GameObject cardSlotPrefab)
@@ -48,13 +32,13 @@ namespace Kardx.UI.Components
                 Destroy(child.gameObject);
             }
             cardSlots.Clear();
-            
+
             // Create card slots
             for (int i = 0; i < Player.BATTLEFIELD_SLOT_COUNT; i++)
             {
                 var slotGO = Instantiate(cardSlotPrefab, transform);
                 slotGO.name = $"PlayerCardSlot_{i}";
-                
+
                 var cardSlot = slotGO.GetComponent<PlayerCardSlot>();
                 if (cardSlot != null)
                 {
@@ -63,30 +47,16 @@ namespace Kardx.UI.Components
                 }
             }
         }
-        
+
         private void OnDestroy()
         {
-            // Unsubscribe from player events
-            if (player != null)
-            {
-                player.OnCardDeployed -= OnCardDeployed;
-            }
         }
-        
-        private void OnCardDeployed(Card card, int slotIndex)
-        {
-            // Update the UI for the deployed card
-            if (slotIndex >= 0 && slotIndex < cardSlots.Count)
-            {
-                UpdateCardInSlot(slotIndex, card);
-            }
-        }
-        
+
         public override void UpdateBattlefield(Battlefield battlefield)
         {
             if (battlefield == null)
                 return;
-                
+
             for (int i = 0; i < cardSlots.Count && i < Player.BATTLEFIELD_SLOT_COUNT; i++)
             {
                 var card = battlefield.GetCardAt(i);
@@ -124,7 +94,7 @@ namespace Kardx.UI.Components
                 cardSlot.ClearHighlight();
             }
         }
-        
+
         /// <summary>
         /// Highlight empty slots in the battlefield.
         /// </summary>
@@ -138,7 +108,7 @@ namespace Kardx.UI.Components
 
             Debug.Log($"[PlayerBattlefieldView] Highlighting empty slots. Total slots: {cardSlots.Count}");
             isHighlightingEmptySlots = true;
-            
+
             int highlightedCount = 0;
             for (int i = 0; i < cardSlots.Count; i++)
             {
@@ -149,10 +119,10 @@ namespace Kardx.UI.Components
                     Debug.Log($"[PlayerBattlefieldView] Highlighted slot {i}");
                 }
             }
-            
+
             Debug.Log($"[PlayerBattlefieldView] Highlighted {highlightedCount} empty slots");
         }
-        
+
         public override void ClearCardHighlights()
         {
             Debug.Log("[PlayerBattlefieldView] Clearing card highlights");
@@ -163,7 +133,7 @@ namespace Kardx.UI.Components
                 slot.ClearHighlight();
             }
         }
-        
+
         /// <summary>
         /// Clear all highlights in the battlefield.
         /// </summary>
@@ -171,13 +141,13 @@ namespace Kardx.UI.Components
         {
             Debug.Log("[PlayerBattlefieldView] Clearing all highlights");
             isHighlightingEmptySlots = false;
-            
+
             foreach (var slot in cardSlots)
             {
                 slot.SetHighlightState(PlayerCardSlot.HighlightType.None);
             }
         }
-        
+
         /// <summary>
         /// Get a specific card slot by index
         /// </summary>
@@ -187,8 +157,8 @@ namespace Kardx.UI.Components
             {
                 return cardSlots[slotIndex];
             }
-            
-            Debug.LogError($"[PlayerBattlefieldView] Slot index {slotIndex} is out of range (0-{cardSlots.Count-1})");
+
+            Debug.LogError($"[PlayerBattlefieldView] Slot index {slotIndex} is out of range (0-{cardSlots.Count - 1})");
             return null;
         }
 
@@ -201,7 +171,7 @@ namespace Kardx.UI.Components
         {
             return validDropHighlightColor;
         }
-        
+
         /// <summary>
         /// Get the MatchManager reference
         /// </summary>
@@ -216,56 +186,63 @@ namespace Kardx.UI.Components
         /// </summary>
         /// <param name="card">The card model that was deployed</param>
         /// <param name="slotIndex">The slot index where the card was deployed</param>
-        /// <param name="detachedCardView">The existing CardView that needs to be placed (optional)</param>
         /// <returns>True if the card was successfully deployed, false otherwise</returns>
-        public bool DeployCard(Card card, int slotIndex, CardView detachedCardView = null)
+        public bool OnCardDeployed(Card card, int slotIndex)
         {
             if (card == null)
             {
                 Debug.LogError("[PlayerBattlefieldView] Cannot deploy null card");
                 return false;
             }
-            
-            // If no detached card was provided, try to find it
-            if (detachedCardView == null)
+
+            // Find detached card view
+            CardView detachedCardView = null;
+            // Look for CardViews at the root level that match our card
+            foreach (CardView cardView in FindObjectsByType<CardView>(FindObjectsSortMode.None))
             {
-                // Look for CardViews at the root level that match our card
-                foreach (CardView cardView in FindObjectsByType<CardView>(FindObjectsSortMode.None))
+                // Check if this card view represents our card and is likely detached (at the root)
+                if (cardView.Card == card && cardView.transform.parent == cardView.transform.root)
                 {
-                    // Check if this card view represents our card and is likely detached (at the root)
-                    if (cardView.Card == card && cardView.transform.parent == cardView.transform.root)
-                    {
-                        detachedCardView = cardView;
-                        break;
-                    }
+                    detachedCardView = cardView;
+                    break;
                 }
             }
-            
+
             // Verify the slot is valid
             if (slotIndex < 0 || slotIndex >= cardSlots.Count)
             {
                 Debug.LogError($"[PlayerBattlefieldView] Invalid slot index: {slotIndex}");
                 return false;
             }
-            
+
             var targetSlot = cardSlots[slotIndex];
             if (targetSlot == null)
             {
                 Debug.LogError($"[PlayerBattlefieldView] Slot {slotIndex} is null");
                 return false;
             }
-            
+
             if (detachedCardView != null)
             {
                 Debug.Log($"[PlayerBattlefieldView] Deploying card {card.Title} to slot {slotIndex}");
-                
+
                 // Place the card in the slot
                 detachedCardView.transform.SetParent(targetSlot.CardContainer, false);
                 detachedCardView.transform.localPosition = Vector3.zero;
-                
+
+                // Explicitly switch from deployment drag handlers to ability drag handlers
+                detachedCardView.SwitchToAbilityDragHandler();
+
+                // Update player's hand to reflect the card being removed
+                var handView = FindAnyObjectByType<HandView>();
+                if (handView != null)
+                {
+                    handView.UpdateHand(matchManager.Player.Hand);
+                }
+
                 return true;
             }
-            
+
             Debug.Log($"[PlayerBattlefieldView] No detached card found for {card.Title}");
             return false;
         }
@@ -278,67 +255,67 @@ namespace Kardx.UI.Components
         /// <param name="slotIndex">The slot to deploy to</param>
         /// <param name="cardGameObject">The existing card GameObject to place in the slot</param>
         /// <returns>True if UI was updated successfully</returns>
-        public bool DeployUnitCard(Card card, int slotIndex, GameObject cardGameObject)
-        {
-            if (card == null || cardGameObject == null || slotIndex < 0 || slotIndex >= cardSlots.Count)
-            {
-                Debug.LogWarning("[PlayerBattlefieldView] Cannot deploy unit card - invalid parameters");
-                return false;
-            }
+        // public bool DeployUnitCard(Card card, int slotIndex, GameObject cardGameObject)
+        // {
+        //     if (card == null || cardGameObject == null || slotIndex < 0 || slotIndex >= cardSlots.Count)
+        //     {
+        //         Debug.LogWarning("[PlayerBattlefieldView] Cannot deploy unit card - invalid parameters");
+        //         return false;
+        //     }
 
-            // Get the target slot
-            var slot = cardSlots[slotIndex];
-            
-            // Move the existing card GameObject to the slot
-            cardGameObject.transform.SetParent(slot.transform, false);
-            cardGameObject.transform.localPosition = Vector3.zero;
-            
-            // Re-enable raycasts
-            var canvasGroup = cardGameObject.GetComponent<CanvasGroup>();
-            if (canvasGroup != null)
-            {
-                canvasGroup.blocksRaycasts = true;
-            }
-            
-            Debug.Log($"[PlayerBattlefieldView] Moved card UI for {card.Title} to slot {slotIndex}");
-            ClearHighlights();
-            return true;
-        }
+        //     // Get the target slot
+        //     var slot = cardSlots[slotIndex];
+
+        //     // Move the existing card GameObject to the slot
+        //     cardGameObject.transform.SetParent(slot.transform, false);
+        //     cardGameObject.transform.localPosition = Vector3.zero;
+
+        //     // Re-enable raycasts
+        //     var canvasGroup = cardGameObject.GetComponent<CanvasGroup>();
+        //     if (canvasGroup != null)
+        //     {
+        //         canvasGroup.blocksRaycasts = true;
+        //     }
+
+        //     Debug.Log($"[PlayerBattlefieldView] Moved card UI for {card.Title} to slot {slotIndex}");
+        //     ClearHighlights();
+        //     return true;
+        // }
 
         /// <summary>
         /// Checks if a unit card can be deployed to a specific slot
         /// </summary>
-        public bool CanDeployUnitCard(Card card, int slotIndex)
-        {
-            if (matchManager == null || card == null)
-                return false;
+        // public bool CanDeployUnitCard(Card card, int slotIndex)
+        // {
+        //     if (matchManager == null || card == null)
+        //         return false;
 
-            // Check if it's a unit card
-            if (!card.IsUnitCard)
-                return false;
+        //     // Check if it's a unit card
+        //     if (!card.IsUnitCard)
+        //         return false;
 
-            // Check if it's the player's turn
-            if (matchManager.CurrentPlayer != matchManager.Player)
-                return false;
+        //     // Check if it's the player's turn
+        //     if (matchManager.CurrentPlayer != matchManager.Player)
+        //         return false;
 
-            // Check if the card is in the player's hand
-            var player = matchManager.Player;
-            if (player == null || !player.Hand.Contains(card))
-                return false;
+        //     // Check if the card is in the player's hand
+        //     var player = matchManager.Player;
+        //     if (player == null || !player.Hand.Contains(card))
+        //         return false;
 
-            // Check if the slot is valid
-            if (slotIndex < 0 || slotIndex >= Player.BATTLEFIELD_SLOT_COUNT)
-                return false;
+        //     // Check if the slot is valid
+        //     if (slotIndex < 0 || slotIndex >= Player.BATTLEFIELD_SLOT_COUNT)
+        //         return false;
 
-            // Check if the slot is empty
-            if (player.Battlefield.GetCardAt(slotIndex) != null)
-                return false;
+        //     // Check if the slot is empty
+        //     if (player.Battlefield.GetCardAt(slotIndex) != null)
+        //         return false;
 
-            // Check if the player has enough credits
-            if (player.Credits < card.Cost)
-                return false;
+        //     // Check if the player has enough credits
+        //     if (player.Credits < card.Cost)
+        //         return false;
 
-            return true;
-        }
+        //     return true;
+        // }
     }
 }

@@ -14,8 +14,6 @@ namespace Kardx.Core
         private Kardx.Utils.ILogger logger;
         private Board board;
         private StrategyPlanner strategyPlanner;
-        private int startingHandSize = 4;
-        private int maxTurns = 50;
         private const int CREDITS_PER_TURN = 1;
 
         // Public properties
@@ -30,7 +28,6 @@ namespace Kardx.Core
         // Essential events for UI updates
         public event Action<Card, int> OnCardDeployed;
         public event Action<Card> OnCardDrawn;
-        public event Action<Card> OnCardDiscarded;
         public event Action<Strategy> OnStrategyDetermined;
         public event Action<Decision> OnDecisionExecuting;
         public event Action<Decision> OnDecisionExecuted;
@@ -44,7 +41,7 @@ namespace Kardx.Core
         public event Action<Card> OnCardDied;
 
         // Event for signaling when AI needs to process its turn
-        public event Action<Board, StrategyPlanner, Action> OnProcessAITurn;
+        public event Action<Board, StrategyPlanner> OnProcessAITurn;
 
         /// <summary>
         /// Creates a new instance of the MatchManager class.
@@ -76,7 +73,7 @@ namespace Kardx.Core
             board = new Board(player1, player2);
 
             // Create the strategy planner for the opponent (player2)
-            strategyPlanner = new StrategyPlanner(StrategySource.Dummy, player2, this, logger);
+            strategyPlanner = new StrategyPlanner(this, StrategySource.Dummy, logger);
 
             // Subscribe to strategy planner events
             strategyPlanner.OnStrategyDetermined += (strategy) =>
@@ -109,45 +106,11 @@ namespace Kardx.Core
             // Reset match state
             IsMatchInProgress = true;
 
-            // Do initial setup
-            InitializePlayerHands();
-
             // Notify listeners that the match has started
             OnMatchStarted?.Invoke("Match started");
 
             // Start first turn
             StartTurn();
-        }
-
-        private void InitializePlayerHands()
-        {
-            // Initialize the player for the first turn
-            // Add credits based on the turn number
-            int creditsToAdd = CREDITS_PER_TURN * board.TurnNumber;
-            board.Player.AddCredits(creditsToAdd);
-            logger?.Log($"[MatchManager] Added {creditsToAdd} credits to player {board.Player.Id}");
-
-            // Draw a card for the player
-            Card drawnCard = board.Player.DrawCard(false); // Player cards are face up
-            if (drawnCard != null)
-            {
-                OnCardDrawn?.Invoke(drawnCard);
-                logger?.Log($"[{CurrentPlayerId}] Card drawn: {drawnCard.Title}");
-            }
-
-            // Initialize the opponent for the first turn
-            // Add credits based on the turn number
-            creditsToAdd = CREDITS_PER_TURN * board.TurnNumber;
-            board.Opponent.AddCredits(creditsToAdd);
-            logger?.Log($"[MatchManager] Added {creditsToAdd} credits to player {board.Opponent.Id}");
-
-            // Draw a card for the opponent
-            drawnCard = board.Opponent.DrawCard(true); // Opponent cards are face down
-            if (drawnCard != null)
-            {
-                OnCardDrawn?.Invoke(drawnCard);
-                logger?.Log($"[{CurrentPlayerId}] Card drawn: {drawnCard.Title}");
-            }
         }
 
         private void StartTurn()
@@ -156,13 +119,22 @@ namespace Kardx.Core
             OnTurnStarted?.Invoke(this, board.CurrentTurnPlayer);
 
             // Reset card attack status
-            board.Player.ResetCardAttackStatus();
-            board.Opponent.ResetCardAttackStatus();
+            board.CurrentTurnPlayer.ResetCardAttackStatus();
+
+            // Draw a card as the frist step for each turn
+            Card drawnCard = DrawCard(); // Player cards are face up
+            if (drawnCard != null)
+            {
+                logger?.Log($"[{CurrentPlayerId}] Card drawn: {drawnCard.Title}");
+            }
 
             // If it's the opponent's turn, process it automatically
-            if (board.CurrentTurnPlayer.Id == board.Opponent.Id)
+            if (!board.IsPlayerTurn())
             {
-                ProcessOpponentTurn();
+                logger?.Log("Let the opponent run the first turn");
+
+                // Trigger the event for the UI layer to handle AI processing
+                OnProcessAITurn?.Invoke(board, strategyPlanner);
             }
         }
 
@@ -186,10 +158,12 @@ namespace Kardx.Core
 
             // Start the next turn
             // Switch to the next player
-            board.SwitchCurrentPlayer();
-            board.IncrementTurnNumber();
-
-            var nextPlayer = board.CurrentTurnPlayer;
+            var nextPlayer = board.SwitchCurrentPlayer();
+            // Increment turn number only on player turn, so that two player will add the same credits
+            if (board.IsPlayerTurn())
+            {
+                board.IncrementTurnNumber();
+            }
             logger?.Log(
                 $"[MatchManager] Starting turn {board.TurnNumber} for player {nextPlayer.Id}"
             );
@@ -201,10 +175,9 @@ namespace Kardx.Core
             logger?.Log($"[MatchManager] Added {creditsToAdd} credits to player {nextPlayer.Id}");
 
             // Draw a card for the player
-            Card drawnCard = nextPlayer.DrawCard(nextPlayer.Id == board.Opponent.Id);
+            Card drawnCard = DrawCard();
             if (drawnCard != null)
             {
-                OnCardDrawn?.Invoke(drawnCard);
                 logger?.Log($"[{CurrentPlayerId}] Card drawn: {drawnCard.Title}");
             }
 
@@ -215,28 +188,16 @@ namespace Kardx.Core
             OnTurnStarted?.Invoke(this, nextPlayer);
 
             // Reset card attack status for both players
-            board.Player.ResetCardAttackStatus();
-            board.Opponent.ResetCardAttackStatus();
+            nextPlayer.ResetCardAttackStatus();
 
             // If it's the opponent's turn, process it automatically
-            if (nextPlayer.Id == board.Opponent.Id)
+            if (!board.IsPlayerTurn())
             {
-                ProcessOpponentTurn();
+                logger?.Log("Processing opponent turn");
+
+                // Trigger the event for the UI layer to handle AI processing
+                OnProcessAITurn?.Invoke(board, strategyPlanner);
             }
-        }
-
-        /// <summary>
-        /// Processes the opponent's turn automatically.
-        /// </summary>
-        private void ProcessOpponentTurn()
-        {
-            if (board == null)
-                throw new InvalidOperationException("Match not started");
-
-            logger?.Log("Processing opponent turn");
-
-            // Trigger the event for the UI layer to handle AI processing
-            OnProcessAITurn?.Invoke(board, strategyPlanner, NextTurn);
         }
 
         private List<Card> LoadDeck(Faction ownerFaction)
@@ -264,6 +225,14 @@ namespace Kardx.Core
             IsMatchInProgress = false;
             OnMatchEnded?.Invoke($"Match ended after {TurnNumber} turns");
             logger?.Log($"Match ended after {TurnNumber} turns");
+        }
+
+        public Card DrawCard()
+        {
+            var player = board.CurrentTurnPlayer;
+            var drawnCard = player.DrawCard(!board.IsPlayerTurn());
+            OnCardDrawn?.Invoke(drawnCard);
+            return drawnCard;
         }
 
         public bool CanDeployUnitCard(Card card)
@@ -379,7 +348,6 @@ namespace Kardx.Core
 
             var currentPlayer = board.CurrentTurnPlayer;
             bool success = currentPlayer.DeployUnitCard(card, position);
-            OnCardDeployed?.Invoke(card, position);
             return success;
         }
 
@@ -410,7 +378,6 @@ namespace Kardx.Core
 
             var currentPlayer = board.CurrentTurnPlayer;
             bool success = currentPlayer.DeployOrderCard(card);
-            OnCardDeployed?.Invoke(card, -1);
             return success;
         }
 
@@ -423,6 +390,7 @@ namespace Kardx.Core
             bool success = card.CardType.Category == CardCategory.Unit ? DeployUnitCard(card, position)
                 : card.CardType.Category == CardCategory.Order ? DeployOrderCard(card)
                 : false;
+            OnCardDeployed?.Invoke(card, position);
             return success;
         }
 
@@ -539,22 +507,6 @@ namespace Kardx.Core
                 // Fire event to notify UI
                 OnCardDied?.Invoke(card);
             }
-        }
-
-        private void SubscribeToStrategyPlannerEvents(StrategyPlanner planner)
-        {
-            if (planner == null)
-                return;
-
-            // Since we're now using matchManager.DeployCard directly in the StrategyPlanner,
-            // we don't need to handle card deployments here anymore as the OnCardDeployed event
-            // will be triggered automatically by the DeployCard method.
-
-            // We can still handle other decision types here if needed
-            planner.OnDecisionExecuted += (decision) => {
-                // Handle other decision types if needed
-                // For example, card discards, attacks, etc.
-            };
         }
 
         /// <summary>

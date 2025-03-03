@@ -2,9 +2,8 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
-using Kardx.UI.Scenes;
 
-namespace Kardx.UI.Components
+namespace Kardx.UI
 {
     using Kardx.Core;
 
@@ -28,7 +27,6 @@ namespace Kardx.UI.Components
         private MatchManager matchManager;
         private Vector2 pointerStartPosition;
         private bool isDragging = false;
-        private bool canAttack = false;
         private Transform originalParent;
         private Vector3 originalPosition;
 
@@ -66,14 +64,14 @@ namespace Kardx.UI.Components
                 Debug.LogError("[AbilityDragHandler] No MatchView found in the scene.");
                 return;
             }
-            
+
             // Get MatchManager through a battlefield view
             PlayerBattlefieldView playerBattlefieldView = FindAnyObjectByType<PlayerBattlefieldView>();
             if (playerBattlefieldView != null)
             {
                 matchManager = playerBattlefieldView.GetMatchManager();
             }
-            
+
             if (matchManager == null)
             {
                 Debug.LogError("[AbilityDragHandler] Cannot find MatchManager reference");
@@ -95,19 +93,19 @@ namespace Kardx.UI.Components
                 attackArrow = arrowObj.AddComponent<AttackArrow>();
             }
         }
-        
+
         // Additional initialization method
         public void Initialize(MatchView matchView, MatchManager matchManager)
         {
             this.matchView = matchView;
             this.matchManager = matchManager;
-            
+
             // Find Canvas if not already set
             if (canvas == null)
             {
                 canvas = GetComponentInParent<Canvas>();
             }
-            
+
             // Verify we have arrow reference
             if (attackArrow == null)
             {
@@ -117,7 +115,7 @@ namespace Kardx.UI.Components
                     attackArrow = arrowObj.GetComponent<AttackArrow>();
                 }
             }
-            
+
             // Set component state appropriately
             UpdateComponentState();
         }
@@ -135,26 +133,26 @@ namespace Kardx.UI.Components
                 EndDragging();
             }
         }
-        
+
         // Helper method to cleanly end the dragging state
         private void EndDragging()
         {
             isDragging = false;
-            
+
             if (attackArrow != null)
             {
                 attackArrow.StopDrawing();
             }
-            
+
             // Clear any highlights
             if (matchView != null)
             {
                 matchView.ClearAllHighlights();
             }
-            
+
             OnDragEnded?.Invoke(false);
         }
-        
+
         // Updates component state based on card abilities
         private void UpdateComponentState()
         {
@@ -163,38 +161,38 @@ namespace Kardx.UI.Components
                 enabled = false;
                 return;
             }
-            
+
             // Only enable this drag handler if the card has abilities and can attack
             bool shouldBeEnabled = CanCardAttack();
             enabled = shouldBeEnabled;
-            
+
             // If we have a deploy drag handler, make sure it's disabled when this component is enabled
             if (deployDragHandler != null)
             {
                 deployDragHandler.enabled = !shouldBeEnabled;
             }
         }
-        
+
         // Determines if the card can attack (is on battlefield, player's turn, etc.)
         private bool CanCardAttack()
         {
             if (cardView == null || cardView.Card == null || matchManager == null)
                 return false;
-                
+
             var card = cardView.Card;
-            
+
             // Check if it's the player's turn
             if (!matchManager.IsPlayerTurn())
                 return false;
-                
+
             // Check if the card is on the player's battlefield
             if (!matchManager.Player.Battlefield.Contains(card))
                 return false;
-                
+
             // Check if the card has already attacked this turn
             if (card.HasAttackedThisTurn)
                 return false;
-                
+
             return true;
         }
 
@@ -359,10 +357,10 @@ namespace Kardx.UI.Components
             {
                 return opponentView.CanTargetCard(cardView.Card, targetCard);
             }
-            
+
             // Fallback implementation if OpponentBattlefieldView isn't available
             // Check if the target card is on the opponent's battlefield
-            return matchManager.Opponent.Battlefield.Contains(targetCard) && 
+            return matchManager.Opponent.Battlefield.Contains(targetCard) &&
                    !targetCard.HasAttackedThisTurn && // Using HasAttackedThisTurn as a simple check
                    matchManager.IsPlayerTurn();
         }

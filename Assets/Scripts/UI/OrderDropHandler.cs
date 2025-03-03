@@ -1,9 +1,8 @@
-using Kardx.UI.Scenes;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-namespace Kardx.UI.Components
+namespace Kardx.UI
 {
     using Card = Kardx.Core.Card;
     using CardCategory = Kardx.Core.CardCategory;
@@ -24,7 +23,7 @@ namespace Kardx.UI.Components
         {
             // Just store the matchView reference
             matchView = GetComponentInParent<MatchView>();
-            
+
             if (matchView == null)
             {
                 Debug.LogWarning("[OrderDropHandler] Could not find MatchView.");
@@ -131,7 +130,7 @@ namespace Kardx.UI.Components
                 Debug.LogError("[OrderDropHandler] Failed to deploy Order card - MatchView not available");
                 return;
             }
-            
+
             var matchManager = matchView.MatchManager;
             if (matchManager == null)
             {
@@ -175,21 +174,21 @@ namespace Kardx.UI.Components
                 Debug.Log("[OrderDropHandler] Invalid drop target: Card is null");
                 return false;
             }
-            
+
             // Get MatchManager from matchView
             if (matchView == null)
             {
                 Debug.Log("[OrderDropHandler] Invalid drop target: MatchView not available");
                 return false;
             }
-            
+
             var matchManager = matchView.MatchManager;
             if (matchManager == null)
             {
                 Debug.Log("[OrderDropHandler] Invalid drop target: MatchManager not available");
                 return false;
             }
-            
+
             // Make sure CardType is not null
             if (card.CardType == null)
             {

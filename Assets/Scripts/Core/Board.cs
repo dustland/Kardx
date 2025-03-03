@@ -13,11 +13,7 @@ namespace Kardx.Core
         private Player opponent;
         private Player currentTurnPlayer;
         private int turnNumber;
-        
-        // Events
-        public event Action<Player> OnTurnStarted;
-        public event Action<Player> OnTurnEnded;
-        
+
         /// <summary>
         /// Initializes a new instance of the <see cref="Board"/> class.
         /// </summary>
@@ -27,36 +23,36 @@ namespace Kardx.Core
         {
             this.player = player;
             this.opponent = opponent;
-            
+
             // Set board reference in players
             player.SetBoard(this);
             opponent.SetBoard(this);
-            
-            // Start with player's turn
-            currentTurnPlayer = player;
+
+            // Start with opponent's turn
+            currentTurnPlayer = opponent;
             turnNumber = 1;
         }
-        
+
         /// <summary>
         /// Gets the player.
         /// </summary>
         public Player Player => player;
-        
+
         /// <summary>
         /// Gets the opponent.
         /// </summary>
         public Player Opponent => opponent;
-        
+
         /// <summary>
         /// Gets the current turn player.
         /// </summary>
         public Player CurrentTurnPlayer => currentTurnPlayer;
-        
+
         /// <summary>
         /// Gets the current turn number.
         /// </summary>
         public int TurnNumber => turnNumber;
-        
+
         /// <summary>
         /// Checks if a player is the opponent.
         /// </summary>
@@ -66,7 +62,7 @@ namespace Kardx.Core
         {
             return player == opponent;
         }
-        
+
         /// <summary>
         /// Checks if it's the player's turn.
         /// </summary>
@@ -75,44 +71,34 @@ namespace Kardx.Core
         {
             return currentTurnPlayer == player;
         }
-        
+
         /// <summary>
-        /// Starts a new turn for the next player.
+        /// Ends the current turn.
         /// </summary>
-        public void StartNextTurn()
+        public void EndTurn()
         {
-            // End current turn
-            OnTurnEnded?.Invoke(currentTurnPlayer);
+            // Switch the current player
+            currentTurnPlayer = currentTurnPlayer == player ? opponent : player;
             
-            // Switch current player
-            currentTurnPlayer = (currentTurnPlayer == player) ? opponent : player;
-            
-            // Increment turn number if it's the player's turn
+            // Increment turn number when player's turn starts
             if (currentTurnPlayer == player)
             {
                 turnNumber++;
             }
-            
-            // Add credits for the new turn
+        }
+
+        /// <summary>
+        /// Starts a new turn for the current player.
+        /// </summary>
+        public void StartTurn()
+        {
+            // Refresh the current player's resources
             currentTurnPlayer.AddCredits(Player.CREDITS_PER_TURN);
             
-            // Draw a card for the new turn
-            currentTurnPlayer.DrawCard();
-            
-            // Notify turn started
-            OnTurnStarted?.Invoke(currentTurnPlayer);
+            // Reset attack counts for all cards would be implemented here
+            // This functionality would need to be added to Battlefield class
         }
-        
-        /// <summary>
-        /// Gets the other player.
-        /// </summary>
-        /// <param name="player">The current player.</param>
-        /// <returns>The other player.</returns>
-        public Player GetOtherPlayer(Player player)
-        {
-            return player == this.player ? opponent : this.player;
-        }
-        
+
         /// <summary>
         /// Processes end of turn effects for all cards in play.
         /// </summary>
@@ -123,13 +109,13 @@ namespace Kardx.Core
             {
                 card.ProcessEndOfTurnEffects();
             }
-            
+
             foreach (var card in opponent.GetCardsInPlay())
             {
                 card.ProcessEndOfTurnEffects();
             }
         }
-        
+
         /// <summary>
         /// Processes start of turn effects for all cards in play.
         /// </summary>
@@ -140,21 +126,23 @@ namespace Kardx.Core
             {
                 card.ProcessStartOfTurnEffects();
             }
-            
+
             foreach (var card in opponent.GetCardsInPlay())
             {
                 card.ProcessStartOfTurnEffects();
             }
         }
-        
+
         /// <summary>
         /// Switches the current player to the other player.
         /// </summary>
-        public void SwitchCurrentPlayer()
+        /// <returns>The new current player.</returns>
+        public Player SwitchCurrentPlayer()
         {
-            currentTurnPlayer = GetOtherPlayer(currentTurnPlayer);
+            currentTurnPlayer = currentTurnPlayer == player ? opponent : player;
+            return currentTurnPlayer;
         }
-        
+
         /// <summary>
         /// Increments the turn number.
         /// </summary>

@@ -8,7 +8,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-namespace Kardx.UI.Components
+namespace Kardx.UI
 {
     public class CardView : MonoBehaviour, IPointerClickHandler
     {
@@ -75,6 +75,8 @@ namespace Kardx.UI.Components
 
         // Reference to the drag handlers on the canvas
         private AbilityDragHandler abilityDragHandler;
+        private UnitDeployDragHandler unitDeployDragHandler;
+        private OrderDeployDragHandler orderDeployDragHandler;
         private CanvasGroup canvasGroup;
         private bool isDraggable = true;
         private bool isDragging = false;
@@ -95,7 +97,6 @@ namespace Kardx.UI.Components
         {
             // Initialize isDragging to false
             isDragging = false;
-            Debug.Log($"[CardView] Initializing {gameObject.name} with isDragging = {isDragging}");
 
             // Ensure we have the basic required components
             if (GetComponent<RectTransform>() == null)
@@ -140,21 +141,10 @@ namespace Kardx.UI.Components
             {
                 cardBackOverlay.gameObject.SetActive(false);
             }
-
-            Debug.Log(
-                $"[CardView] Initialized {gameObject.name} - Image: {backgroundImage != null}, "
-                    + $"RaycastTarget: {backgroundImage.raycastTarget}, "
-                    + $"CanvasGroup: {canvasGroup != null}, "
-                    + $"DragHandler: {abilityDragHandler != null}"
-            );
         }
 
         public void OnPointerClick(PointerEventData eventData)
         {
-            Debug.Log(
-                $"[CardView] OnPointerClick on {gameObject.name} (isDragging: {isDragging}, EventCamera: {eventData.enterEventCamera?.name}, PointerPress: {eventData.pointerPress?.name})"
-            );
-
             // Check if the CanvasGroup is blocking raycasts
             var canvasGroup = GetComponent<CanvasGroup>();
             if (canvasGroup != null)
@@ -368,7 +358,6 @@ namespace Kardx.UI.Components
                 {
                     artworkImage.sprite = sprite;
                     artworkImage.preserveAspect = true;
-                    Debug.Log($"[CardView] Successfully loaded image for {imageUrl}");
                 }
                 else
                 {
@@ -396,60 +385,98 @@ namespace Kardx.UI.Components
         {
             isDraggable = canDrag;
 
-            // Find the AbilityDragHandler if it's not already cached
+            // Cache references to drag handlers if not already done
             if (abilityDragHandler == null)
-            {
                 abilityDragHandler = GetComponent<AbilityDragHandler>();
-                if (abilityDragHandler == null)
-                {
-                    // Try to find it in the parent canvas
-                    var canvas = GetComponentInParent<Canvas>();
-                    if (canvas != null)
-                    {
-                        abilityDragHandler = canvas.GetComponent<AbilityDragHandler>();
-                    }
-                }
-            }
+
+            if (unitDeployDragHandler == null)
+                unitDeployDragHandler = GetComponent<UnitDeployDragHandler>();
+
+            if (orderDeployDragHandler == null)
+                orderDeployDragHandler = GetComponent<OrderDeployDragHandler>();
 
             // Check if the card is on the battlefield
             bool isOnBattlefield = IsCardOnBattlefield();
+            bool isPlayerCard = card != null && card.Owner != null && !card.Owner.IsOpponent;
 
-            // For cards on battlefield, enable AbilityDragHandler
-            if (isOnBattlefield)
+            // Disable all drag handlers first
+            if (abilityDragHandler != null) abilityDragHandler.enabled = false;
+            if (unitDeployDragHandler != null) unitDeployDragHandler.enabled = false;
+            if (orderDeployDragHandler != null) orderDeployDragHandler.enabled = false;
+
+            // Only enable drag handlers if dragging is allowed and it's a player card
+            if (canDrag && isPlayerCard)
             {
-                if (abilityDragHandler != null)
+                if (isOnBattlefield)
                 {
-                    abilityDragHandler.enabled = canDrag;
+                    // Cards on battlefield use AbilityDragHandler
+                    if (abilityDragHandler != null)
+                    {
+                        abilityDragHandler.enabled = true;
+                        Debug.Log($"[CardView] Card {card?.Title} is on battlefield, enabling AbilityDragHandler");
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"[CardView] Card {card?.Title} is on battlefield but has no AbilityDragHandler");
+                    }
                 }
-
-                Debug.Log(
-                    $"[CardView] Card {(card != null ? card.Title : "unknown")} is on battlefield, AbilityDragHandler enabled: {canDrag}"
-                );
+                else
+                {
+                    // Cards in hand use UnitDeployDragHandler or OrderDeployDragHandler based on card type
+                    if (card != null && card.IsUnitCard && unitDeployDragHandler != null)
+                    {
+                        unitDeployDragHandler.enabled = true;
+                        Debug.Log($"[CardView] Card {card.Title} is in hand, enabling UnitDeployDragHandler");
+                    }
+                    else if (card != null && !card.IsUnitCard && orderDeployDragHandler != null)
+                    {
+                        orderDeployDragHandler.enabled = true;
+                        Debug.Log($"[CardView] Card {card.Title} is in hand, enabling OrderDeployDragHandler");
+                    }
+                }
             }
             else
             {
-                // For cards in hand, disable AbilityDragHandler
-                if (abilityDragHandler != null)
-                {
-                    abilityDragHandler.enabled = false;
-                }
-
-                Debug.Log(
-                    $"[CardView] Card {(card != null ? card.Title : "unknown")} is in hand"
-                );
+                Debug.Log($"[CardView] Card {card?.Title} is not draggable or is an opponent card");
             }
 
-            // When a card is deployed to the battlefield, we disable dragging
-            // Make sure to reset the isDragging flag to ensure the card can be clicked
+            // When a card is no longer draggable, reset the isDragging flag
             if (!canDrag)
             {
                 isDragging = false;
-                Debug.Log(
-                    $"[CardView] Card {(card != null ? card.Title : "unknown")} is no longer draggable, resetting isDragging to false"
-                );
+                Debug.Log($"[CardView] Card {card?.Title} is no longer draggable, resetting isDragging to false");
             }
         }
-        
+
+        /// <summary>
+        /// Explicitly switches the card from deployment drag handlers to ability drag handlers
+        /// Called when a card is deployed to the battlefield
+        /// </summary>
+        public void SwitchToAbilityDragHandler()
+        {
+            // Cache references to drag handlers if not already done
+            if (abilityDragHandler == null)
+                abilityDragHandler = GetComponent<AbilityDragHandler>();
+
+            if (unitDeployDragHandler == null)
+                unitDeployDragHandler = GetComponent<UnitDeployDragHandler>();
+
+            if (orderDeployDragHandler == null)
+                orderDeployDragHandler = GetComponent<OrderDeployDragHandler>();
+
+            // Disable deployment drag handlers
+            if (unitDeployDragHandler != null) unitDeployDragHandler.enabled = false;
+            if (orderDeployDragHandler != null) orderDeployDragHandler.enabled = false;
+
+            // Only enable ability drag handler if it's a player card
+            bool isPlayerCard = card != null && card.Owner != null && !card.Owner.IsOpponent;
+            if (isPlayerCard && abilityDragHandler != null)
+            {
+                abilityDragHandler.enabled = isDraggable;
+                Debug.Log($"[CardView] Switched {card?.Title} to AbilityDragHandler (enabled: {isDraggable})");
+            }
+        }
+
         // Method to set card interactable state
         public void SetInteractable(bool interactable)
         {
@@ -462,7 +489,7 @@ namespace Kardx.UI.Components
                 // Always keep the alpha at 1.0 - we don't need visual differentiation for interactable state
                 canvasGroup.alpha = 1.0f;
             }
-            
+
             // Update draggable state
             SetDraggable(interactable && isDraggable);
         }
@@ -493,7 +520,7 @@ namespace Kardx.UI.Components
             {
                 card.SetFaceDown(faceDown);
             }
-            
+
             // Always update the UI state
             ShowCardBack(faceDown);
         }
@@ -503,17 +530,17 @@ namespace Kardx.UI.Components
         {
             this.card = card;
             this.cardType = card?.CardType;
-            
+
             // Set face down state on the card model
             if (card != null)
             {
                 card.SetFaceDown(faceDown);
             }
-            
+
             // Update the UI
             UpdateUI();
         }
-        
+
         // Method to set a card on this view
         public void SetCard(Card card, bool faceDown = false)
         {
@@ -601,53 +628,29 @@ namespace Kardx.UI.Components
                     card.OwnerFaction,
                     FactionCardBacks[Faction.Neutral]
                 );
-                Debug.Log($"[CardView] Attempting to load card back from path: {cardBackPath}");
 
                 Sprite cardBackSprite = Resources.Load<Sprite>(cardBackPath);
 
                 if (cardBackSprite != null)
                 {
-                    Debug.Log(
-                        $"[CardView] Successfully loaded card back sprite for faction {card.OwnerFaction}"
-                    );
                     cardBackOverlay.sprite = cardBackSprite;
-
                     cardBackOverlay.gameObject.SetActive(true);
                 }
                 else
                 {
-                    Debug.LogWarning(
-                        $"[CardView] Failed to load card back sprite for faction {card.OwnerFaction} at path: {cardBackPath}"
-                    );
-
-                    // Try loading with a direct path to the Resources/Cards folder as fallback
-                    string fallbackPath = $"Cards/{Path.GetFileName(cardBackPath)}";
-                    Debug.Log($"[CardView] Trying fallback path: {fallbackPath}");
-                    cardBackSprite = Resources.Load<Sprite>(fallbackPath);
-
-                    if (cardBackSprite != null)
-                    {
-                        Debug.Log($"[CardView] Successfully loaded card back from fallback path");
-                        cardBackOverlay.sprite = cardBackSprite;
-
-                        cardBackOverlay.gameObject.SetActive(true);
-                    }
-                    else
-                    {
-                        Debug.LogError(
+                    Debug.LogError(
                             $"[CardView] Failed to load card back from fallback path. Using neutral back as last resort"
                         );
-                        // Load neutral back as fallback
-                        cardBackSprite = Resources.Load<Sprite>(FactionCardBacks[Faction.Neutral]);
+                    // Load neutral back as fallback
+                    cardBackSprite = Resources.Load<Sprite>(FactionCardBacks[Faction.Neutral]);
 
-                        if (cardBackSprite == null)
-                        {
-                            Debug.LogError(
-                                "[CardView] Even neutral card back failed to load! Creating placeholder image."
-                            );
-                            // Skip placeholder creation
-                            cardBackOverlay.gameObject.SetActive(false);
-                        }
+                    if (cardBackSprite == null)
+                    {
+                        Debug.LogError(
+                            "[CardView] Even neutral card back failed to load! Creating placeholder image."
+                        );
+                        // Skip placeholder creation
+                        cardBackOverlay.gameObject.SetActive(false);
                     }
                 }
             }
@@ -702,7 +705,6 @@ namespace Kardx.UI.Components
             }
 
             // Initialize card data
-            Debug.Log($"[CardView] Initializing card data for {card.Title}");
             cardView.Initialize(card);
 
             // Update the UI to reflect the current state of the card
@@ -729,7 +731,6 @@ namespace Kardx.UI.Components
                 image = cardGO.AddComponent<Image>();
             }
             image.raycastTarget = true;
-            Debug.Log($"[CardView] Set raycastTarget to true for {card.Title}");
 
             // Set up the appropriate drag handlers
             bool isInHand = !cardView.IsCardOnBattlefield();
@@ -791,7 +792,6 @@ namespace Kardx.UI.Components
                 }
             }
 
-            Debug.Log($"[CardView] Card UI creation complete for {card.Title}");
             return cardView;
         }
     }
