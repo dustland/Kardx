@@ -55,9 +55,30 @@ namespace Kardx.UI.Components
             this.battlefieldView = battlefieldView;
             
             // Initialize highlight
+            if (highlightImage == null)
+            {
+                // Create highlight image if it doesn't exist
+                GameObject highlightObj = new GameObject("Highlight");
+                highlightObj.transform.SetParent(transform, false);
+                highlightObj.transform.SetAsFirstSibling(); // Put it at the back
+                
+                // Make it fill the slot
+                RectTransform rectTransform = highlightObj.AddComponent<RectTransform>();
+                rectTransform.anchorMin = Vector2.zero;
+                rectTransform.anchorMax = Vector2.one;
+                rectTransform.offsetMin = Vector2.zero;
+                rectTransform.offsetMax = Vector2.zero;
+                
+                // Add image component
+                highlightImage = highlightObj.AddComponent<Image>();
+                highlightImage.color = availableHighlightColor;
+                highlightImage.raycastTarget = false; // Don't block raycasts
+            }
+            
+            // Ensure highlight is initially disabled
             if (highlightImage != null)
             {
-                highlightImage.enabled = false;
+                highlightImage.gameObject.SetActive(false);
             }
             
             // Initialize card container if not set
@@ -155,7 +176,7 @@ namespace Kardx.UI.Components
         {
             if (!IsHighlighted())
             {
-                Debug.Log("[PlayerCardSlot] Card slot is not a valid drop target");
+                Debug.LogWarning($"[PlayerCardSlot] Card slot {slotIndex} is not a valid drop target. Current highlight: {currentHighlightType}");
                 return;
             }
             
@@ -163,9 +184,11 @@ namespace Kardx.UI.Components
             var cardView = eventData.pointerDrag.GetComponent<CardView>();
             if (cardView == null || cardView.Card == null)
             {
-                Debug.Log("[PlayerCardSlot] Dropped item is not a valid card");
+                Debug.LogError("[PlayerCardSlot] Dropped item is not a valid card");
                 return;
             }
+
+            Debug.Log($"[PlayerCardSlot] Card {cardView.Card.Title} dropped on slot {slotIndex}");
 
             // Get access to the match manager directly from battlefield view
             var matchManager = battlefieldView.GetMatchManager();
@@ -179,20 +202,25 @@ namespace Kardx.UI.Components
                 if (card.IsUnitCard)
                 {
                     // For unit cards, deploy to the specific slot
+                    Debug.Log($"[PlayerCardSlot] Deploying unit card to slot {slotIndex}");
                     success = matchManager.DeployUnitCard(card, slotIndex);
                 }
                 else if (card.IsOrderCard)
                 {
                     // For order cards, just deploy 
+                    Debug.Log("[PlayerCardSlot] Deploying order card");
                     success = matchManager.DeployOrderCard(card);
                 }
                 
-                // If deployment was successful, we can destroy the dragged card
-                // The UI will be updated through the OnCardDeployed event from MatchManager
-                if (success && eventData.pointerDrag != null)
-                {
-                    Destroy(eventData.pointerDrag);
-                }
+                Debug.Log($"[PlayerCardSlot] Deployment {(success ? "succeeded" : "failed")}");
+                
+                // We don't destroy the card anymore - HandleCardDeployed will handle it
+                // The drag handlers now leave the cards for HandleCardDeployed to reposition
+                // If deployment was successful, the UI will be updated through the OnCardDeployed event from MatchManager
+            }
+            else
+            {
+                Debug.LogError("[PlayerCardSlot] Cannot deploy card - MatchManager is null");
             }
             
             // Clear all highlights - we access this through the battlefield view now 
@@ -218,7 +246,9 @@ namespace Kardx.UI.Components
         
         private bool IsHighlighted()
         {
-            return currentHighlightType == HighlightType.DropTarget;
+            // Accept both DropTarget and Available states as valid drop targets
+            return currentHighlightType == HighlightType.DropTarget || 
+                   currentHighlightType == HighlightType.Available;
         }
     }
 }

@@ -1,12 +1,13 @@
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using Kardx.Core;
 using Kardx.UI.Scenes;
 
 namespace Kardx.UI.Components
 {
-    using Kardx.Core;
-
     /// <summary>
     /// Specialized drag handler for deploying order cards.
     /// </summary>
@@ -14,14 +15,17 @@ namespace Kardx.UI.Components
     {
         [SerializeField]
         private float dragOffset = 0.5f;
-
+        
+        [SerializeField]
+        private Transform orderDropArea;
+        
         private CardView cardView;
-        private MatchManager matchManager;
         private Vector3 originalPosition;
         private Transform originalParent;
         private CanvasGroup canvasGroup;
         private bool isDragging = false;
-
+        private HandView handView;
+        
         private void Awake()
         {
             cardView = GetComponent<CardView>();
@@ -32,139 +36,116 @@ namespace Kardx.UI.Components
                 canvasGroup = gameObject.AddComponent<CanvasGroup>();
             }
             
-            // Get the MatchManager through the containing hierarchy
-            var matchView = GetComponentInParent<MatchView>();
-            if (matchView != null)
-            {
-                matchManager = matchView.MatchManager;
-            }
-            else
+            InitializeHandView();
+        }
+        
+        private void InitializeHandView()
+        {
+            // Get the HandView through the containing hierarchy
+            handView = GetComponentInParent<HandView>();
+            
+            if (handView == null)
             {
                 // If we can't find it directly, try finding it in the scene
-                matchView = FindAnyObjectByType<MatchView>();
-                if (matchView != null)
+                handView = FindAnyObjectByType<HandView>();
+                if (handView == null)
                 {
-                    matchManager = matchView.MatchManager;
+                    Debug.LogError("OrderDeployDragHandler: Cannot find HandView in hierarchy or scene");
                 }
                 else
                 {
-                    Debug.LogError("OrderDeployDragHandler: Cannot find MatchView in hierarchy or scene");
+                    Debug.Log("[OrderDeployDragHandler] Found HandView in scene directly");
                 }
             }
         }
-
+        
         public void OnBeginDrag(PointerEventData eventData)
         {
             if (!CanDrag())
                 return;
-
+                
             isDragging = true;
             originalPosition = transform.position;
             originalParent = transform.parent;
-
+            
             // Disable raycast blocking so we can detect drop targets underneath
             canvasGroup.blocksRaycasts = false;
             
             // Move to front of UI
             transform.SetParent(transform.root);
         }
-
+        
         public void OnDrag(PointerEventData eventData)
         {
             if (!isDragging)
                 return;
-
+                
             // Move the card with the cursor
             transform.position = eventData.position + new Vector2(0, dragOffset);
         }
-
+        
+        /// <summary>
+        /// Handles the end of drag operation. Only responsible for UI behavior.
+        /// This method only handles returning the card to its original position if not dropped on a valid target.
+        /// The actual deployment logic happens in OrderDropHandler.OnDrop.
+        /// </summary>
+        /// <param name="eventData">Data about the pointer event</param>
         public void OnEndDrag(PointerEventData eventData)
         {
+            Debug.Log("[OrderDeployDragHandler] End Drag");
+            
             if (!isDragging)
                 return;
-
+                
             isDragging = false;
             
-            // Re-enable raycast blocking
-            canvasGroup.blocksRaycasts = true;
-            
-            // Check if the card can be played
-            if (CanPlayOrderCard())
+            // Re-enable raycasts now that we're done dragging
+            if (canvasGroup != null)
             {
-                // Get the card
-                Card card = cardView.Card;
+                canvasGroup.blocksRaycasts = true;
+            }
+            
+            // Check if we dropped on a valid target
+            bool wasDroppedOnTarget = eventData.pointerEnter != null && 
+                                     (eventData.pointerEnter.GetComponent<OrderDropHandler>() != null);
+            
+            // If not dropped on a valid target, return the card to its original position
+            if (!wasDroppedOnTarget)
+            {
+                Debug.Log("[OrderDeployDragHandler] Not dropped on valid target, returning to original position");
+                ReturnToOriginalPosition();
                 
-                if (matchManager != null)
+                // If we have a reference to HandView, we can ask it to clear highlights
+                if (handView != null)
                 {
-                    // Play the order card directly through the match manager
-                    bool deploySuccess = matchManager.DeployOrderCard(card);
-                    
-                    // If deployment was successful, the card is removed from hand and we should destroy this instance
-                    if (deploySuccess)
-                    {
-                        Destroy(this.gameObject);
-                    }
-                    else
-                    {
-                        // Return to original position
-                        transform.SetParent(originalParent);
-                        transform.position = originalPosition;
-                    }
+                    handView.ClearHighlights();
                 }
-            }
-            else
-            {
-                // Return to original position
-                transform.SetParent(originalParent);
-                transform.position = originalPosition;
             }
             
-            // Get the parent battlefield view to clear highlights if possible
-            // Otherwise we'll try to find a MatchView to do it
-            var playerBattlefieldView = GetComponentInParent<PlayerBattlefieldView>();
-            if (playerBattlefieldView != null)
-            {
-                playerBattlefieldView.ClearHighlights();
-            }
-            else
-            {
-                // Try to find the MatchView directly in the scene
-                var matchView = FindAnyObjectByType<MatchView>();
-                if (matchView != null)
-                {
-                    matchView.ClearAllHighlights();
-                }
-                else
-                {
-                    Debug.LogError("OrderDeployDragHandler: Cannot find MatchView for clearing highlights");
-                }
-            }
+            // Note: We don't need to handle deployment here
+            // OrderDropHandler.OnDrop will handle the game logic for deployment
+            // and the card will be handled appropriately after that
         }
-
-        private bool CanPlayOrderCard()
-        {
-            if (cardView == null || cardView.Card == null || matchManager == null)
-                return false;
-                
-            var card = cardView.Card;
-            
-            // Only order cards in player's hand can be dragged during player's turn
-            return card.IsOrderCard && 
-                   matchManager.IsPlayerTurn() && 
-                   matchManager.CurrentPlayer.Hand.Contains(card);
-        }
-
+        
         private bool CanDrag()
         {
-            if (cardView == null || cardView.Card == null || matchManager == null)
+            // Check if this is a valid order card
+            if (cardView == null || cardView.Card == null || !cardView.Card.IsOrderCard)
+            {
+                Debug.LogWarning("[OrderDeployDragHandler] Cannot drag non-order card");
                 return false;
-                
-            var card = cardView.Card;
+            }
             
-            // Only order cards in player's hand can be dragged during player's turn
-            return card.IsOrderCard && 
-                   matchManager.IsPlayerTurn() && 
-                   matchManager.CurrentPlayer.Hand.Contains(card);
+            return true;
+        }
+        
+        private void ReturnToOriginalPosition()
+        {
+            Debug.Log("[OrderDeployDragHandler] Returning to original position");
+            
+            // Return the card to its original parent and position
+            transform.SetParent(originalParent);
+            transform.localPosition = Vector3.zero;
         }
     }
 }

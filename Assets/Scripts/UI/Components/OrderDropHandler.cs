@@ -1,4 +1,4 @@
-using System.Linq;
+using Kardx.UI.Scenes;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -7,21 +7,29 @@ namespace Kardx.UI.Components
 {
     using Card = Kardx.Core.Card;
     using CardCategory = Kardx.Core.CardCategory;
+    using Kardx.Core;
 
     /// <summary>
     /// Handles the dropping of Order cards onto the battlefield.
     /// This component should be attached to a GameObject that covers the entire battlefield area.
     /// </summary>
-    public class OrderDropHandler : MonoBehaviour, IDropHandler
+    public class OrderDropHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler, IPointerExitHandler
     {
         [SerializeField]
         private Image highlightImage;
 
-        private Kardx.UI.Scenes.MatchView matchView;
+        private MatchView matchView;
 
         private void Awake()
         {
-            matchView = GetComponentInParent<Kardx.UI.Scenes.MatchView>();
+            // Just store the matchView reference
+            matchView = GetComponentInParent<MatchView>();
+            
+            if (matchView == null)
+            {
+                Debug.LogWarning("[OrderDropHandler] Could not find MatchView.");
+            }
+
             if (!highlightImage)
                 CreateHighlight();
             else
@@ -39,30 +47,38 @@ namespace Kardx.UI.Components
 
         private void ConfigureHighlightImage()
         {
-            // Ensure the highlight image has proper RectTransform settings
-            var rt = highlightImage.rectTransform;
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.sizeDelta = Vector2.zero;
-            rt.localPosition = Vector3.zero;
-            rt.localScale = Vector3.one;
-
-            // Make sure highlight fills the entire area
-            rt.offsetMin = Vector2.zero;
-            rt.offsetMax = Vector2.zero;
-
-            // Set default properties
-            highlightImage.color = new Color(0f, 0.5f, 1f, 0.2f); // Blue tint for Order cards
             highlightImage.raycastTarget = false;
-            highlightImage.enabled = false; // Start with highlight disabled
+            SetHighlight(false);
         }
 
         private void CreateHighlight()
         {
-            var go = new GameObject("OrderHighlight");
-            highlightImage = go.AddComponent<Image>();
-            highlightImage.transform.SetParent(transform, false);
-            ConfigureHighlightImage();
+            // Create a child object for highlighting
+            var highlightObj = new GameObject("HighlightImage");
+            highlightObj.transform.SetParent(transform, false);
+            highlightObj.transform.localPosition = Vector3.zero;
+            highlightObj.transform.localScale = Vector3.one;
+
+            // Make it fill the parent
+            var rectTransform = highlightObj.AddComponent<RectTransform>();
+            rectTransform.anchorMin = Vector2.zero;
+            rectTransform.anchorMax = Vector2.one;
+            rectTransform.offsetMin = Vector2.zero;
+            rectTransform.offsetMax = Vector2.zero;
+
+            // Add the image component
+            highlightImage = highlightObj.AddComponent<Image>();
+            highlightImage.raycastTarget = false;
+            highlightImage.color = new Color(1f, 1f, 0f, 0.3f); // Semi-transparent yellow
+            SetHighlight(false);
+        }
+
+        public void SetHighlight(bool show)
+        {
+            if (highlightImage != null)
+            {
+                highlightImage.enabled = show;
+            }
         }
 
         public void OnDrop(PointerEventData eventData)
@@ -89,6 +105,19 @@ namespace Kardx.UI.Components
                 );
             }
 
+            // Make sure Card and CardType are not null
+            if (cardView.Card == null)
+            {
+                Debug.LogError("[OrderDropHandler] CardView has null Card reference");
+                return;
+            }
+
+            if (cardView.Card.CardType == null)
+            {
+                Debug.LogError($"[OrderDropHandler] Card {cardView.Card.Title} has null CardType");
+                return;
+            }
+
             // Check if this is an Order card
             if (cardView.Card.CardType.Category != CardCategory.Order)
             {
@@ -96,15 +125,21 @@ namespace Kardx.UI.Components
                 return;
             }
 
-            // Check if the card is in the player's hand
-            if (!IsCardInHand(cardView.Card))
+            // Deploy the Order card using MatchManager directly
+            if (matchView == null)
             {
-                Debug.Log($"[OrderDropHandler] Card {cardView.Card.Title} is not in player's hand");
+                Debug.LogError("[OrderDropHandler] Failed to deploy Order card - MatchView not available");
+                return;
+            }
+            
+            var matchManager = matchView.MatchManager;
+            if (matchManager == null)
+            {
+                Debug.LogError("[OrderDropHandler] Failed to deploy Order card - MatchManager not available");
                 return;
             }
 
-            // Deploy the Order card
-            if (matchView == null || !matchView.DeployOrderCard(cardView.Card))
+            if (!matchManager.DeployOrderCard(cardView.Card))
             {
                 Debug.Log($"[OrderDropHandler] Failed to deploy Order card {cardView.Card.Title}");
             }
@@ -116,17 +151,18 @@ namespace Kardx.UI.Components
             }
         }
 
-        // Helper method to check if a card is in the player's hand
-        private bool IsCardInHand(Card card)
+        public void OnPointerEnter(PointerEventData eventData)
         {
-            if (matchView == null || card == null)
-                return false;
+            var draggingCard = eventData.pointerDrag?.GetComponent<CardView>()?.Card;
+            if (draggingCard != null && IsValidDropTarget(draggingCard))
+            {
+                SetHighlight(true);
+            }
+        }
 
-            var currentPlayer = matchView.GetCurrentPlayer();
-            if (currentPlayer == null)
-                return false;
-
-            return currentPlayer.Hand.Cards.Any(c => c == card);
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            SetHighlight(false);
         }
 
         /// <summary>
@@ -134,46 +170,49 @@ namespace Kardx.UI.Components
         /// </summary>
         public bool IsValidDropTarget(Card card)
         {
-            if (matchView == null || card == null)
+            if (card == null)
             {
-                Debug.Log("[OrderDropHandler] Invalid drop target: matchView or card is null");
+                Debug.Log("[OrderDropHandler] Invalid drop target: Card is null");
+                return false;
+            }
+            
+            // Get MatchManager from matchView
+            if (matchView == null)
+            {
+                Debug.Log("[OrderDropHandler] Invalid drop target: MatchView not available");
+                return false;
+            }
+            
+            var matchManager = matchView.MatchManager;
+            if (matchManager == null)
+            {
+                Debug.Log("[OrderDropHandler] Invalid drop target: MatchManager not available");
+                return false;
+            }
+            
+            // Make sure CardType is not null
+            if (card.CardType == null)
+            {
+                Debug.LogError($"[OrderDropHandler] Card {card.Title} has null CardType");
                 return false;
             }
 
-            // Only Order cards can be deployed here
+            // Check if the card is an Order card
             if (card.CardType.Category != CardCategory.Order)
             {
-                Debug.Log(
-                    $"[OrderDropHandler] Invalid drop target: {card.Title} is not an Order card"
-                );
-                return false;
-            }
-
-            // Check if the card is in the player's hand
-            if (!IsCardInHand(card))
-            {
-                Debug.Log(
-                    $"[OrderDropHandler] Invalid drop target: {card.Title} is not in player's hand"
-                );
+                Debug.Log($"[OrderDropHandler] Invalid drop target: {card.Title} is not an Order card");
                 return false;
             }
 
             // Check if the card can be deployed according to game rules
-            if (!matchView.CanDeployOrderCard(card))
+            if (!matchManager.CanDeployOrderCard(card))
             {
                 Debug.Log(
-                    $"[OrderDropHandler] Invalid drop target: {card.Title} cannot be deployed (game rules)"
+                    $"[OrderDropHandler] Invalid drop target: {card.Title} cannot be deployed due to game rules"
                 );
                 return false;
             }
-
             return true;
-        }
-
-        public void SetHighlight(bool show)
-        {
-            if (highlightImage != null)
-                highlightImage.enabled = show;
         }
     }
 }

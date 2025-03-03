@@ -22,13 +22,13 @@ namespace Kardx.UI.Scenes
         private Transform playerHandArea;
 
         [SerializeField]
-        private Transform playerBattlefieldArea; // Area for player's battlefield with HorizontalLayoutGroup
+        private Transform playerBattlefieldArea;
 
         [SerializeField]
         private Transform opponentHandArea;
 
         [SerializeField]
-        private Transform opponentBattlefieldArea; // Area for opponent's battlefield with HorizontalLayoutGroup
+        private Transform opponentBattlefieldArea;
 
         [SerializeField]
         private Transform playerHeadquarter;
@@ -41,10 +41,10 @@ namespace Kardx.UI.Scenes
 
         [Header("UI Elements")]
         [SerializeField]
-        private GameObject playerCardSlotPrefab; // Prefab for player card slot
+        private GameObject playerCardSlotPrefab;
 
         [SerializeField]
-        private GameObject opponentCardSlotPrefab; // Prefab for opponent card slot
+        private GameObject opponentCardSlotPrefab;
 
         [SerializeField]
         private GameObject cardPrefab;
@@ -58,19 +58,16 @@ namespace Kardx.UI.Scenes
         [SerializeField]
         private TextMeshProUGUI opponentCreditsText;
 
-        [Header("Battlefield Views")]
+        [Header("View Components")]
         // References to the actual components - set during initialization
         private PlayerBattlefieldView playerBattlefieldView;
         private OpponentBattlefieldView opponentBattlefieldView;
-
-        // Non-serialized fields
-        private Dictionary<Card, GameObject> cardUIElements = new();
+        private HandView playerHandView;
+        private HandView opponentHandView;
 
         [SerializeField]
-        private CardDetailView cardDetailView; // Reference to the CardDetailView
-
-        private List<CardType> cards = new();
-
+        private CardDetailView cardDetailView;
+        
         // Public accessor for MatchManager
         public MatchManager MatchManager => matchManager;
 
@@ -87,7 +84,7 @@ namespace Kardx.UI.Scenes
             if (!cardDetailView.gameObject.activeSelf)
             {
                 cardDetailView.gameObject.SetActive(true);
-                cardDetailView.Hide(); // This will properly hide it after initialization
+                cardDetailView.Hide();
             }
 
             // Initialize the shared reference
@@ -96,43 +93,66 @@ namespace Kardx.UI.Scenes
             // Make sure the CardPanel is initially inactive
             cardDetailView.gameObject.SetActive(false);
             
-            // Now we can initialize battlefield views since players exist
-            InitializeBattlefieldViews();
+            // Now we can initialize all view components
+            InitializeViewComponents();
         }
 
-        private void InitializeBattlefieldViews()
+        private void InitializeViewComponents()
         {
-            // Get the PlayerBattlefieldView component from the player battlefield area
+            // Initialize battlefield views
             if (playerBattlefieldArea != null)
             {
                 playerBattlefieldView = playerBattlefieldArea.GetComponent<PlayerBattlefieldView>();
+                if (playerBattlefieldView != null)
+                {
+                    playerBattlefieldView.Initialize(matchManager);
+                    playerBattlefieldView.InitializeSlots(playerCardSlotPrefab);
+                }
+                else
+                {
+                    Debug.LogError("PlayerBattlefieldView component not found on playerBattlefieldArea. Please add this component in the Unity Editor.");
+                }
             }
 
-            // Get the OpponentBattlefieldView component from the opponent battlefield area
             if (opponentBattlefieldArea != null)
             {
                 opponentBattlefieldView = opponentBattlefieldArea.GetComponent<OpponentBattlefieldView>();
+                if (opponentBattlefieldView != null)
+                {
+                    opponentBattlefieldView.Initialize(matchManager);
+                    opponentBattlefieldView.InitializeSlots(opponentCardSlotPrefab);
+                }
+                else
+                {
+                    Debug.LogError("OpponentBattlefieldView component not found on opponentBattlefieldArea. Please add this component in the Unity Editor.");
+                }
             }
-
-            // Initialize the battlefield views if they exist
-            if (playerBattlefieldView != null)
+            
+            // Initialize hand views - should be set up in Unity Editor
+            if (playerHandArea != null)
             {
-                playerBattlefieldView.Initialize(MatchManager);
-                playerBattlefieldView.InitializeSlots(playerCardSlotPrefab);
+                playerHandView = playerHandArea.GetComponent<HandView>();
+                if (playerHandView != null)
+                {
+                    playerHandView.Initialize(matchManager);
+                }
+                else
+                {
+                    Debug.LogError("HandView component not found on playerHandArea. Please add this component in the Unity Editor.");
+                }
             }
-            else
+            
+            if (opponentHandArea != null)
             {
-                Debug.LogError("PlayerBattlefieldView component not found on playerBattlefieldArea");
-            }
-
-            if (opponentBattlefieldView != null)
-            {
-                opponentBattlefieldView.Initialize(MatchManager);
-                opponentBattlefieldView.InitializeSlots(opponentCardSlotPrefab);
-            }
-            else
-            {
-                Debug.LogError("OpponentBattlefieldView component not found on opponentBattlefieldArea");
+                opponentHandView = opponentHandArea.GetComponent<HandView>();
+                if (opponentHandView != null)
+                {
+                    opponentHandView.Initialize(matchManager);
+                }
+                else
+                {
+                    Debug.LogError("HandView component not found on opponentHandArea. Please add this component in the Unity Editor.");
+                }
             }
         }
 
@@ -144,9 +164,6 @@ namespace Kardx.UI.Scenes
 
         private void SetupMatch()
         {
-            // MatchManager is already created and initialized in Awake()
-            // Battlefield views are also already initialized in Awake()
-            
             // Subscribe to MatchManager events
             SetupEventHandlers();
 
@@ -162,13 +179,11 @@ namespace Kardx.UI.Scenes
             if (matchManager != null)
             {
                 // Set up event subscriptions
-                matchManager.OnCardDeployed += (card, slotIndex) => HandleCardDeployed(card, slotIndex);
-                matchManager.OnTurnStarted += (sender, player) => HandleTurnStarted(player);
-                matchManager.OnTurnEnded += (sender, player) => HandleTurnEnded(player);
-                matchManager.OnAttackCompleted += (attackerCard, targetCard, damageDealt, remainingHealth) => 
-                    HandleAttackCompleted(attackerCard, targetCard, damageDealt, remainingHealth);
-                matchManager.OnProcessAITurn += (board, planner, callback) => 
-                    HandleProcessAITurn(board, planner, callback);
+                matchManager.OnCardDeployed += HandleCardDeployed;
+                matchManager.OnTurnStarted += HandleTurnStarted;
+                matchManager.OnTurnEnded += HandleTurnEnded;
+                matchManager.OnAttackCompleted += HandleAttackCompleted;
+                matchManager.OnProcessAITurn += HandleProcessAITurn;
                 matchManager.OnCardDrawn += HandleCardDrawn;
                 matchManager.OnCardDied += HandleCardDied;
                 matchManager.OnMatchStarted += HandleMatchStarted;
@@ -176,17 +191,16 @@ namespace Kardx.UI.Scenes
             }
         }
 
-        private void HandleTurnStarted(Player player)
+        private void HandleTurnStarted(object sender, Player player)
         {
             Debug.Log($"[MatchView] Turn started for {(player == matchManager.Player ? "Player" : "Opponent")}");
             UpdateTurnDisplay();
             UpdateCreditsDisplay();
         }
 
-        private void HandleTurnEnded(Player player)
+        private void HandleTurnEnded(object sender, Player player)
         {
             Debug.Log($"[MatchView] Turn ended for {(player == matchManager.Player ? "Player" : "Opponent")}");
-            // Any cleanup needed at the end of a turn
         }
 
         private void UpdateTurnDisplay()
@@ -218,16 +232,60 @@ namespace Kardx.UI.Scenes
         private void HandleCardDeployed(Card card, int slotIndex)
         {
             Debug.Log($"[MatchView] Card deployed: {card.Title} at slot {slotIndex}");
-            UpdateUI();
+            
+            // For player cards deployed on the battlefield, attempt to place any detached card view
+            if (card.Owner == matchManager.Player && playerBattlefieldView != null)
+            {
+                bool handled = playerBattlefieldView.DeployCard(card, slotIndex);
+                Debug.Log($"[MatchView] Card deployment {(handled ? "succeeded" : "not needed")}");
+                
+                // Update player's hand to reflect the card being removed
+                if (playerHandView != null)
+                {
+                    playerHandView.UpdateHand(matchManager.Player.Hand);
+                }
+            }
+            else if (card.Owner == matchManager.Opponent && opponentBattlefieldView != null)
+            {
+                // Update the opponent's battlefield
+                opponentBattlefieldView.UpdateBattlefield(matchManager.Opponent.Battlefield);
+                
+                // Update opponent's hand to reflect the card being removed
+                if (opponentHandView != null)
+                {
+                    opponentHandView.UpdateHand(matchManager.Opponent.Hand);
+                }
+            }
+            
+            // No need for UpdateUI() as we've made the specific updates needed
         }
 
         private void HandleAttackCompleted(Card attackerCard, Card targetCard, int damageDealt, int remainingHealth)
         {
             Debug.Log($"[MatchView] Attack completed: {attackerCard.Title} -> {targetCard.Title} - Damage: {damageDealt} - Remaining Health: {remainingHealth}");
-            UpdateUI();
+            
+            // Update only the battlefields that were affected
+            if (attackerCard.Owner == matchManager.Player && playerBattlefieldView != null)
+            {
+                playerBattlefieldView.UpdateBattlefield(matchManager.Player.Battlefield);
+            }
+            else if (attackerCard.Owner == matchManager.Opponent && opponentBattlefieldView != null)
+            {
+                opponentBattlefieldView.UpdateBattlefield(matchManager.Opponent.Battlefield);
+            }
+            
+            if (targetCard.Owner == matchManager.Player && playerBattlefieldView != null)
+            {
+                playerBattlefieldView.UpdateBattlefield(matchManager.Player.Battlefield);
+            }
+            else if (targetCard.Owner == matchManager.Opponent && opponentBattlefieldView != null)
+            {
+                opponentBattlefieldView.UpdateBattlefield(matchManager.Opponent.Battlefield);
+            }
+            
+            // No need for UpdateUI() as we've made the specific updates needed
         }
 
-        // Method to handle AI turn processing
         private void HandleProcessAITurn(Board board, StrategyPlanner planner, Action callback)
         {
             Debug.Log("[MatchView] Processing AI turn");
@@ -236,391 +294,67 @@ namespace Kardx.UI.Scenes
             // After AI processing is complete, invoke the callback
             callback?.Invoke();
             
-            // Update the UI to reflect changes
-            UpdateUI();
+            // Update specific UI components after AI turn
+            
+            // Update opponent battlefield
+            if (opponentBattlefieldView != null)
+            {
+                opponentBattlefieldView.UpdateBattlefield(matchManager.Opponent.Battlefield);
+            }
+            
+            // Update player battlefield (in case AI affected it)
+            if (playerBattlefieldView != null)
+            {
+                playerBattlefieldView.UpdateBattlefield(matchManager.Player.Battlefield);
+            }
+            
+            // Update opponent hand
+            if (opponentHandView != null)
+            {
+                opponentHandView.UpdateHand(matchManager.Opponent.Hand);
+            }
+            
+            // Update turn and credits display
+            UpdateTurnDisplay();
+            UpdateCreditsDisplay();
+            
+            // No need for UpdateUI() as we've made the specific updates needed
         }
 
-        // Method to update the entire UI
+        // Method to update the entire UI - this is now thinner because each component handles its own updates
         public void UpdateUI()
         {
             if (matchManager == null)
                 return;
 
-            // Update player's hand
-            UpdateHand(matchManager.Player, playerHandArea);
+            // Update hand views
+            if (playerHandView != null)
+            {
+                playerHandView.UpdateHand();
+            }
+            
+            if (opponentHandView != null)
+            {
+                opponentHandView.UpdateHand();
+            }
 
-            // Update opponent's hand (face down)
-            UpdateHand(matchManager.Opponent, opponentHandArea, true);
-
-            // Update player's battlefield
+            // Update battlefield views
             if (playerBattlefieldView != null)
             {
-                UpdateBattlefield(matchManager.Player, playerBattlefieldView);
+                playerBattlefieldView.UpdateBattlefield(matchManager.Player.Battlefield);
             }
 
-            // Update opponent's battlefield
             if (opponentBattlefieldView != null)
             {
-                UpdateBattlefield(matchManager.Opponent, opponentBattlefieldView);
+                opponentBattlefieldView.UpdateBattlefield(matchManager.Opponent.Battlefield);
             }
 
-            // Update credits display
+            // Update credits and turn display
             UpdateCreditsDisplay();
-
-            // Update turn display
             UpdateTurnDisplay();
         }
 
-        // Method to update a player's hand
-        private void UpdateHand(Player player, Transform handTransform, bool faceDown = false)
-        {
-            if (player == null || handTransform == null)
-                return;
-
-            // Clear existing cards
-            foreach (Transform child in handTransform)
-            {
-                Destroy(child.gameObject);
-            }
-
-            // Add cards from player's hand
-            foreach (var card in player.Hand.GetCards())
-            {
-                var cardGO = CreateCardUI(card, handTransform, faceDown);
-                
-                // Add appropriate drag handlers based on card type
-                var cardView = cardGO.GetComponent<CardView>();
-                if (cardView != null && !faceDown && player == matchManager.Player)
-                {
-                    if (card.IsUnitCard)
-                    {
-                        if (cardGO.GetComponent<UnitDeployDragHandler>() == null)
-                        {
-                            cardGO.AddComponent<UnitDeployDragHandler>();
-                        }
-                    }
-                    else if (card.IsOrderCard)
-                    {
-                        if (cardGO.GetComponent<OrderDeployDragHandler>() == null)
-                        {
-                            cardGO.AddComponent<OrderDeployDragHandler>();
-                        }
-                    }
-                }
-            }
-        }
-
-        // Method to update a player's battlefield
-        private void UpdateBattlefield(Player player, BaseBattlefieldView battlefieldView)
-        {
-            if (player == null || battlefieldView == null)
-                return;
-
-            battlefieldView.UpdateBattlefield(player.Battlefield);
-        }
-
-        // Method to create a card UI element
-        public GameObject CreateCardUI(Card card, Transform parent, bool faceDown = false)
-        {
-            if (card == null || parent == null || cardPrefab == null)
-                return null;
-
-            var cardGO = Instantiate(cardPrefab, parent);
-            var cardView = cardGO.GetComponent<CardView>();
-            
-            if (cardView != null)
-            {
-                cardView.SetCard(card, faceDown);
-                cardView.SetInteractable(!faceDown);
-            }
-
-            return cardGO;
-        }
-
-        // Method to deploy a unit card
-        public bool DeployUnitCard(Card card, int slotIndex)
-        {
-            if (matchManager == null || card == null)
-                return false;
-
-            // Check if this is a valid deployment
-            if (!CanDeployUnitCard(card, slotIndex))
-                return false;
-
-            // Deploy the card
-            bool success = matchManager.DeployCard(card, slotIndex);
-            
-            // Clear all highlights
-            ClearAllHighlights();
-            
-            // Update the UI
-            if (success)
-            {
-                UpdateUI();
-            }
-            
-            return success;
-        }
-
-        // Method to deploy an order card
-        public bool DeployOrderCard(Card card)
-        {
-            if (matchManager == null || card == null)
-                return false;
-
-            // Check if this is a valid deployment
-            if (!CanDeployOrderCard(card))
-                return false;
-
-            // Deploy the card
-            bool success = matchManager.DeployOrderCard(card);
-            
-            // Clear all highlights
-            ClearAllHighlights();
-            
-            // Update the UI
-            if (success)
-            {
-                UpdateUI();
-            }
-            
-            return success;
-        }
-
-        // Method to deploy a card to a position
-        public bool DeployCard(Card card, int position)
-        {
-            if (matchManager == null || card == null)
-                return false;
-                
-            // Check if it's a unit card
-            if (card.CardType.Category == CardCategory.Unit)
-            {
-                return matchManager.DeployUnitCard(card, position);
-            }
-            // Check if it's an order card
-            else if (card.CardType.Category == CardCategory.Order)
-            {
-                return matchManager.DeployOrderCard(card);
-            }
-            
-            return false;
-        }
-        
-        // Method to check if a card can be deployed
-        public bool CanDeployCard(Card card)
-        {
-            if (matchManager == null || card == null)
-                return false;
-                
-            // Check if it's a unit card
-            if (card.CardType.Category == CardCategory.Unit)
-            {
-                return matchManager.CanDeployUnitCard(card);
-            }
-            // Check if it's an order card
-            else if (card.CardType.Category == CardCategory.Order)
-            {
-                return matchManager.CanDeployOrderCard(card);
-            }
-            
-            return false;
-        }
-
-        // Method to check if a unit card can be deployed
-        public bool CanDeployUnitCard(Card card, int slotIndex)
-        {
-            if (matchManager == null || card == null)
-                return false;
-
-            // Check if it's a unit card
-            if (!card.IsUnitCard)
-                return false;
-
-            // Check if it's the player's turn
-            if (!IsPlayerTurn())
-                return false;
-
-            // Check if the card is in the player's hand
-            var player = matchManager.Player;
-            if (player == null || !player.Hand.Contains(card))
-                return false;
-
-            // Check if the slot is valid
-            if (slotIndex < 0 || slotIndex >= Player.BATTLEFIELD_SLOT_COUNT)
-                return false;
-
-            // Check if the slot is empty
-            if (player.Battlefield.GetCardAt(slotIndex) != null)
-                return false;
-
-            // Check if the player has enough credits
-            if (player.Credits < card.Cost)
-                return false;
-
-            return true;
-        }
-
-        // Method to check if an order card can be deployed
-        public bool CanDeployOrderCard(Card card)
-        {
-            if (matchManager == null || card == null)
-                return false;
-
-            // Check if it's an order card
-            if (!card.IsOrderCard)
-                return false;
-
-            // Check if it's the player's turn
-            if (!IsPlayerTurn())
-                return false;
-
-            // Check if the card is in the player's hand
-            var player = matchManager.Player;
-            if (player == null || !player.Hand.Contains(card))
-                return false;
-
-            // Check if the player has enough credits
-            if (player.Credits < card.Cost)
-                return false;
-
-            return true;
-        }
-
-        // Method to check if a card can target another card
-        public bool CanTargetCard(Card attackerCard, Card targetCard)
-        {
-            if (matchManager == null || attackerCard == null || targetCard == null)
-                return false;
-
-            // Check if it's the player's turn
-            if (!IsPlayerTurn())
-                return false;
-
-            // Check if the attacker is on the player's battlefield
-            var player = matchManager.Player;
-            if (player == null || !player.Battlefield.Contains(attackerCard))
-                return false;
-
-            // Check if the target is on the opponent's battlefield
-            var opponent = matchManager.Opponent;
-            if (opponent == null || !opponent.Battlefield.Contains(targetCard))
-                return false;
-
-            // Check if the attacker has already attacked this turn
-            if (attackerCard.HasAttackedThisTurn)
-                return false;
-
-            return true;
-        }
-
-        // Method to target a card with another card
-        public bool TargetCard(Card sourceCard, Card targetCard)
-        {
-            if (matchManager == null || sourceCard == null || targetCard == null)
-                return false;
-
-            // Check if this is a valid target
-            if (!CanTargetCard(sourceCard, targetCard))
-                return false;
-
-            // Execute the attack
-            bool success = matchManager.InitiateAttack(sourceCard, targetCard);
-            
-            // Clear all highlights
-            ClearAllHighlights();
-            
-            // Update UI
-            if (success)
-            {
-                UpdateUI();
-            }
-            
-            return success;
-        }
-
-        // Method to check if there are valid targets for a card
-        public bool HasValidTargets(Card card)
-        {
-            if (matchManager == null || card == null)
-                return false;
-
-            // Check if it's the player's turn
-            if (!IsPlayerTurn())
-                return false;
-
-            // Check if the card is on the player's battlefield
-            var player = matchManager.Player;
-            if (player == null || !player.Battlefield.Contains(card))
-                return false;
-
-            // Check if the card has already attacked this turn
-            if (card.HasAttackedThisTurn)
-                return false;
-
-            // Check if there are any cards on the opponent's battlefield
-            var opponent = matchManager.Opponent;
-            if (opponent == null || opponent.Battlefield.Count == 0)
-                return false;
-
-            return true;
-        }
-
-        // Method to highlight valid targets for a card
-        public void HighlightValidTargets(Card card)
-        {
-            if (matchManager == null || card == null || opponentBattlefieldView == null)
-                return;
-
-            // Check if it's the player's turn
-            if (!IsPlayerTurn())
-                return;
-
-            // Check if the card is on the player's battlefield
-            var player = matchManager.Player;
-            if (player == null || !player.Battlefield.Contains(card))
-                return;
-
-            // Check if the card has already attacked this turn
-            if (card.HasAttackedThisTurn)
-                return;
-
-            // Highlight all cards on the opponent's battlefield
-            var opponent = matchManager.Opponent;
-            if (opponent != null)
-            {
-                opponentBattlefieldView.HighlightCards(opponent.Battlefield);
-            }
-        }
-
-        // Method to highlight valid unit drop slots
-        public void HighlightValidUnitDropSlots(Card card)
-        {
-            if (matchManager == null || card == null || playerBattlefieldView == null)
-                return;
-
-            // Check if it's a unit card
-            if (!card.IsUnitCard)
-                return;
-
-            // Check if it's the player's turn
-            if (!IsPlayerTurn())
-                return;
-
-            // Check if the card is in the player's hand
-            var player = matchManager.Player;
-            if (player == null || !player.Hand.Contains(card))
-                return;
-
-            // Check if the player has enough credits
-            if (player.Credits < card.Cost)
-                return;
-
-            // Highlight empty slots on the player's battlefield
-            playerBattlefieldView.HighlightEmptySlots(player.Battlefield);
-        }
-
-        // Method to clear all highlights
+        // Method to clear all highlights - delegates to battlefield views
         public void ClearAllHighlights()
         {
             if (playerBattlefieldView != null)
@@ -634,42 +368,6 @@ namespace Kardx.UI.Scenes
             }
         }
 
-        // Method to check if it's the player's turn
-        public bool IsPlayerTurn()
-        {
-            if (matchManager == null)
-                return false;
-
-            return matchManager.CurrentPlayer == matchManager.Player;
-        }
-
-        // Method to get the current player
-        public Player GetCurrentPlayer()
-        {
-            if (matchManager == null)
-                return null;
-
-            return matchManager.CurrentPlayer;
-        }
-
-        // Method to get the player
-        public Player GetPlayer()
-        {
-            if (matchManager == null)
-                return null;
-
-            return matchManager.Player;
-        }
-
-        // Method to get the opponent
-        public Player GetOpponent()
-        {
-            if (matchManager == null)
-                return null;
-
-            return matchManager.Opponent;
-        }
-
         // Method to end the player's turn
         public void EndTurn()
         {
@@ -677,57 +375,101 @@ namespace Kardx.UI.Scenes
                 return;
 
             matchManager.NextTurn();
-            UpdateUI();
-        }
-
-        private List<Card> GetValidTargets(Card sourceCard, Player targetPlayer)
-        {
-            List<Card> validTargets = new List<Card>();
-
-            // Check if this card can attack
-            if (sourceCard == null ||
-                !sourceCard.IsUnitCard ||
-                sourceCard.HasAttackedThisTurn)
-                return validTargets;
-
-            // Add valid targets from the target player's battlefield
-            for (int i = 0; i < Battlefield.SLOT_COUNT; i++)
+            
+            // Update specific UI components that change on turn end
+            
+            // Update each battlefield
+            if (playerBattlefieldView != null)
             {
-                var targetCard = targetPlayer.Battlefield.GetCardAt(i);
-                if (targetCard != null)
-                {
-                    validTargets.Add(targetCard);
-                }
+                playerBattlefieldView.UpdateBattlefield(matchManager.Player.Battlefield);
             }
-
-            return validTargets;
+            
+            if (opponentBattlefieldView != null)
+            {
+                opponentBattlefieldView.UpdateBattlefield(matchManager.Opponent.Battlefield);
+            }
+            
+            // Update turn and credits display
+            UpdateTurnDisplay();
+            UpdateCreditsDisplay();
+            
+            // No need to call UpdateUI() as we've made specific updates
         }
 
         private void HandleMatchStarted(string message)
         {
             Debug.Log($"[MatchView] Match started: {message}");
-
-            // Do a full UI refresh at the start of the match
-            UpdateUI();
+            
+            // Update specific UI components based on their initial state
+            if (playerBattlefieldView != null)
+            {
+                playerBattlefieldView.UpdateBattlefield(matchManager.Player.Battlefield);
+            }
+            
+            if (opponentBattlefieldView != null)
+            {
+                opponentBattlefieldView.UpdateBattlefield(matchManager.Opponent.Battlefield);
+            }
+            
+            if (playerHandView != null)
+            {
+                playerHandView.UpdateHand(matchManager.Player.Hand);
+            }
+            
+            if (opponentHandView != null)
+            {
+                opponentHandView.UpdateHand(matchManager.Opponent.Hand);
+            }
+            
+            // Update turn display
+            UpdateTurnDisplay();
         }
 
         private void HandleMatchEnded(string message)
         {
             Debug.Log($"[MatchView] Match ended: {message}");
-
-            // Handle match end UI updates if needed
         }
 
         private void HandleCardDrawn(Card card)
         {
             Debug.Log($"[MatchView] Card drawn: {card.Title}");
-            UpdateUI();
+            
+            // For cards drawn by the player, update the player's hand
+            if (card.Owner == matchManager.Player && playerHandView != null)
+            {
+                // Add just the new card to the hand visualization
+                playerHandView.AddCardToHand(card);
+                Debug.Log($"[MatchView] Added card to player hand: {card.Title}");
+            }
+            else if (card.Owner == matchManager.Opponent && opponentHandView != null)
+            {
+                // Add the card to the opponent's hand visualization
+                opponentHandView.AddCardToHand(card);
+                Debug.Log($"[MatchView] Added card to opponent hand: {card.Title}");
+            }
+            
+            // We don't need to call UpdateUI() since we've made the specific updates needed
         }
 
         private void HandleCardDied(Card card)
         {
             Debug.Log($"[MatchView] Card died: {card.Title}");
-            UpdateUI();
+            
+            // Update only the specific battlefield that contained the card
+            if (card.Owner == matchManager.Player && playerBattlefieldView != null)
+            {
+                // Update just the player's battlefield
+                playerBattlefieldView.UpdateBattlefield(matchManager.Player.Battlefield);
+                Debug.Log($"[MatchView] Updated player battlefield after card death: {card.Title}");
+            }
+            else if (card.Owner == matchManager.Opponent && opponentBattlefieldView != null)
+            {
+                // Update just the opponent's battlefield
+                opponentBattlefieldView.UpdateBattlefield(matchManager.Opponent.Battlefield);
+                Debug.Log($"[MatchView] Updated opponent battlefield after card death: {card.Title}");
+            }
+            
+            // No need for UpdateUI() as we've made the specific updates needed
         }
     }
 }

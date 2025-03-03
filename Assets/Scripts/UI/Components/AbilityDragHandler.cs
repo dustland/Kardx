@@ -25,6 +25,7 @@ namespace Kardx.UI.Components
         private CanvasGroup canvasGroup;
         private UnitDeployDragHandler deployDragHandler;
         private MatchView matchView;
+        private MatchManager matchManager;
         private Vector2 pointerStartPosition;
         private bool isDragging = false;
         private bool canAttack = false;
@@ -58,11 +59,24 @@ namespace Kardx.UI.Components
                 canvasGroup = gameObject.AddComponent<CanvasGroup>();
             }
 
-            // Find MatchView
+            // Find MatchView and MatchManager
             matchView = GetComponentInParent<MatchView>();
             if (matchView == null)
             {
                 Debug.LogError("[AbilityDragHandler] No MatchView found in the scene.");
+                return;
+            }
+            
+            // Get MatchManager through a battlefield view
+            PlayerBattlefieldView playerBattlefieldView = FindAnyObjectByType<PlayerBattlefieldView>();
+            if (playerBattlefieldView != null)
+            {
+                matchManager = playerBattlefieldView.GetMatchManager();
+            }
+            
+            if (matchManager == null)
+            {
+                Debug.LogError("[AbilityDragHandler] Cannot find MatchManager reference");
                 return;
             }
 
@@ -83,9 +97,10 @@ namespace Kardx.UI.Components
         }
         
         // Additional initialization method
-        public void Initialize(MatchView matchView)
+        public void Initialize(MatchView matchView, MatchManager matchManager)
         {
             this.matchView = matchView;
+            this.matchManager = matchManager;
             
             // Find Canvas if not already set
             if (canvas == null)
@@ -163,17 +178,17 @@ namespace Kardx.UI.Components
         // Determines if the card can attack (is on battlefield, player's turn, etc.)
         private bool CanCardAttack()
         {
-            if (cardView == null || cardView.Card == null || matchView == null)
+            if (cardView == null || cardView.Card == null || matchManager == null)
                 return false;
                 
             var card = cardView.Card;
             
             // Check if it's the player's turn
-            if (!matchView.IsPlayerTurn())
+            if (!matchManager.IsPlayerTurn())
                 return false;
                 
             // Check if the card is on the player's battlefield
-            if (!matchView.GetPlayer().Battlefield.Contains(card))
+            if (!matchManager.Player.Battlefield.Contains(card))
                 return false;
                 
             // Check if the card has already attacked this turn
@@ -269,11 +284,21 @@ namespace Kardx.UI.Components
 
         private void HighlightValidTargets(PointerEventData eventData)
         {
-            if (matchView == null || cardView.Card == null)
+            if (matchManager == null || cardView.Card == null)
                 return;
 
-            // Ask the match view to highlight valid targets
-            matchView.HighlightValidTargets(cardView.Card);
+            // Get opponent battlefield
+            OpponentBattlefieldView opponentView = FindAnyObjectByType<OpponentBattlefieldView>();
+            if (opponentView != null)
+            {
+                // Highlight valid targets in opponent battlefield
+                opponentView.HighlightValidTargets(cardView.Card);
+            }
+            else if (matchView != null)
+            {
+                // Fallback to match view if available
+                matchView.ClearAllHighlights();
+            }
         }
 
         private void ClearAllHighlights()
@@ -325,23 +350,42 @@ namespace Kardx.UI.Components
 
         private bool IsValidAttackTarget(Card targetCard)
         {
-            if (cardView.Card == null || targetCard == null || matchView == null)
+            if (cardView.Card == null || targetCard == null || matchManager == null)
                 return false;
 
-            // Check if this is a valid attack target
-            return matchView.CanTargetCard(cardView.Card, targetCard);
+            // Find the OpponentBattlefieldView to use its CanTargetCard method
+            OpponentBattlefieldView opponentView = FindAnyObjectByType<OpponentBattlefieldView>();
+            if (opponentView != null)
+            {
+                return opponentView.CanTargetCard(cardView.Card, targetCard);
+            }
+            
+            // Fallback implementation if OpponentBattlefieldView isn't available
+            // Check if the target card is on the opponent's battlefield
+            return matchManager.Opponent.Battlefield.Contains(targetCard) && 
+                   !targetCard.HasAttackedThisTurn && // Using HasAttackedThisTurn as a simple check
+                   matchManager.IsPlayerTurn();
         }
 
         private void InitiateAttack(Card attackerCard, Card targetCard)
         {
-            if (attackerCard == null || targetCard == null || matchView == null)
+            if (attackerCard == null || targetCard == null || matchManager == null)
                 return;
 
             // Notify listeners about the attack
             OnAttackInitiated?.Invoke(attackerCard, targetCard);
 
-            // Use the match view to handle the attack
-            matchView.TargetCard(attackerCard, targetCard);
+            // Try to use the OpponentBattlefieldView to handle the attack
+            OpponentBattlefieldView opponentView = FindAnyObjectByType<OpponentBattlefieldView>();
+            if (opponentView != null)
+            {
+                opponentView.AttackCard(attackerCard, targetCard);
+            }
+            else
+            {
+                // Fallback to using the match manager directly
+                matchManager.InitiateAttack(attackerCard, targetCard);
+            }
 
             // Mark the card as having attacked this turn
             attackerCard.HasAttackedThisTurn = true;

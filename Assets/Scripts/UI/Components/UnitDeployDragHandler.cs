@@ -1,12 +1,12 @@
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
-using UnityEngine.UI;
-using Kardx.UI.Scenes;
+using Kardx.Core;
+using System.Linq;
 
 namespace Kardx.UI.Components
 {
-    using Kardx.Core;
-
     /// <summary>
     /// Specialized drag handler for deploying unit cards.
     /// </summary>
@@ -16,13 +16,11 @@ namespace Kardx.UI.Components
         private float dragOffset = 0.5f;
 
         private CardView cardView;
-        private MatchManager matchManager;
         private PlayerBattlefieldView playerBattlefieldView;
         private Vector3 originalPosition;
         private Transform originalParent;
         private CanvasGroup canvasGroup;
         private bool isDragging = false;
-        private PlayerCardSlot currentHoverSlot;
 
         private void Awake()
         {
@@ -33,35 +31,26 @@ namespace Kardx.UI.Components
             {
                 canvasGroup = gameObject.AddComponent<CanvasGroup>();
             }
-            
-            // Get the MatchManager through the containing hierarchy
-            var matchView = GetComponentInParent<MatchView>();
-            if (matchView != null)
-            {
-                matchManager = matchView.MatchManager;
-                playerBattlefieldView = matchView.GetComponentInChildren<PlayerBattlefieldView>();
-            }
-            else
-            {
-                // If we can't find it directly, try finding it in the scene
-                matchView = FindAnyObjectByType<MatchView>();
-                if (matchView != null)
-                {
-                    matchManager = matchView.MatchManager;
-                    playerBattlefieldView = matchView.GetComponentInChildren<PlayerBattlefieldView>();
-                }
-                else
-                {
-                    Debug.LogError("UnitDeployDragHandler: Cannot find MatchView in hierarchy or scene");
-                }
-            }
-            
+
+            InitializeBattlefieldView();
+        }
+
+        private void InitializeBattlefieldView()
+        {
+            // Get the PlayerBattlefieldView through the containing hierarchy
+            playerBattlefieldView = GetComponentInParent<PlayerBattlefieldView>();
+
             if (playerBattlefieldView == null)
             {
+                // If we can't find it directly, try finding it in the scene
                 playerBattlefieldView = FindAnyObjectByType<PlayerBattlefieldView>();
                 if (playerBattlefieldView == null)
                 {
-                    Debug.LogError("UnitDeployDragHandler: Cannot find PlayerBattlefieldView");
+                    Debug.LogError("UnitDeployDragHandler: Cannot find PlayerBattlefieldView in hierarchy or scene");
+                }
+                else
+                {
+                    Debug.Log("[UnitDeployDragHandler] Found PlayerBattlefieldView in scene directly");
                 }
             }
         }
@@ -74,31 +63,22 @@ namespace Kardx.UI.Components
             isDragging = true;
             originalPosition = transform.position;
             originalParent = transform.parent;
-            currentHoverSlot = null;
 
             // Disable raycast blocking so we can detect drop targets underneath
             canvasGroup.blocksRaycasts = false;
-            
-            // Move to front of UI
+
+            // Place the card on the root to ensure proper layering
             transform.SetParent(transform.root);
-            
-            // Highlight valid drop targets directly using PlayerBattlefieldView
-            if (playerBattlefieldView != null && matchManager != null)
+
+            // Highlight valid drop targets
+            if (playerBattlefieldView != null && cardView.Card != null)
             {
-                playerBattlefieldView.HighlightEmptySlots(matchManager.Player.Battlefield);
+                Debug.Log("[UnitDeployDragHandler] Highlighting empty slots via PlayerBattlefieldView");
+                playerBattlefieldView.HighlightEmptySlots(cardView.Card.Owner.Battlefield);
             }
             else
             {
-                // Fallback to the MatchView if we couldn't find PlayerBattlefieldView
-                var matchView = FindAnyObjectByType<MatchView>();
-                if (matchView != null)
-                {
-                    matchView.HighlightValidUnitDropSlots(cardView.Card);
-                }
-                else
-                {
-                    Debug.LogError("UnitDeployDragHandler: Cannot find MatchView for highlighting");
-                }
+                Debug.LogError("UnitDeployDragHandler: PlayerBattlefieldView not available for highlighting");
             }
         }
 
@@ -109,51 +89,18 @@ namespace Kardx.UI.Components
 
             // Move the card with the cursor
             transform.position = eventData.position + new Vector2(0, dragOffset);
-            
-            // Check if we're hovering over a card slot
-            if (eventData.pointerCurrentRaycast.gameObject != null)
-            {
-                PlayerCardSlot hoveredSlot = eventData.pointerCurrentRaycast.gameObject.GetComponent<PlayerCardSlot>();
-                
-                // If we've changed which slot we're hovering over
-                if (hoveredSlot != currentHoverSlot)
-                {
-                    // Reset any enhanced highlight on the previous slot
-                    if (currentHoverSlot != null)
-                    {
-                        // Set back to normal "Available" highlight
-                        currentHoverSlot.SetHighlightState(PlayerCardSlot.HighlightType.Available);
-                    }
-                    
-                    // Set enhanced highlight for the new slot if it's valid
-                    if (hoveredSlot != null)
-                    {
-                        // Check if the slot is empty
-                        if (matchManager != null && 
-                            matchManager.Player != null && 
-                            matchManager.Player.Battlefield.GetCardAt(hoveredSlot.SlotIndex) == null)
-                        {
-                            // Set to "DropTarget" highlight state
-                            hoveredSlot.SetHighlightState(PlayerCardSlot.HighlightType.DropTarget);
-                            currentHoverSlot = hoveredSlot;
-                        }
-                    }
-                    else
-                    {
-                        currentHoverSlot = null;
-                    }
-                }
-            }
-            else if (currentHoverSlot != null)
-            {
-                // We're no longer hovering over any slot, reset to "Available"
-                currentHoverSlot.SetHighlightState(PlayerCardSlot.HighlightType.Available);
-                currentHoverSlot = null;
-            }
         }
 
+        /// <summary>
+        /// Handles the end of drag operation. Only responsible for UI behavior.
+        /// This method only handles returning the card to its original position if not dropped on a valid target.
+        /// The actual deployment logic happens in PlayerCardSlot.OnDrop.
+        /// </summary>
+        /// <param name="eventData">Data about the pointer event</param>
         public void OnEndDrag(PointerEventData eventData)
         {
+            Debug.Log("[UnitDeployDragHandler] End Drag");
+
             if (!isDragging)
                 return;
 
@@ -161,82 +108,70 @@ namespace Kardx.UI.Components
             
             // Re-enable raycast blocking
             canvasGroup.blocksRaycasts = true;
-            
+
+            // The deployment logic is handled by the drop target (PlayerCardSlot.OnDrop)
+            // This drag handler only needs to return the card if it wasn't dropped on a valid target
+
             // Check if it was dropped on a valid target
-            bool wasDroppedOnTarget = false;
-            PlayerCardSlot targetSlot = null;
-            
-            if (eventData.pointerEnter != null)
+            bool droppedOnTarget = (eventData.pointerEnter != null &&
+                                   eventData.pointerEnter.GetComponent<PlayerCardSlot>() != null);
+
+            if (!droppedOnTarget)
             {
-                targetSlot = eventData.pointerEnter.GetComponent<PlayerCardSlot>();
-                wasDroppedOnTarget = targetSlot != null;
-            }
-            
-            if (wasDroppedOnTarget && targetSlot != null)
-            {
-                // Get the card
-                Card card = cardView.Card;
-                
-                if (matchManager != null)
+                // Return the card to its original position if not dropped on a valid target
+                ReturnToOriginalPosition();
+
+                // Clear any highlights
+                if (playerBattlefieldView != null)
                 {
-                    // Try to deploy the card directly in the game state
-                    bool deploySuccess = matchManager.DeployUnitCard(card, targetSlot.SlotIndex);
-                    
-                    // If deployment was successful, the card is removed from hand and will be created 
-                    // in the battlefield by UpdateUI, so we can destroy this instance
-                    if (deploySuccess)
-                    {
-                        Destroy(this.gameObject);
-                    }
-                    else
-                    {
-                        // If deployment failed, return to original position
-                        transform.SetParent(originalParent);
-                        transform.position = originalPosition;
-                    }
+                    playerBattlefieldView.ClearHighlights();
                 }
             }
-            else
-            {
-                // If not dropped on a valid target, return to original position
-                transform.SetParent(originalParent);
-                transform.position = originalPosition;
-            }
-            
-            // Clear highlights directly through PlayerBattlefieldView if possible
-            if (playerBattlefieldView != null)
-            {
-                playerBattlefieldView.ClearHighlights();
-            }
-            else
-            {
-                // Try to find the MatchView directly in the scene
-                var matchView = FindAnyObjectByType<MatchView>();
-                if (matchView != null)
-                {
-                    matchView.ClearAllHighlights();
-                }
-                else
-                {
-                    Debug.LogError("UnitDeployDragHandler: Cannot find MatchView for clearing highlights");
-                }
-            }
-            
-            // Reset current hover slot
-            currentHoverSlot = null;
+
+            // Note: We don't destroy the card here.
+            // If the drop was valid, the drop handler (PlayerCardSlot.OnDrop) will handle the deployment logic
+            // and either destroy this object or reposition it.
         }
 
         private bool CanDrag()
         {
-            if (cardView == null || cardView.Card == null || matchManager == null)
+            if (cardView == null || cardView.Card == null)
                 return false;
-                
-            var card = cardView.Card;
-            
-            // Only unit cards in player's hand can be dragged during player's turn
-            return card.IsUnitCard && 
-                   matchManager.IsPlayerTurn() && 
-                   matchManager.CurrentPlayer.Hand.Contains(card);
+
+            // Only unit cards can be dragged
+            return cardView.Card.IsUnitCard;
+        }
+
+        private void ReturnToOriginalPosition()
+        {
+            transform.SetParent(originalParent);
+            transform.position = originalPosition;
+        }
+
+        private List<PlayerCardSlot> GetCardSlotsUnderPointer(Vector2 position)
+        {
+            List<PlayerCardSlot> results = new List<PlayerCardSlot>();
+
+            // Cast rays to find all objects under the pointer
+            var eventData = new PointerEventData(EventSystem.current)
+            {
+                position = position
+            };
+
+            var raycastResults = new List<RaycastResult>();
+            EventSystem.current.RaycastAll(eventData, raycastResults);
+
+            // Filter results to only include PlayerCardSlot components
+            foreach (var result in raycastResults)
+            {
+                PlayerCardSlot slot = result.gameObject.GetComponent<PlayerCardSlot>();
+                if (slot != null)
+                {
+                    results.Add(slot);
+                }
+            }
+
+            return results;
         }
     }
 }

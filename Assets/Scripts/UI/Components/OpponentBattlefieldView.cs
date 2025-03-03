@@ -158,5 +158,114 @@ namespace Kardx.UI.Components
         {
             return opponent;
         }
+
+        /// <summary>
+        /// Checks if a source card can target a specific opponent card
+        /// </summary>
+        public bool CanTargetCard(Card sourceCard, Card targetCard)
+        {
+            if (matchManager == null || sourceCard == null || targetCard == null)
+                return false;
+                
+            // Check if it's the player's turn
+            if (matchManager.CurrentPlayer != matchManager.Player)
+                return false;
+                
+            // Check if the source card is on the player's battlefield
+            if (!matchManager.Player.Battlefield.Contains(sourceCard))
+                return false;
+                
+            // Check if the target card is on the opponent's battlefield
+            if (!matchManager.Opponent.Battlefield.Contains(targetCard))
+                return false;
+                
+            // Check if the source card has already attacked this turn
+            if (sourceCard.HasAttackedThisTurn)
+                return false;
+                
+            return true;
+        }
+        
+        /// <summary>
+        /// Attacks a target card with a source card
+        /// </summary>
+        public bool AttackCard(Card sourceCard, Card targetCard)
+        {
+            if (!CanTargetCard(sourceCard, targetCard))
+                return false;
+                
+            // Initiate the attack
+            bool success = matchManager.InitiateAttack(sourceCard, targetCard);
+            
+            if (success)
+            {
+                Debug.Log($"[OpponentBattlefieldView] Attack initiated: {sourceCard.Title} -> {targetCard.Title}");
+                ClearHighlights();
+            }
+            
+            return success;
+        }
+        
+        /// <summary>
+        /// Get valid target cards for a source card
+        /// </summary>
+        public List<Card> GetValidTargets(Card sourceCard)
+        {
+            List<Card> validTargets = new List<Card>();
+            
+            // Check if source card can attack
+            if (sourceCard == null || !sourceCard.IsUnitCard || sourceCard.HasAttackedThisTurn)
+                return validTargets;
+                
+            // Get the opponent battlefield
+            Battlefield opponentBattlefield = matchManager.Opponent.Battlefield;
+            
+            // Get valid targets
+            for (int i = 0; i < Battlefield.SLOT_COUNT; i++)
+            {
+                Card targetCard = opponentBattlefield.GetCardAt(i);
+                if (targetCard != null)
+                {
+                    validTargets.Add(targetCard);
+                }
+            }
+            
+            return validTargets;
+        }
+
+        /// <summary>
+        /// Highlights all valid attack targets for the given source card
+        /// </summary>
+        /// <param name="sourceCard">The card that would be attacking</param>
+        public void HighlightValidTargets(Card sourceCard)
+        {
+            if (matchManager == null || sourceCard == null)
+                return;
+                
+            // First clear any existing highlights
+            ClearHighlights();
+            
+            // Only highlight if it's the player's turn and the source card is on the player's battlefield
+            if (!matchManager.IsPlayerTurn() || !matchManager.Player.Battlefield.Contains(sourceCard))
+                return;
+                
+            // Don't highlight if the card has already attacked
+            if (sourceCard.HasAttackedThisTurn)
+                return;
+                
+            isHighlightingCards = true;
+            
+            // Highlight all cards on the opponent's battlefield that can be targeted
+            for (int i = 0; i < cardSlots.Count; i++)
+            {
+                Card opponentCard = matchManager.Opponent.Battlefield.GetCardAt(i);
+                if (opponentCard != null)
+                {
+                    // Check if this opponent card can be attacked
+                    // We might add more criteria here based on game rules
+                    cardSlots[i].SetHighlight(targetHighlightColor, true);
+                }
+            }
+        }
     }
 }
