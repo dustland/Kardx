@@ -231,6 +231,7 @@ namespace Kardx.UI
             {
                 opponentBattlefieldView.OnCardDeployed(card, slotIndex);
             }
+            UpdateCreditsDisplay();
         }
 
         private void HandleAttackCompleted(Card attackerCard, Card targetCard, int damageDealt, int remainingHealth)
