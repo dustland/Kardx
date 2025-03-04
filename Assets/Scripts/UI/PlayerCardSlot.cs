@@ -188,6 +188,13 @@ namespace Kardx.UI
                 return;
             }
 
+            // Re-enable raycast blocking on the dragged card
+            var canvasGroup = cardView.GetComponent<CanvasGroup>();
+            if (canvasGroup != null)
+            {
+                canvasGroup.blocksRaycasts = true;
+            }
+
             Debug.Log($"[PlayerCardSlot] Card {cardView.Card.Title} dropped on slot {slotIndex}");
 
             // Get access to the match manager directly from battlefield view
