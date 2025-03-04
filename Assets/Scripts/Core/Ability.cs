@@ -185,7 +185,7 @@ namespace Kardx.Core
 
                 case EffectCategory.Heal:
                     // Implement healing logic
-                    // This would typically restore defence points
+                    // This would typically restore defense points
                     UnityEngine.Debug.Log($"[Ability] {abilityType.Name} healing effect applied");
                     break;
 

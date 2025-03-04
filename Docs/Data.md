@@ -48,10 +48,10 @@ public class Card
     private bool isFaceDown;
     private Faction ownerFaction;
     private List<Modifier> modifiers = new();
-    private int currentDefence;
+    private int currentDefense;
     private string currentAbilityId;
 
-    public int Defence => cardType.BaseDefence + GetAttributeModifier("defence");
+    public int Defense => cardType.BaseDefense + GetAttributeModifier("defense");
     public int Attack => cardType.BaseAttack + GetAttributeModifier("attack");
     public int DeploymentCost => cardType.DeploymentCost;
 }
@@ -182,7 +182,7 @@ Board
 │   ├── Battlefield[5]           // Fixed deployment slots
 │   │   └── Card                 // Deployed card
 │   │       ├── CardType         // Static data definition
-│   │       ├── RuntimeState     // Dynamic values (e.g., Defence, Attack)
+│   │       ├── RuntimeState     // Dynamic values (e.g., Defense, Attack)
 │   │       │   └── Modifiers    // Temporary effects
 │   │       └── InstanceData     // Unique properties (ID, Ownership, FaceDown)
 │   └── DiscardPile             // Cards discarded or removed from play
@@ -308,7 +308,7 @@ Card definitions are stored in a structured format, ensuring consistency and fac
   "rarity": "Standard",
   "stats": {
     "attack": 2,
-    "defence": 3,
+    "defense": 3,
     "deploymentCost": 2
   },
   "abilities": [
@@ -364,7 +364,7 @@ For example, a JSON configuration file might look like this:
       "rarity": "Standard",
       "stats": {
         "attack": 2,
-        "defence": 3,
+        "defense": 3,
         "deploymentCost": 2
       },
       "abilities": [
@@ -404,7 +404,7 @@ For example, a JSON configuration file might look like this:
 This JSON file defines the rules for each card:
 
 - **Card Definitions:** Each card is identified by an ID, title, category, and rarity, situating it within the game's ecosystem.
-- **Stats:** Base attributes (attack, defence, deploymentCost) determine combat performance.
+- **Stats:** Base attributes (attack, defense, deploymentCost) determine combat performance.
 - **Abilities:** Each ability is specified with a trigger (such as OnAttack or OnDeployment), an effect, and parameters to fine-tune its behavior.
 
 1. **Parsing and Validation:**

@@ -107,7 +107,7 @@
   {
     "id": "550e8400-e29b-41d4-a716-446655440005",
     "name": "Fortify",
-    "description": "Gain +3 defence for this turn.",
+    "description": "Gain +3 defense for this turn.",
     "iconPath": "Icons/fortify.png",
     "trigger": 1,
     "cooldownTurns": 2,
@@ -121,7 +121,7 @@
     "effect": 2,
     "effectValue": 3,
     "effectDuration": 1,
-    "effectAttribute": "defence",
+    "effectAttribute": "defense",
     "specialEffectId": "",
     "customParameters": {}
   },

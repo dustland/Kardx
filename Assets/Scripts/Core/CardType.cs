@@ -30,8 +30,8 @@ namespace Kardx.Core
         private int operationCost; // Resource cost to use abilities
 
         // Stats
-        [JsonProperty("baseDefence")]
-        private int baseDefence; // Base defence of the card
+        [JsonProperty("baseDefense")]
+        private int baseDefense; // Base defense of the card
 
         [JsonProperty("baseAttack")]
         private int baseAttack; // Attack power of the card
@@ -67,10 +67,10 @@ namespace Kardx.Core
         public int OperationCost => operationCost;
         // For backward compatibility
         public int Cost => DeploymentCost;
-        public int BaseDefence
+        public int BaseDefense
         {
-            get => baseDefence;
-            private set => baseDefence = Math.Max(1, value);
+            get => baseDefense;
+            private set => baseDefense = Math.Max(1, value);
         }
 
         public int BaseAttack
@@ -98,7 +98,7 @@ namespace Kardx.Core
                 subtype = subtype,
                 deploymentCost = deploymentCost,
                 operationCost = operationCost,
-                baseDefence = baseDefence,
+                baseDefense = baseDefense,
                 baseAttack = baseAttack,
                 baseCounterAttack = baseCounterAttack,
                 rarity = rarity,
@@ -129,7 +129,7 @@ namespace Kardx.Core
             string subtype,
             int deploymentCost,
             int operationCost,
-            int baseDefence,
+            int baseDefense,
             int baseAttack,
             int baseCounterAttack,
             CardRarity rarity,
@@ -143,7 +143,7 @@ namespace Kardx.Core
             this.subtype = subtype;
             this.deploymentCost = Math.Max(0, deploymentCost);
             this.operationCost = Math.Max(0, operationCost);
-            this.baseDefence = Math.Max(1, baseDefence);
+            this.baseDefense = Math.Max(1, baseDefense);
             this.baseAttack = Math.Max(0, baseAttack);
             this.baseCounterAttack = Math.Max(0, baseCounterAttack);
             this.rarity = rarity;

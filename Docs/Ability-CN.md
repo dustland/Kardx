@@ -189,14 +189,14 @@ public interface ISpecialEffectHandler
 | --------------- | ---------- | -------------------------------------------------- |
 | `Damage`        | 造成伤害   | `{"value": 2, "damageType": "physical"}`           |
 | `Heal`          | 治疗单位   | `{"value": 2, "overHeal": false}`                  |
-| `Buff`          | 增益效果   | `{"attack": 1, "defence": 2, "duration": 2}`       |
-| `Debuff`        | 减益效果   | `{"attack": -1, "defence": -1, "duration": 2}`     |
+| `Buff`          | 增益效果   | `{"attack": 1, "defense": 2, "duration": 2}`       |
+| `Debuff`        | 减益效果   | `{"attack": -1, "defense": -1, "duration": 2}`     |
 | `Draw`          | 抽牌       | `{"count": 1, "specific": "order"}`                |
 | `Discard`       | 弃牌       | `{"count": 1, "random": true}`                     |
 | `Move`          | 移动卡牌   | `{"destination": "battlefield", "position": 2}`    |
 | `Summon`        | 召唤单位   | `{"cardTypeId": "INF-001", "position": 0}`         |
 | `Transform`     | 变形       | `{"cardTypeId": "INF-002", "keepModifiers": true}` |
-| `Modifier`      | 属性修正   | `{"attack": 2, "defence": -1}`                     |
+| `Modifier`      | 属性修正   | `{"attack": 2, "defense": -1}`                     |
 | `Counter`       | 添加计数器 | `{"counterType": "charge", "value": 1}`            |
 | `Destroy`       | 直接摧毁   | `{"ignoreEffects": false}`                         |
 | `ReturnToHand`  | 返回手牌   | `{"position": "top"}`                              |
@@ -233,7 +233,7 @@ public interface ISpecialEffectHandler
   "effect": "Special",
   "specialEffectId": "strategicDecision",
   "customParameters": {
-    "hqDefenceBonus": 2,
+    "hqDefenseBonus": 2,
     "creditIncrement": 1,
     "duration": 3,
     "victoryPointCost": 2

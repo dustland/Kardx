@@ -13,7 +13,7 @@ namespace Kardx.Core
         private Faction ownerFaction; // The faction that owns this card
         private List<Modifier> modifiers = new(); // Active temporary modifiers
         private Dictionary<string, int> dynamicAttributes = new(); // Computed attributes
-        private int currentDefence; // Current defence value
+        private int currentDefense; // Current defense value
         private string currentAbilityId; // Current applied ability, should be one of the abilities in the card type
         private Player owner; // Reference to the Player who owns this card
         private bool hasAttackedThisTurn; // Whether this card has attacked this turn
@@ -39,16 +39,16 @@ namespace Kardx.Core
         // Computed properties
         public bool IsUnitCard => CardType.Category == CardCategory.Unit;
         public bool IsOrderCard => CardType.Category == CardCategory.Order;
-        public bool IsAlive => CurrentDefence > 0;
+        public bool IsAlive => CurrentDefense > 0;
         public int Cost => CardType.Cost;
-        // When current defence is 0, the card is destroyed
-        public int CurrentDefence
+        // When current defense is 0, the card is destroyed
+        public int CurrentDefense
         {
-            get => currentDefence;
+            get => currentDefense;
             set
             {
                 bool wasAlive = IsAlive;
-                currentDefence = Math.Max(0, value);
+                currentDefense = Math.Max(0, value);
                 if (wasAlive && !IsAlive)
                 {
                     Debug.Log($"[Card] {Title} has been destroyed!");
@@ -60,7 +60,7 @@ namespace Kardx.Core
         // Property to access card abilities
         public IReadOnlyList<AbilityType> Abilities => CardType.Abilities;
 
-        public int Defence => cardType.BaseDefence + GetAttributeModifier("defence");
+        public int Defense => cardType.BaseDefense + GetAttributeModifier("defense");
         public int Attack => cardType.BaseAttack + GetAttributeModifier("attack");
         public int CounterAttack =>
             cardType.BaseCounterAttack + GetAttributeModifier("counterAttack");
@@ -76,7 +76,7 @@ namespace Kardx.Core
         {
             this.cardType = cardType;
             this.instanceId = Guid.NewGuid();
-            this.currentDefence = cardType.BaseDefence;
+            this.currentDefense = cardType.BaseDefense;
             this.FaceDown = false; // Default to face up
             this.ownerFaction = ownerFaction;
             this.owner = owner;
@@ -156,12 +156,12 @@ namespace Kardx.Core
             if (amount <= 0)
                 return;
 
-            int previousDefence = CurrentDefence;
-            CurrentDefence -= amount;
+            int previousDefense = CurrentDefense;
+            CurrentDefense -= amount;
 
             // Log the damage
             UnityEngine.Debug.Log(
-                $"[Card] {Title} took {amount} damage. Defence reduced from {previousDefence} to {CurrentDefence}"
+                $"[Card] {Title} took {amount} damage. Defense reduced from {previousDefense} to {CurrentDefense}"
             );
         }
 
@@ -171,12 +171,12 @@ namespace Kardx.Core
             if (amount <= 0)
                 return;
 
-            int previousDefence = CurrentDefence;
-            CurrentDefence = Math.Min(CurrentDefence + amount, Defence);
+            int previousDefense = CurrentDefense;
+            CurrentDefense = Math.Min(CurrentDefense + amount, Defense);
 
             // Log the healing
             UnityEngine.Debug.Log(
-                $"[Card] {Title} healed {amount} points. Defence increased from {previousDefence} to {CurrentDefence}"
+                $"[Card] {Title} healed {amount} points. Defense increased from {previousDefense} to {CurrentDefense}"
             );
         }
 
@@ -258,7 +258,7 @@ namespace Kardx.Core
         }
 
         // Event handlers
-        protected virtual void OnDefenceChanged()
+        protected virtual void OnDefenseChanged()
         {
             // Override in derived classes or use events if needed
         }

@@ -22,7 +22,7 @@ namespace Kardx.Core.Acting
 
             // Extract parameters
             if (
-                !parameters.TryGetValue("hqDefenceBonus", out var defenceBonus)
+                !parameters.TryGetValue("hqDefenseBonus", out var defenseBonus)
                 || !parameters.TryGetValue("creditIncrement", out var creditIncrement)
                 || !parameters.TryGetValue("duration", out var duration)
             )
@@ -31,14 +31,14 @@ namespace Kardx.Core.Acting
                 return false;
             }
 
-            int defenceBonusValue = 0;
+            int defenseBonusValue = 0;
             int creditIncrementValue = 0;
             int durationValue = 0;
 
             // Try to convert parameters to appropriate types
             try
             {
-                defenceBonusValue = System.Convert.ToInt32(defenceBonus);
+                defenseBonusValue = System.Convert.ToInt32(defenseBonus);
                 creditIncrementValue = System.Convert.ToInt32(creditIncrement);
                 durationValue = System.Convert.ToInt32(duration);
             }
@@ -48,8 +48,8 @@ namespace Kardx.Core.Acting
                 return false;
             }
 
-            // Apply HQ defence bonus
-            if (defenceBonusValue > 0)
+            // Apply HQ defense bonus
+            if (defenseBonusValue > 0)
             {
                 // Find the player's HQ card
                 var player = FindPlayerForCard(source);
@@ -60,16 +60,16 @@ namespace Kardx.Core.Acting
                     {
                         var modifier = new Modifier(
                             System.Guid.NewGuid().ToString(),
-                            "Strategic Defence Bonus",
-                            "defence",
-                            defenceBonusValue,
+                            "Strategic Defense Bonus",
+                            "defense",
+                            defenseBonusValue,
                             ModifierType.Buff,
                             durationValue
                         );
 
                         hqCard.AddModifier(modifier);
                         Debug.Log(
-                            $"Applied {defenceBonusValue} defence bonus to HQ for {durationValue} turns"
+                            $"Applied {defenseBonusValue} defense bonus to HQ for {durationValue} turns"
                         );
                     }
                 }

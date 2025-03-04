@@ -434,7 +434,7 @@ namespace Kardx.Core
             defenderCard.TakeDamage(attackDamage);
 
             // Apply counter-attack damage to attacker if defender is still alive
-            if (defenderCard.CurrentDefence > 0)
+            if (defenderCard.CurrentDefense > 0)
             {
                 attackerCard.TakeDamage(counterAttackDamage);
             }
@@ -448,7 +448,7 @@ namespace Kardx.Core
                 attackerCard,
                 defenderCard,
                 attackDamage,
-                defenderCard.CurrentDefence
+                defenderCard.CurrentDefense
             );
 
             return true;
@@ -460,7 +460,7 @@ namespace Kardx.Core
         /// <param name="card">The card to check</param>
         private void CheckCardDeath(Card card)
         {
-            if (card.CurrentDefence <= 0)
+            if (card.CurrentDefense <= 0)
             {
                 // Remove the card from the battlefield
                 card.Owner.RemoveFromBattlefield(card);

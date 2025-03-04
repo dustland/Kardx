@@ -47,7 +47,7 @@ namespace Kardx.UI
         private TextMeshProUGUI attackText;
 
         [SerializeField]
-        private TextMeshProUGUI defenceText;
+        private TextMeshProUGUI defenseText;
 
         [SerializeField]
         private TextMeshProUGUI abilityText;
@@ -202,7 +202,7 @@ namespace Kardx.UI
                 var operationCost =
                     card != null ? card.OperationCost : cardType?.OperationCost ?? 0;
                 var attack = card != null ? card.Attack : cardType?.BaseAttack ?? 0;
-                var defence = card != null ? card.CurrentDefence : cardType?.BaseDefence ?? 0;
+                var defense = card != null ? card.CurrentDefense : cardType?.BaseDefense ?? 0;
                 var imageUrl = card != null ? card.ImageUrl : cardType?.ImageUrl;
                 var abilities = card != null ? card.CardType?.Abilities : cardType?.Abilities;
                 var categoryMark = card != null ? card.CardType?.Category : cardType?.Category;
@@ -225,18 +225,18 @@ namespace Kardx.UI
                     operationCostText.text = operationCost.ToString();
                 if (attackText != null)
                     attackText.text = attack.ToString();
-                if (defenceText != null)
+                if (defenseText != null)
                 {
-                    defenceText.text = defence.ToString();
+                    defenseText.text = defense.ToString();
 
-                    // Optionally highlight if defence is different from max
-                    if (card != null && card.CurrentDefence < card.Defence)
+                    // Optionally highlight if defense is different from max
+                    if (card != null && card.CurrentDefense < card.Defense)
                     {
-                        defenceText.color = Color.red;
+                        defenseText.color = Color.red;
                     }
                     else
                     {
-                        defenceText.color = Color.white;
+                        defenseText.color = Color.white;
                     }
                 }
 
@@ -282,7 +282,7 @@ namespace Kardx.UI
                 if (card != null)
                 {
                     Debug.Log(
-                        $"[CardView] Updated UI for card: {card.Title}, Defence: {card.CurrentDefence}/{card.Defence}"
+                        $"[CardView] Updated UI for card: {card.Title}, Defense: {card.CurrentDefense}/{card.Defense}"
                     );
                 }
             }

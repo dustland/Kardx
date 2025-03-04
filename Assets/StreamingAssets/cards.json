@@ -7,7 +7,7 @@
     "subtype": "Infantry",
     "deploymentCost": 2,
     "operationCost": 0,
-    "baseDefence": 3,
+    "baseDefense": 3,
     "baseAttack": 2,
     "baseCounterAttack": 1,
     "rarity": "Standard",
@@ -17,7 +17,11 @@
       "health": 5,
       "speed": 1
     },
-    "abilities": ["550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440001", "550e8400-e29b-41d4-a716-446655440008"]
+    "abilities": [
+      "550e8400-e29b-41d4-a716-446655440000",
+      "550e8400-e29b-41d4-a716-446655440001",
+      "550e8400-e29b-41d4-a716-446655440008"
+    ]
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440001",
@@ -27,7 +31,7 @@
     "subtype": "Artillery",
     "deploymentCost": 4,
     "operationCost": 0,
-    "baseDefence": 2,
+    "baseDefense": 2,
     "baseAttack": 5,
     "baseCounterAttack": 0,
     "rarity": "Limited",
@@ -37,17 +41,21 @@
       "health": 4,
       "range": 3
     },
-    "abilities": ["550e8400-e29b-41d4-a716-446655440006", "550e8400-e29b-41d4-a716-446655440005", "550e8400-e29b-41d4-a716-446655440003"]
+    "abilities": [
+      "550e8400-e29b-41d4-a716-446655440006",
+      "550e8400-e29b-41d4-a716-446655440005",
+      "550e8400-e29b-41d4-a716-446655440003"
+    ]
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440002",
     "title": "Tank Division",
-    "description": "A heavily armored unit with high attack and defence.",
+    "description": "A heavily armored unit with high attack and defense.",
     "category": "Unit",
     "subtype": "Armor",
     "deploymentCost": 5,
     "operationCost": 0,
-    "baseDefence": 6,
+    "baseDefense": 6,
     "baseAttack": 4,
     "baseCounterAttack": 2,
     "rarity": "Elite",
@@ -71,7 +79,7 @@
     "subtype": "Support",
     "deploymentCost": 3,
     "operationCost": 0,
-    "baseDefence": 2,
+    "baseDefense": 2,
     "baseAttack": 1,
     "baseCounterAttack": 0,
     "rarity": "Standard",
@@ -81,7 +89,11 @@
       "health": 4,
       "speed": 1
     },
-    "abilities": ["550e8400-e29b-41d4-a716-446655440007", "550e8400-e29b-41d4-a716-446655440001", "550e8400-e29b-41d4-a716-446655440003"]
+    "abilities": [
+      "550e8400-e29b-41d4-a716-446655440007",
+      "550e8400-e29b-41d4-a716-446655440001",
+      "550e8400-e29b-41d4-a716-446655440003"
+    ]
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440004",
@@ -91,7 +103,7 @@
     "subtype": "Infantry",
     "deploymentCost": 3,
     "operationCost": 0,
-    "baseDefence": 2,
+    "baseDefense": 2,
     "baseAttack": 3,
     "baseCounterAttack": 1,
     "rarity": "Limited",
@@ -101,7 +113,11 @@
       "health": 4,
       "speed": 3
     },
-    "abilities": ["550e8400-e29b-41d4-a716-446655440004", "550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440003"]
+    "abilities": [
+      "550e8400-e29b-41d4-a716-446655440004",
+      "550e8400-e29b-41d4-a716-446655440000",
+      "550e8400-e29b-41d4-a716-446655440003"
+    ]
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440005",
@@ -111,7 +127,7 @@
     "subtype": "Artillery",
     "deploymentCost": 4,
     "operationCost": 0,
-    "baseDefence": 3,
+    "baseDefense": 3,
     "baseAttack": 6,
     "baseCounterAttack": 0,
     "rarity": "Elite",
@@ -121,7 +137,11 @@
       "health": 5,
       "range": 2
     },
-    "abilities": ["550e8400-e29b-41d4-a716-446655440006", "550e8400-e29b-41d4-a716-446655440005", "550e8400-e29b-41d4-a716-446655440008"]
+    "abilities": [
+      "550e8400-e29b-41d4-a716-446655440006",
+      "550e8400-e29b-41d4-a716-446655440005",
+      "550e8400-e29b-41d4-a716-446655440008"
+    ]
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440006",
@@ -131,7 +151,7 @@
     "subtype": "Air",
     "deploymentCost": 2,
     "operationCost": 0,
-    "baseDefence": 1,
+    "baseDefense": 1,
     "baseAttack": 1,
     "baseCounterAttack": 0,
     "rarity": "Standard",
@@ -141,7 +161,11 @@
       "health": 3,
       "speed": 4
     },
-    "abilities": ["550e8400-e29b-41d4-a716-446655440003", "550e8400-e29b-41d4-a716-446655440004", "550e8400-e29b-41d4-a716-446655440001"]
+    "abilities": [
+      "550e8400-e29b-41d4-a716-446655440003",
+      "550e8400-e29b-41d4-a716-446655440004",
+      "550e8400-e29b-41d4-a716-446655440001"
+    ]
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440007",
@@ -151,7 +175,7 @@
     "subtype": "Air",
     "deploymentCost": 5,
     "operationCost": 0,
-    "baseDefence": 4,
+    "baseDefense": 4,
     "baseAttack": 5,
     "baseCounterAttack": 2,
     "rarity": "Limited",
@@ -161,7 +185,11 @@
       "health": 6,
       "speed": 5
     },
-    "abilities": ["550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440004", "550e8400-e29b-41d4-a716-446655440008"]
+    "abilities": [
+      "550e8400-e29b-41d4-a716-446655440000",
+      "550e8400-e29b-41d4-a716-446655440004",
+      "550e8400-e29b-41d4-a716-446655440008"
+    ]
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440008",
@@ -171,7 +199,7 @@
     "subtype": "Support",
     "deploymentCost": 3,
     "operationCost": 0,
-    "baseDefence": 2,
+    "baseDefense": 2,
     "baseAttack": 1,
     "baseCounterAttack": 0,
     "rarity": "Standard",
@@ -181,7 +209,11 @@
       "health": 4,
       "speed": 2
     },
-    "abilities": ["550e8400-e29b-41d4-a716-446655440003", "550e8400-e29b-41d4-a716-446655440001", "550e8400-e29b-41d4-a716-446655440007"]
+    "abilities": [
+      "550e8400-e29b-41d4-a716-446655440003",
+      "550e8400-e29b-41d4-a716-446655440001",
+      "550e8400-e29b-41d4-a716-446655440007"
+    ]
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440009",
@@ -191,7 +223,7 @@
     "subtype": "Armor",
     "deploymentCost": 6,
     "operationCost": 0,
-    "baseDefence": 8,
+    "baseDefense": 8,
     "baseAttack": 6,
     "baseCounterAttack": 3,
     "rarity": "Elite",
@@ -201,7 +233,11 @@
       "health": 10,
       "speed": 1
     },
-    "abilities": ["550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440005", "550e8400-e29b-41d4-a716-446655440008"]
+    "abilities": [
+      "550e8400-e29b-41d4-a716-446655440000",
+      "550e8400-e29b-41d4-a716-446655440005",
+      "550e8400-e29b-41d4-a716-446655440008"
+    ]
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440010",
@@ -211,7 +247,7 @@
     "subtype": "Tactical",
     "deploymentCost": 4,
     "operationCost": 0,
-    "baseDefence": 0,
+    "baseDefense": 0,
     "baseAttack": 0,
     "baseCounterAttack": 0,
     "rarity": "Limited",
@@ -220,6 +256,9 @@
     "attributes": {
       "area_damage": 2
     },
-    "abilities": ["550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440006"]
+    "abilities": [
+      "550e8400-e29b-41d4-a716-446655440000",
+      "550e8400-e29b-41d4-a716-446655440006"
+    ]
   }
 ]

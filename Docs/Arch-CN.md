@@ -75,7 +75,7 @@ Kardx 架构旨在创建一个可维护、可测试和可扩展的代码库，�
 
    - 封装静态数据（CardType）和运行时状态
    - 使用 Guid 进行唯一实例标识
-   - 维护自身状态（FaceDown、CurrentDefence 等）
+   - 维护自身状态（FaceDown、CurrentDefense 等）
 
 2. **Player**：管理玩家状态，包括卡牌和资源
 
