@@ -152,7 +152,7 @@ namespace Kardx.UI
 
             if (attackArrow != null)
             {
-                attackArrow.StopDrawing();
+                attackArrow.CancelDrawing();
             }
 
             // Clear any highlights
@@ -239,12 +239,27 @@ namespace Kardx.UI
                 attackArrow.SetSource(transform);
                 attackArrow.StartDrawing();
                 Debug.Log($"[AbilityDragHandler] Started drawing attack arrow from {cardView.Card.Title}");
+                
+                // Ensure the LineRenderer is enabled and visible
+                LineRenderer lineRenderer = attackArrow.GetComponent<LineRenderer>();
+                if (lineRenderer != null)
+                {
+                    lineRenderer.enabled = true;
+                    lineRenderer.startWidth = 5f;
+                    lineRenderer.endWidth = 5f;
+                    lineRenderer.startColor = new Color(1f, 0f, 0f, 0.8f); // Red with slight transparency
+                    lineRenderer.endColor = new Color(1f, 0f, 0f, 0.8f);
+                    lineRenderer.material = new Material(Shader.Find("Sprites/Default"));
+                    lineRenderer.sortingOrder = 100;
+                    Debug.Log("[AbilityDragHandler] LineRenderer configured for visibility");
+                }
             }
 
             // Update the arrow position
             if (isDragging)
             {
                 attackArrow.UpdatePosition(eventData.position);
+                Debug.Log($"[AbilityDragHandler] Updated arrow position to {eventData.position}");
 
                 // Highlight valid targets
                 HighlightValidTargets(eventData);
@@ -271,7 +286,8 @@ namespace Kardx.UI
                 if (targetCardView != null)
                 {
                     // Complete the arrow drawing to the target
-                    attackArrow.FinishDrawing(targetCardView.transform);
+                    Vector2 targetPosition = new Vector2(targetCardView.transform.position.x, targetCardView.transform.position.y);
+                    attackArrow.UpdatePosition(targetPosition);
 
                     // Initiate the attack
                     matchManager.InitiateAttack(cardView.Card, targetCard);

@@ -328,12 +328,12 @@ namespace Kardx.UI
         {
             if (playerBattlefieldView != null)
             {
-                playerBattlefieldView.ClearHighlights();
+                playerBattlefieldView.ClearCardHighlights();
             }
 
             if (opponentBattlefieldView != null)
             {
-                opponentBattlefieldView.ClearHighlights();
+                opponentBattlefieldView.ClearCardHighlights();
             }
         }
 

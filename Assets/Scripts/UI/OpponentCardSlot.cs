@@ -32,9 +32,19 @@ namespace Kardx.UI
             this.battlefieldView = battlefieldView;
 
             // Initialize highlight
+            if (highlightImage == null)
+            {
+                CreateHighlightImage();
+            }
+
             if (highlightImage != null)
             {
                 highlightImage.enabled = false;
+                Debug.Log($"[OpponentCardSlot] Initialized slot {slotIndex} with highlight image: {highlightImage.name}");
+            }
+            else
+            {
+                Debug.LogWarning($"[OpponentCardSlot] No highlight image assigned to slot {slotIndex}");
             }
 
             // Initialize card container if not set
@@ -42,6 +52,45 @@ namespace Kardx.UI
             {
                 cardContainer = transform;
             }
+        }
+
+        private void CreateHighlightImage()
+        {
+            // Create a new GameObject for the highlight
+            GameObject highlightObj = new GameObject("HighlightImage");
+            highlightObj.transform.SetParent(transform, false);
+            highlightObj.transform.SetAsFirstSibling(); // Ensure it's the first child so it appears behind other elements
+            
+            // Make it fill the parent
+            RectTransform rectTransform = highlightObj.AddComponent<RectTransform>();
+            rectTransform.anchorMin = Vector2.zero;
+            rectTransform.anchorMax = Vector2.one;
+            rectTransform.offsetMin = Vector2.zero;
+            rectTransform.offsetMax = Vector2.zero;
+            
+            // Add an Image component
+            Image image = highlightObj.AddComponent<Image>();
+            image.color = new Color(1f, 0.2f, 0f, 0.9f); // Bright orange-red with high alpha
+            
+            // Create a white texture for the highlight
+            Texture2D texture = new Texture2D(1, 1);
+            texture.SetPixel(0, 0, Color.white);
+            texture.Apply();
+            
+            // Create a sprite from the texture
+            Sprite sprite = Sprite.Create(texture, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f));
+            image.sprite = sprite;
+            
+            // Set it to be behind other elements
+            image.raycastTarget = false;
+            
+            // Initially disabled
+            image.enabled = false;
+            
+            // Assign it to the highlightImage field
+            highlightImage = image;
+            
+            Debug.Log($"[OpponentCardSlot] Created highlight image for slot {slotIndex}");
         }
 
         public void SetHighlight(Color color, bool active)
@@ -52,6 +101,11 @@ namespace Kardx.UI
             {
                 highlightImage.color = color;
                 highlightImage.enabled = active;
+                Debug.Log($"[OpponentCardSlot] Set highlight: active={active}, color={color}, image={highlightImage.name}");
+            }
+            else
+            {
+                Debug.LogWarning($"[OpponentCardSlot] Cannot set highlight: highlightImage is null on slot {slotIndex}");
             }
         }
 
@@ -95,7 +149,7 @@ namespace Kardx.UI
             // Return the attacking card to its original position (handled by UnitAttackDragHandler)
 
             // Clear any highlights
-            battlefieldView.ClearHighlights();
+            battlefieldView.ClearCardHighlights();
         }
 
         // Method to clear the current card view

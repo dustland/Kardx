@@ -124,7 +124,7 @@ namespace Kardx.UI
                 // Clear any highlights
                 if (playerBattlefieldView != null)
                 {
-                    playerBattlefieldView.ClearHighlights();
+                    playerBattlefieldView.ClearCardHighlights();
                 }
             }
 

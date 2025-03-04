@@ -138,17 +138,13 @@ namespace Kardx.UI
             }
         }
 
+        /// <summary>
+        /// Clears all highlights from the battlefield.
+        /// </summary>
         public override void ClearCardHighlights()
         {
-            foreach (var slot in cardSlots)
-            {
-                slot.ClearHighlight();
-            }
-        }
+            isHighlightingCards = false;
 
-        public void ClearHighlights()
-        {
-            // Clear any highlights if present
             foreach (var slot in cardSlots)
             {
                 slot.ClearHighlight();
@@ -208,6 +204,10 @@ namespace Kardx.UI
             // Check if the source card has already attacked this turn
             if (sourceCard.HasAttackedThisTurn)
                 return false;
+                
+            // Check if the player has enough credits for the operation cost
+            if (sourceCard.OperationCost > matchManager.Player.Credits)
+                return false;
 
             return true;
         }
@@ -249,7 +249,7 @@ namespace Kardx.UI
                 return;
 
             // First clear any existing highlights
-            ClearHighlights();
+            ClearCardHighlights();
 
             // Only highlight if it's the player's turn and the source card is on the player's battlefield
             if (!matchManager.IsPlayerTurn() || !matchManager.Player.Battlefield.Contains(sourceCard))
@@ -259,7 +259,16 @@ namespace Kardx.UI
             if (sourceCard.HasAttackedThisTurn)
                 return;
 
+            // Don't highlight if player doesn't have enough credits for the operation cost
+            if (sourceCard.OperationCost > matchManager.Player.Credits)
+                return;
+
             isHighlightingCards = true;
+
+            // Use a brighter, more noticeable color for valid targets
+            Color highlightColor = new Color(1f, 0.2f, 0f, 0.9f); // Bright orange-red with high alpha
+
+            Debug.Log($"[OpponentBattlefieldView] Highlighting valid targets for {sourceCard.Title}");
 
             // Highlight all cards on the opponent's battlefield that can be targeted
             for (int i = 0; i < cardSlots.Count; i++)
@@ -268,8 +277,8 @@ namespace Kardx.UI
                 if (opponentCard != null)
                 {
                     // Check if this opponent card can be attacked
-                    // We might add more criteria here based on game rules
-                    cardSlots[i].SetHighlight(targetHighlightColor, true);
+                    cardSlots[i].SetHighlight(highlightColor, true);
+                    Debug.Log($"[OpponentBattlefieldView] Highlighted target: {opponentCard.Title}");
                 }
             }
         }

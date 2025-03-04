@@ -135,20 +135,6 @@ namespace Kardx.UI
         }
 
         /// <summary>
-        /// Clear all highlights in the battlefield.
-        /// </summary>
-        public void ClearHighlights()
-        {
-            Debug.Log("[PlayerBattlefieldView] Clearing all highlights");
-            isHighlightingEmptySlots = false;
-
-            foreach (var slot in cardSlots)
-            {
-                slot.SetHighlightState(PlayerCardSlot.HighlightType.None);
-            }
-        }
-
-        /// <summary>
         /// Get a specific card slot by index
         /// </summary>
         public PlayerCardSlot GetSlot(int slotIndex)

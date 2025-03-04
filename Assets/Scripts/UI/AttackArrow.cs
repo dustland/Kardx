@@ -1,179 +1,112 @@
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace Kardx.UI
 {
+    /// <summary>
+    /// Manages the drawing of an attack arrow between two points
+    /// </summary>
     [RequireComponent(typeof(LineRenderer))]
     public class AttackArrow : MonoBehaviour
     {
-        [SerializeField]
         private LineRenderer lineRenderer;
-
-        [SerializeField]
-        private float arrowWidth = 5f;
-
-        [SerializeField]
-        private Color arrowColor = new Color(1f, 0f, 0f, 0.8f); // Red with slight transparency
-
-        [SerializeField]
-        private Material arrowMaterial;
-
         private Transform sourceTransform;
-        private Transform targetTransform;
         private Canvas parentCanvas;
-        private Camera uiCamera;
         private bool isActive = false;
 
         private void Awake()
         {
+            lineRenderer = GetComponent<LineRenderer>();
             if (lineRenderer == null)
-                lineRenderer = GetComponent<LineRenderer>();
+            {
+                lineRenderer = gameObject.AddComponent<LineRenderer>();
+                ConfigureLineRenderer();
+            }
 
-            // Configure LineRenderer
-            lineRenderer.positionCount = 3; // Start point, control point, end point
-            lineRenderer.startWidth = arrowWidth;
-            lineRenderer.endWidth = arrowWidth;
-            lineRenderer.startColor = arrowColor;
-            lineRenderer.endColor = arrowColor;
-            lineRenderer.useWorldSpace = true;
-
-            // If material is provided, use it, otherwise create a default one
-            if (arrowMaterial != null)
-                lineRenderer.material = arrowMaterial;
-            else
-                lineRenderer.material = new Material(Shader.Find("Sprites/Default"));
-
-            // Initially hide the arrow
-            lineRenderer.enabled = false;
-
-            // Find the parent canvas and camera
+            // Find the parent canvas
             parentCanvas = GetComponentInParent<Canvas>();
-            if (parentCanvas != null && parentCanvas.renderMode == RenderMode.ScreenSpaceCamera)
-                uiCamera = parentCanvas.worldCamera;
-            else
-                uiCamera = Camera.main;
+            if (parentCanvas == null)
+            {
+                // Find any canvas in the scene
+                parentCanvas = FindAnyObjectByType<Canvas>();
+                if (parentCanvas != null)
+                {
+                    transform.SetParent(parentCanvas.transform, false);
+                }
+            }
+        }
+
+        private void ConfigureLineRenderer()
+        {
+            lineRenderer.positionCount = 3; // Start, control, and end points
+            lineRenderer.startWidth = 5f;
+            lineRenderer.endWidth = 5f;
+            lineRenderer.startColor = new Color(1f, 0f, 0f, 0.8f); // Red with slight transparency
+            lineRenderer.endColor = new Color(1f, 0f, 0f, 0.8f);
+            lineRenderer.useWorldSpace = true;
+            lineRenderer.material = new Material(Shader.Find("Sprites/Default"));
+            lineRenderer.sortingOrder = 100;
+            lineRenderer.enabled = false;
+            
+            Debug.Log("[AttackArrow] LineRenderer configured");
         }
 
         public void SetSource(Transform source)
         {
             sourceTransform = source;
+            Debug.Log($"[AttackArrow] Source set to {source.name}");
         }
 
         public void StartDrawing()
         {
             if (sourceTransform == null)
-            {
-                Debug.LogWarning("[AttackArrow] Cannot start drawing: sourceTransform is null");
                 return;
-            }
 
             isActive = true;
             lineRenderer.enabled = true;
-            Debug.Log("[AttackArrow] Started drawing arrow. LineRenderer enabled: " + lineRenderer.enabled);
-
-            // Set initial position to the source card
             Vector3 sourcePos = GetCanvasPosition(sourceTransform.position);
             lineRenderer.SetPosition(0, sourcePos);
-            lineRenderer.SetPosition(1, sourcePos);
-            lineRenderer.SetPosition(2, sourcePos);
-            Debug.Log($"[AttackArrow] Initial position set to: {sourcePos}");
+            lineRenderer.SetPosition(1, sourcePos); // Control point starts at source
+            lineRenderer.SetPosition(2, sourcePos); // End point starts at source
+            
+            Debug.Log($"[AttackArrow] Started drawing from {sourcePos}");
         }
 
-        public void UpdatePosition(Vector3 currentPosition)
+        public void UpdatePosition(Vector2 targetPosition)
         {
             if (!isActive || sourceTransform == null)
                 return;
 
             Vector3 sourcePos = GetCanvasPosition(sourceTransform.position);
-            Vector3 targetPos = GetCanvasPosition(currentPosition);
-
-            // Calculate a control point for a slight curve
-            Vector3 direction = (targetPos - sourcePos).normalized;
-            float distance = Vector3.Distance(sourcePos, targetPos);
-            Vector3 controlPoint =
-                sourcePos + direction * (distance * 0.5f) + Vector3.up * (distance * 0.2f);
-
-            // Update the line positions
+            Vector3 targetPos = new Vector3(targetPosition.x, targetPosition.y, sourcePos.z);
+            
+            // Calculate a control point for a curved line
+            Vector3 controlPoint = sourcePos + (targetPos - sourcePos) * 0.5f;
+            controlPoint.y += 50f; // Curve upward
+            
+            // Set the positions
             lineRenderer.SetPosition(0, sourcePos);
             lineRenderer.SetPosition(1, controlPoint);
             lineRenderer.SetPosition(2, targetPos);
-        }
-
-        public void FinishDrawing(Transform target)
-        {
-            if (!isActive)
-                return;
-
-            targetTransform = target;
-            if (sourceTransform != null && targetTransform != null)
-            {
-                Vector3 sourcePos = GetCanvasPosition(sourceTransform.position);
-                Vector3 targetPos = GetCanvasPosition(targetTransform.position);
-
-                // Calculate a control point for a slight curve
-                Vector3 direction = (targetPos - sourcePos).normalized;
-                float distance = Vector3.Distance(sourcePos, targetPos);
-                Vector3 controlPoint =
-                    sourcePos + direction * (distance * 0.5f) + Vector3.up * (distance * 0.2f);
-
-                // Update the line positions
-                lineRenderer.SetPosition(0, sourcePos);
-                lineRenderer.SetPosition(1, controlPoint);
-                lineRenderer.SetPosition(2, targetPos);
-            }
-        }
-
-        public void Hide()
-        {
-            isActive = false;
-            lineRenderer.enabled = false;
-            sourceTransform = null;
-            targetTransform = null;
+            
+            Debug.Log($"[AttackArrow] Updated positions: source={sourcePos}, target={targetPos}");
         }
 
         public void CancelDrawing()
         {
-            // Cancel the current drawing operation
             isActive = false;
             lineRenderer.enabled = false;
-            targetTransform = null;
-        }
-
-        public void StopDrawing()
-        {
-            // Stop drawing and hide the arrow
-            isActive = false;
-            lineRenderer.enabled = false;
-            sourceTransform = null;
-            targetTransform = null;
+            Debug.Log("[AttackArrow] Drawing cancelled");
         }
 
         private Vector3 GetCanvasPosition(Vector3 worldPosition)
         {
-            // Convert screen position to world position for the line renderer
-            if (
-                parentCanvas != null
-                && parentCanvas.renderMode == RenderMode.ScreenSpaceCamera
-                && uiCamera != null
-            )
-            {
-                // For Screen Space - Camera
+            if (parentCanvas != null && parentCanvas.renderMode == RenderMode.ScreenSpaceCamera)
                 return worldPosition;
-            }
-            else if (
-                parentCanvas != null
-                && parentCanvas.renderMode == RenderMode.ScreenSpaceOverlay
-            )
-            {
-                // For Screen Space - Overlay
-                Vector3 screenPoint = RectTransformUtility.WorldToScreenPoint(null, worldPosition);
-                return new Vector3(screenPoint.x, screenPoint.y, 0);
-            }
             else
-            {
-                // Fallback
-                return worldPosition;
-            }
+                return worldPosition; // Fallback
         }
     }
 }

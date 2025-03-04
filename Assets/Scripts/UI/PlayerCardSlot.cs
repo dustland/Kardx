@@ -231,7 +231,7 @@ namespace Kardx.UI
             }
 
             // Clear all highlights - we access this through the battlefield view now 
-            battlefieldView.ClearHighlights();
+            battlefieldView.ClearCardHighlights();
         }
 
         // Method to clear the current card view
