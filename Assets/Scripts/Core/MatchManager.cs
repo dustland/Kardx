@@ -499,31 +499,36 @@ namespace Kardx.Core
 
             // Check if the attacker has already attacked this turn
             if (attackerCard.HasAttackedThisTurn)
+            {
+                logger?.Log("[MatchManager] Attack failed: Attacker has already attacked this turn");
                 return false;
+            }
 
             // Check if the cards belong to different players
             if (attackerCard.Owner == defenderCard.Owner)
+            {
+                logger?.Log("[MatchManager] Attack failed: Cards belong to the same player");
                 return false;
+            }
 
             // Check if both cards are on the battlefield
             bool attackerOnBattlefield = attackerCard.Owner.Battlefield.Contains(attackerCard);
             bool defenderOnBattlefield = defenderCard.Owner.Battlefield.Contains(defenderCard);
 
             if (!attackerOnBattlefield || !defenderOnBattlefield)
+            {
+                logger?.Log("[MatchManager] Attack failed: One or more cards are not on the battlefield");
                 return false;
+            }
 
             // Add any other attack validation rules here
             if (attackerCard.OperationCost > attackerCard.Owner.Credits)
+            {
+                logger?.Log("[MatchManager] Attack failed: Attacker does not have enough credits");
                 return false;
+            }
 
             return true;
-        }
-
-        // Deprecated - use InitiateAttack instead
-        [System.Obsolete("Use InitiateAttack instead")]
-        public bool AttackCard(Card attackingCard, Card targetCard)
-        {
-            return InitiateAttack(attackingCard, targetCard);
         }
     }
 }

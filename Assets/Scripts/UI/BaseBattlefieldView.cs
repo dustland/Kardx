@@ -25,6 +25,13 @@ namespace Kardx.UI
         /// <param name="battlefield">The battlefield data to display</param>
         public abstract void UpdateBattlefield();
 
+
+        /// <summary>
+        /// Removes the given card from the battlefield.
+        /// </summary>
+        /// <param name="card">The card to remove</param>
+        public abstract void RemoveCard(Card card);
+
         /// <summary>
         /// Clears all highlights from the battlefield.
         /// </summary>

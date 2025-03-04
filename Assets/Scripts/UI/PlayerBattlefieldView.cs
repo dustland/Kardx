@@ -246,5 +246,21 @@ namespace Kardx.UI
             Debug.Log($"[PlayerBattlefieldView] No detached card found for {card.Title}");
             return false;
         }
+
+        public override void RemoveCard(Card card)
+        {
+            foreach (var slot in cardSlots)
+            {
+                // Find the CardView component in the children of the slot
+                CardView cardView = slot.GetComponentInChildren<CardView>();
+                if (cardView != null && cardView.Card == card)
+                {
+                    // Destroy the card GameObject
+                    Destroy(cardView.gameObject);
+                    Debug.Log($"[PlayerBattlefieldView] Removed card UI for {card.Title}");
+                    break;
+                }
+            }
+        }
     }
 }

@@ -169,6 +169,22 @@ namespace Kardx.UI
             return opponent;
         }
 
+        public override void RemoveCard(Card card)
+        {
+            foreach (var slot in cardSlots)
+            {
+                // Find the CardView component in the children of the slot
+                CardView cardView = slot.GetComponentInChildren<CardView>();
+                if (cardView != null && cardView.Card == card)
+                {
+                    // Destroy the card GameObject
+                    Destroy(cardView.gameObject);
+                    Debug.Log($"[OpponentBattlefieldView] Removed card UI for {card.Title}");
+                    break;
+                }
+            }
+        }
+
         /// <summary>
         /// Checks if a source card can target a specific opponent card
         /// </summary>
@@ -194,26 +210,6 @@ namespace Kardx.UI
                 return false;
 
             return true;
-        }
-
-        /// <summary>
-        /// Attacks a target card with a source card
-        /// </summary>
-        public bool AttackCard(Card sourceCard, Card targetCard)
-        {
-            if (!CanTargetCard(sourceCard, targetCard))
-                return false;
-
-            // Initiate the attack
-            bool success = matchManager.InitiateAttack(sourceCard, targetCard);
-
-            if (success)
-            {
-                Debug.Log($"[OpponentBattlefieldView] Attack initiated: {sourceCard.Title} -> {targetCard.Title}");
-                ClearHighlights();
-            }
-
-            return success;
         }
 
         /// <summary>

@@ -30,9 +30,6 @@ namespace Kardx.UI
         private Transform originalParent;
         private Vector3 originalPosition;
 
-        // Event to notify when an attack is initiated
-        public event Action<Card, Card> OnAttackInitiated;
-
         // Events for drag state
         public event Action OnDragStarted;
         public event Action<bool> OnDragEnded;
@@ -277,7 +274,7 @@ namespace Kardx.UI
                     attackArrow.FinishDrawing(targetCardView.transform);
 
                     // Initiate the attack
-                    InitiateAttack(cardView.Card, targetCard);
+                    matchManager.InitiateAttack(cardView.Card, targetCard);
                 }
             }
             else
@@ -378,32 +375,6 @@ namespace Kardx.UI
             return matchManager.Opponent.Battlefield.Contains(targetCard) &&
                    !targetCard.HasAttackedThisTurn && // Using HasAttackedThisTurn as a simple check
                    matchManager.IsPlayerTurn();
-        }
-
-        private void InitiateAttack(Card attackerCard, Card targetCard)
-        {
-            if (attackerCard == null || targetCard == null || matchManager == null)
-                return;
-
-            // Notify listeners about the attack
-            OnAttackInitiated?.Invoke(attackerCard, targetCard);
-
-            // Try to use the OpponentBattlefieldView to handle the attack
-            OpponentBattlefieldView opponentView = FindAnyObjectByType<OpponentBattlefieldView>();
-            if (opponentView != null)
-            {
-                opponentView.AttackCard(attackerCard, targetCard);
-            }
-            else
-            {
-                Debug.LogWarning("OpponentBattlefieldView not found for AttackCard.");
-            }
-
-            // Mark the card as having attacked this turn
-            attackerCard.HasAttackedThisTurn = true;
-
-            // Update the component state
-            UpdateComponentState();
         }
     }
 }

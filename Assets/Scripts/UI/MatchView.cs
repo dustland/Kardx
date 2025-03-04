@@ -409,21 +409,22 @@ namespace Kardx.UI
         {
             Debug.Log($"[MatchView] Card died: {card.Title}");
 
-            // Update only the specific battlefield that contained the card
+            // Remove the card from the battlefield view
             if (card.Owner == matchManager.Player && playerBattlefieldView != null)
             {
-                // Update just the player's battlefield
-                playerBattlefieldView.UpdateBattlefield();
-                Debug.Log($"[MatchView] Updated player battlefield after card death: {card.Title}");
+                // Remove the card from the player's battlefield view
+                playerBattlefieldView.RemoveCard(card);
+                Debug.Log($"[MatchView] Removed card from player battlefield: {card.Title}");
             }
             else if (card.Owner == matchManager.Opponent && opponentBattlefieldView != null)
             {
-                // Update just the opponent's battlefield
-                opponentBattlefieldView.UpdateBattlefield();
-                Debug.Log($"[MatchView] Updated opponent battlefield after card death: {card.Title}");
+                // Remove the card from the opponent's battlefield view
+                opponentBattlefieldView.RemoveCard(card);
+                Debug.Log($"[MatchView] Removed card from opponent battlefield: {card.Title}");
             }
 
-            // No need for UpdateUI() as we've made the specific updates needed
+            // Update UI elements that depend on the battlefield state
+            UpdateCreditsDisplay();
         }
 
         private void OnDestroy()
