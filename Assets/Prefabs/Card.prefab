@@ -935,7 +935,7 @@ MonoBehaviour:
   deploymentCostText: {fileID: 7660826518443253100}
   operationCostText: {fileID: 3146065014060102945}
   attackText: {fileID: 5244797991633264376}
-  defenceText: {fileID: 2888376061793279572}
+  defenseText: {fileID: 0}
   abilityText: {fileID: 6103096867747156372}
   abilityDescriptionText: {fileID: 782688637163469766}
   hasAttackedToggle: {fileID: 6917065891617564501}
@@ -996,6 +996,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   minDragDistance: 10
+  attackArrowPrefab: {fileID: 1074997326309281609, guid: 8093a8466c2af4e879823e494fd99e62, type: 3}
 --- !u!1 &2567085652576297218
 GameObject:
   m_ObjectHideFlags: 0

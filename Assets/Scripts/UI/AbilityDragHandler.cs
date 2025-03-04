@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 using UnityEngine.EventSystems;
+using Kardx.Core;
 
 namespace Kardx.UI
 {
@@ -18,6 +20,9 @@ namespace Kardx.UI
         [SerializeField]
         private float minDragDistance = 10f; // Minimum drag distance to start targeting
 
+        [SerializeField]
+        private GameObject attackArrowPrefab;
+
         private CardView cardView;
         private AttackArrow attackArrow;
         private Canvas canvas;
@@ -27,12 +32,12 @@ namespace Kardx.UI
         private MatchManager matchManager;
         private Vector2 pointerStartPosition;
         private bool isDragging = false;
-        private Transform originalParent;
-        private Vector3 originalPosition;
+        private OpponentCardSlot currentTarget = null;
 
         // Events for drag state
         public event Action OnDragStarted;
         public event Action<bool> OnDragEnded;
+        public event Action OnPointerDownEvent;
 
         private void Awake()
         {
@@ -43,8 +48,8 @@ namespace Kardx.UI
             canvas = GetComponentInParent<Canvas>();
             if (canvas == null)
             {
-                Debug.LogError("[AbilityDragHandler] No Canvas found in parents.");
-                return;
+                canvas = FindAnyObjectByType<Canvas>();
+                Debug.LogWarning("[AbilityDragHandler] No canvas found in parents, using any canvas in scene");
             }
 
             // Find CanvasGroup
@@ -55,19 +60,13 @@ namespace Kardx.UI
             }
 
             // Find MatchView and MatchManager
-            matchView = GetComponentInParent<MatchView>();
+            matchView = FindAnyObjectByType<MatchView>();
             if (matchView == null)
             {
                 Debug.LogError("[AbilityDragHandler] No MatchView found in the scene.");
                 return;
             }
-
-            // Get MatchManager through a battlefield view
-            PlayerBattlefieldView playerBattlefieldView = FindAnyObjectByType<PlayerBattlefieldView>();
-            if (playerBattlefieldView != null)
-            {
-                matchManager = playerBattlefieldView.GetMatchManager();
-            }
+            matchManager = matchView.MatchManager;
 
             if (matchManager == null)
             {
@@ -75,33 +74,35 @@ namespace Kardx.UI
                 return;
             }
 
-            // Find or create the attack arrow
-            GameObject arrowObj = GameObject.Find("AttackArrow");
-            if (arrowObj == null)
-            {
-                arrowObj = new GameObject("AttackArrow");
-                arrowObj.transform.SetParent(canvas.transform, false);
-                
-                // Add and configure LineRenderer
-                LineRenderer lineRenderer = arrowObj.AddComponent<LineRenderer>();
-                lineRenderer.positionCount = 3; // Start, control, and end points
-                lineRenderer.startWidth = 5f;
-                lineRenderer.endWidth = 5f;
-                lineRenderer.startColor = new Color(1f, 0f, 0f, 0.8f); // Red with slight transparency
-                lineRenderer.endColor = new Color(1f, 0f, 0f, 0.8f);
-                lineRenderer.useWorldSpace = true;
-                
-                // Set material for the line renderer
-                lineRenderer.material = new Material(Shader.Find("Sprites/Default"));
-                
-                // Set sorting layer to ensure it appears above cards
-                lineRenderer.sortingOrder = 100;
-            }
+            InitializeAttackArrow();
+        }
 
-            attackArrow = arrowObj.GetComponent<AttackArrow>();
+        private void InitializeAttackArrow()
+        {
+            // Find or create the attack arrow
             if (attackArrow == null)
             {
-                attackArrow = arrowObj.AddComponent<AttackArrow>();
+                attackArrow = FindAnyObjectByType<AttackArrow>(FindObjectsInactive.Include);
+                if (attackArrow == null && attackArrowPrefab != null)
+                {
+                    GameObject arrowObj = Instantiate(attackArrowPrefab, canvas.transform);
+                    attackArrow = arrowObj.GetComponent<AttackArrow>();
+                    Debug.Log($"[AbilityDragHandler] Created attack arrow from prefab: {attackArrow != null}");
+                }
+                else if (attackArrow != null)
+                {
+                    Debug.Log("[AbilityDragHandler] Found existing attack arrow in scene");
+                }
+            }
+
+            if (attackArrow == null)
+            {
+                Debug.LogError("[AbilityDragHandler] Failed to initialize attack arrow");
+            }
+            else
+            {
+                // Ensure it's initially disabled
+                attackArrow.gameObject.SetActive(false);
             }
         }
 
@@ -209,60 +210,49 @@ namespace Kardx.UI
 
         public void OnPointerDown(PointerEventData eventData)
         {
-            // If this component is disabled or the card can't attack, don't handle the event
-            if (!enabled || !CanCardAttack())
-                return;
-
+            // Store the pointer position for drag initialization
             pointerStartPosition = eventData.position;
-            isDragging = false;
+
+            Debug.Log($"[AbilityDragHandler] Pointer down at {pointerStartPosition}");
+
+            // Fire the event
+            OnPointerDownEvent?.Invoke();
         }
 
         public void OnDrag(PointerEventData eventData)
         {
-            // If this component is disabled, don't handle the event
-            if (!enabled)
-                return;
-
-            if (cardView.Card == null || !CanCardAttack())
-                return;
-
-            // Check if we've dragged far enough to start targeting
-            if (!isDragging)
+            if (!isDragging || cardView == null || !CanCardAttack())
             {
-                float dragDistance = Vector2.Distance(pointerStartPosition, eventData.position);
-                if (dragDistance < minDragDistance)
-                    return;
-
-                // Start drawing the attack arrow
-                isDragging = true;
-                OnDragStarted?.Invoke();
-                attackArrow.SetSource(transform);
-                attackArrow.StartDrawing();
-                Debug.Log($"[AbilityDragHandler] Started drawing attack arrow from {cardView.Card.Title}");
-                
-                // Ensure the LineRenderer is enabled and visible
-                LineRenderer lineRenderer = attackArrow.GetComponent<LineRenderer>();
-                if (lineRenderer != null)
-                {
-                    lineRenderer.enabled = true;
-                    lineRenderer.startWidth = 5f;
-                    lineRenderer.endWidth = 5f;
-                    lineRenderer.startColor = new Color(1f, 0f, 0f, 0.8f); // Red with slight transparency
-                    lineRenderer.endColor = new Color(1f, 0f, 0f, 0.8f);
-                    lineRenderer.material = new Material(Shader.Find("Sprites/Default"));
-                    lineRenderer.sortingOrder = 100;
-                    Debug.Log("[AbilityDragHandler] LineRenderer configured for visibility");
-                }
+                return;
             }
 
-            // Update the arrow position
-            if (isDragging)
+            // Update the attack arrow position
+            if (attackArrow != null)
             {
-                attackArrow.UpdatePosition(eventData.position);
-                Debug.Log($"[AbilityDragHandler] Updated arrow position to {eventData.position}");
+                // Pass the screen position directly to the attack arrow
+                attackArrow.UpdateEndPosition(eventData.position);
+                Debug.Log($"[AbilityDragHandler] Dragging to {eventData.position}");
+            }
 
-                // Highlight valid targets
-                HighlightValidTargets(eventData);
+            // Check for valid targets
+            OpponentCardSlot newTarget = GetTargetUnderPointer(eventData);
+
+            // If the target has changed, update highlighting
+            if (newTarget != currentTarget)
+            {
+                // Unhighlight the previous target
+                if (currentTarget != null)
+                {
+                    currentTarget.SetHighlight(Color.clear, false);
+                }
+
+                // Highlight the new target if valid
+                currentTarget = newTarget;
+                if (currentTarget != null)
+                {
+                    bool isValidTarget = IsValidTarget(currentTarget);
+                    currentTarget.SetHighlight(new Color(1f, 0.2f, 0f, 0.9f), isValidTarget);
+                }
             }
         }
 
@@ -287,7 +277,7 @@ namespace Kardx.UI
                 {
                     // Complete the arrow drawing to the target
                     Vector2 targetPosition = new Vector2(targetCardView.transform.position.x, targetCardView.transform.position.y);
-                    attackArrow.UpdatePosition(targetPosition);
+                    attackArrow.UpdateEndPosition(targetPosition);
 
                     // Initiate the attack
                     matchManager.InitiateAttack(cardView.Card, targetCard);
@@ -305,7 +295,38 @@ namespace Kardx.UI
 
         public void OnBeginDrag(PointerEventData eventData)
         {
-            // This is required for the interface but we handle drag start in OnDrag
+            // Get the card view component
+            cardView = GetComponent<CardView>();
+            if (cardView == null || !CanCardAttack())
+            {
+                return;
+            }
+
+            // Initialize drag state
+            isDragging = true;
+
+            // Initialize the attack arrow if needed
+            if (attackArrow == null)
+            {
+                InitializeAttackArrow();
+            }
+
+            if (attackArrow != null)
+            {
+                // Use the stored pointer start position for the initial arrow position
+                attackArrow.StartDrawing();
+                attackArrow.UpdateStartPosition(pointerStartPosition);
+                attackArrow.UpdateEndPosition(pointerStartPosition);
+
+                Debug.Log($"[AbilityDragHandler] Started drawing arrow from pointer position: {pointerStartPosition}");
+            }
+            else
+            {
+                Debug.LogError("[AbilityDragHandler] Failed to initialize attack arrow");
+            }
+
+            // Highlight valid targets
+            HighlightValidTargets(eventData);
         }
 
         private void HighlightValidTargets(PointerEventData eventData)
@@ -391,6 +412,52 @@ namespace Kardx.UI
             return matchManager.Opponent.Battlefield.Contains(targetCard) &&
                    !targetCard.HasAttackedThisTurn && // Using HasAttackedThisTurn as a simple check
                    matchManager.IsPlayerTurn();
+        }
+
+        private OpponentCardSlot GetTargetUnderPointer(PointerEventData eventData)
+        {
+            // Raycast to find objects under the pointer
+            List<RaycastResult> results = new List<RaycastResult>();
+            EventSystem.current.RaycastAll(eventData, results);
+
+            // Look for an OpponentCardSlot in the results
+            foreach (RaycastResult result in results)
+            {
+                OpponentCardSlot slot = result.gameObject.GetComponent<OpponentCardSlot>();
+                if (slot != null)
+                {
+                    return slot;
+                }
+            }
+
+            return null;
+        }
+
+        private bool IsValidTarget(OpponentCardSlot target)
+        {
+            if (target == null || cardView == null || matchManager == null)
+            {
+                return false;
+            }
+
+            // Get the card data
+            Card attackerCard = cardView.Card;
+
+            // Get the target card using the battlefield
+            var targetPlayer = matchManager.Opponent;
+            var defenderCard = targetPlayer?.Battlefield.GetCardAt(target.SlotIndex);
+
+            // Check if the target has a card
+            if (defenderCard == null)
+            {
+                return false;
+            }
+
+            // Check if the attacker can attack this target (implement your game rules here)
+            // For example, check if the target is in range, if the attacker has enough action points, etc.
+
+            // Simple implementation: all opponent cards are valid targets
+            return true;
         }
     }
 }
