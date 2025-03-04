@@ -23,7 +23,7 @@ namespace Kardx.UI
         /// Updates the battlefield display based on the battlefield model.
         /// </summary>
         /// <param name="battlefield">The battlefield data to display</param>
-        public abstract void UpdateBattlefield(Battlefield battlefield);
+        public abstract void UpdateBattlefield();
 
         /// <summary>
         /// Clears all highlights from the battlefield.

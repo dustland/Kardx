@@ -185,6 +185,14 @@ namespace Kardx.UI
             Debug.Log($"[MatchView] Turn started for {(player == matchManager.Player ? "Player" : "Opponent")}");
             UpdateTurnDisplay();
             UpdateCreditsDisplay();
+            if (playerBattlefieldView != null)
+            {
+                playerBattlefieldView.UpdateBattlefield();
+            }
+            else if (opponentBattlefieldView != null)
+            {
+                opponentBattlefieldView.UpdateBattlefield();
+            }
         }
 
         private void HandleTurnEnded(object sender, Player player)
@@ -241,20 +249,20 @@ namespace Kardx.UI
             // Update only the battlefields that were affected
             if (attackerCard.Owner == matchManager.Player && playerBattlefieldView != null)
             {
-                playerBattlefieldView.UpdateBattlefield(matchManager.Player.Battlefield);
+                playerBattlefieldView.UpdateBattlefield();
             }
             else if (attackerCard.Owner == matchManager.Opponent && opponentBattlefieldView != null)
             {
-                opponentBattlefieldView.UpdateBattlefield(matchManager.Opponent.Battlefield);
+                opponentBattlefieldView.UpdateBattlefield();
             }
 
             if (targetCard.Owner == matchManager.Player && playerBattlefieldView != null)
             {
-                playerBattlefieldView.UpdateBattlefield(matchManager.Player.Battlefield);
+                playerBattlefieldView.UpdateBattlefield();
             }
             else if (targetCard.Owner == matchManager.Opponent && opponentBattlefieldView != null)
             {
-                opponentBattlefieldView.UpdateBattlefield(matchManager.Opponent.Battlefield);
+                opponentBattlefieldView.UpdateBattlefield();
             }
 
             // No need for UpdateUI() as we've made the specific updates needed
@@ -302,12 +310,12 @@ namespace Kardx.UI
             // Update battlefield views
             if (playerBattlefieldView != null)
             {
-                playerBattlefieldView.UpdateBattlefield(matchManager.Player.Battlefield);
+                playerBattlefieldView.UpdateBattlefield();
             }
 
             if (opponentBattlefieldView != null)
             {
-                opponentBattlefieldView.UpdateBattlefield(matchManager.Opponent.Battlefield);
+                opponentBattlefieldView.UpdateBattlefield();
             }
 
             // Update credits and turn display
@@ -349,12 +357,12 @@ namespace Kardx.UI
             // Update specific UI components based on their initial state
             if (playerBattlefieldView != null)
             {
-                playerBattlefieldView.UpdateBattlefield(matchManager.Player.Battlefield);
+                playerBattlefieldView.UpdateBattlefield();
             }
 
             if (opponentBattlefieldView != null)
             {
-                opponentBattlefieldView.UpdateBattlefield(matchManager.Opponent.Battlefield);
+                opponentBattlefieldView.UpdateBattlefield();
             }
 
             if (playerHandView != null)
@@ -405,13 +413,13 @@ namespace Kardx.UI
             if (card.Owner == matchManager.Player && playerBattlefieldView != null)
             {
                 // Update just the player's battlefield
-                playerBattlefieldView.UpdateBattlefield(matchManager.Player.Battlefield);
+                playerBattlefieldView.UpdateBattlefield();
                 Debug.Log($"[MatchView] Updated player battlefield after card death: {card.Title}");
             }
             else if (card.Owner == matchManager.Opponent && opponentBattlefieldView != null)
             {
                 // Update just the opponent's battlefield
-                opponentBattlefieldView.UpdateBattlefield(matchManager.Opponent.Battlefield);
+                opponentBattlefieldView.UpdateBattlefield();
                 Debug.Log($"[MatchView] Updated opponent battlefield after card death: {card.Title}");
             }
 

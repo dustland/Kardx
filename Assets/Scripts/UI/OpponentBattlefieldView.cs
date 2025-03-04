@@ -58,8 +58,12 @@ namespace Kardx.UI
         //     }
         // }
 
-        public override void UpdateBattlefield(Battlefield battlefield)
+        public override void UpdateBattlefield()
         {
+            if (matchManager == null)
+                return;
+
+            var battlefield = matchManager.Opponent.Battlefield;
             if (battlefield == null)
                 return;
 
@@ -93,6 +97,13 @@ namespace Kardx.UI
             {
                 // Card is present, update visual state as needed
                 // but don't create/destroy the card GameObject
+
+                // Update the CardView if it exists
+                CardView cardView = cardSlot.transform.GetComponentInChildren<CardView>();
+                if (cardView != null && cardView.Card == card)
+                {
+                    cardView.UpdateUI();
+                }
 
                 // We might still need to highlight based on state
                 // For example, if this card is targetable by an ability

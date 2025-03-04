@@ -41,8 +41,12 @@ namespace Kardx.UI
         {
         }
 
-        public override void UpdateBattlefield(Battlefield battlefield)
+        public override void UpdateBattlefield()
         {
+            if (matchManager == null)
+                return;
+                
+            var battlefield = matchManager.Player.Battlefield;
             if (battlefield == null)
                 return;
 
@@ -80,6 +84,13 @@ namespace Kardx.UI
             }
             else
             {
+                // Update the CardView if it exists
+                CardView cardView = cardSlot.transform.GetComponentInChildren<CardView>();
+                if (cardView != null && cardView.Card == card)
+                {
+                    cardView.UpdateUI();
+                }
+                
                 cardSlot.ClearHighlight();
             }
         }
@@ -235,76 +246,5 @@ namespace Kardx.UI
             Debug.Log($"[PlayerBattlefieldView] No detached card found for {card.Title}");
             return false;
         }
-
-        /// <summary>
-        /// Visual-only method that places a card GameObject into a slot
-        /// This method ONLY handles reparenting the card UI - it does NOT modify game state
-        /// </summary>
-        /// <param name="card">The card model (for reference only)</param>
-        /// <param name="slotIndex">The slot to deploy to</param>
-        /// <param name="cardGameObject">The existing card GameObject to place in the slot</param>
-        /// <returns>True if UI was updated successfully</returns>
-        // public bool DeployUnitCard(Card card, int slotIndex, GameObject cardGameObject)
-        // {
-        //     if (card == null || cardGameObject == null || slotIndex < 0 || slotIndex >= cardSlots.Count)
-        //     {
-        //         Debug.LogWarning("[PlayerBattlefieldView] Cannot deploy unit card - invalid parameters");
-        //         return false;
-        //     }
-
-        //     // Get the target slot
-        //     var slot = cardSlots[slotIndex];
-
-        //     // Move the existing card GameObject to the slot
-        //     cardGameObject.transform.SetParent(slot.transform, false);
-        //     cardGameObject.transform.localPosition = Vector3.zero;
-
-        //     // Re-enable raycasts
-        //     var canvasGroup = cardGameObject.GetComponent<CanvasGroup>();
-        //     if (canvasGroup != null)
-        //     {
-        //         canvasGroup.blocksRaycasts = true;
-        //     }
-
-        //     Debug.Log($"[PlayerBattlefieldView] Moved card UI for {card.Title} to slot {slotIndex}");
-        //     ClearHighlights();
-        //     return true;
-        // }
-
-        /// <summary>
-        /// Checks if a unit card can be deployed to a specific slot
-        /// </summary>
-        // public bool CanDeployUnitCard(Card card, int slotIndex)
-        // {
-        //     if (matchManager == null || card == null)
-        //         return false;
-
-        //     // Check if it's a unit card
-        //     if (!card.IsUnitCard)
-        //         return false;
-
-        //     // Check if it's the player's turn
-        //     if (matchManager.CurrentPlayer != matchManager.Player)
-        //         return false;
-
-        //     // Check if the card is in the player's hand
-        //     var player = matchManager.Player;
-        //     if (player == null || !player.Hand.Contains(card))
-        //         return false;
-
-        //     // Check if the slot is valid
-        //     if (slotIndex < 0 || slotIndex >= Player.BATTLEFIELD_SLOT_COUNT)
-        //         return false;
-
-        //     // Check if the slot is empty
-        //     if (player.Battlefield.GetCardAt(slotIndex) != null)
-        //         return false;
-
-        //     // Check if the player has enough credits
-        //     if (player.Credits < card.Cost)
-        //         return false;
-
-        //     return true;
-        // }
     }
 }

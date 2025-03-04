@@ -87,7 +87,7 @@ namespace Kardx.UI
             if (targetCard != null && matchManager != null)
             {
                 // Try to attack from the attacking card to the target card
-                bool attackSuccess = matchManager.AttackCard(attackingCard, targetCard);
+                bool attackSuccess = matchManager.InitiateAttack(attackingCard, targetCard);
 
                 // The UI will be updated through events from MatchManager
             }

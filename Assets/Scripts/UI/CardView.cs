@@ -55,6 +55,9 @@ namespace Kardx.UI
         [SerializeField]
         private TextMeshProUGUI abilityDescriptionText;
 
+        [SerializeField]
+        private Toggle hasAttackedToggle;
+
         [Header("Card Back")]
         [SerializeField]
         private Image cardBackOverlay; // Overlay image for face down state
@@ -207,6 +210,7 @@ namespace Kardx.UI
                 categoryString = !string.IsNullOrEmpty(categoryString)
                     ? categoryString[0].ToString()
                     : string.Empty;
+                hasAttackedToggle.isOn = card != null ? card.HasAttackedThisTurn : false;
 
                 // Update UI elements safely
                 if (nameText != null)

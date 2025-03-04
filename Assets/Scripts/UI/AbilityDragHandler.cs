@@ -381,8 +381,7 @@ namespace Kardx.UI
             }
             else
             {
-                // Fallback to using the match manager directly
-                matchManager.InitiateAttack(attackerCard, targetCard);
+                Debug.LogWarning("OpponentBattlefieldView not found for AttackCard.");
             }
 
             // Mark the card as having attacked this turn
