@@ -439,6 +439,8 @@ namespace Kardx.Core
                 attackerCard.TakeDamage(counterAttackDamage);
             }
 
+            attackerCard.Owner.SpendCredits(attackerCard.OperationCost);
+
             // Check if any cards died as a result of the attack
             CheckCardDeath(attackerCard);
             CheckCardDeath(defenderCard);
@@ -511,6 +513,8 @@ namespace Kardx.Core
                 return false;
 
             // Add any other attack validation rules here
+            if (attackerCard.OperationCost > attackerCard.Owner.Credits)
+                return false;
 
             return true;
         }

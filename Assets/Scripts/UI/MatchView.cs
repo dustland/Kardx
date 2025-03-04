@@ -265,7 +265,7 @@ namespace Kardx.UI
                 opponentBattlefieldView.UpdateBattlefield();
             }
 
-            // No need for UpdateUI() as we've made the specific updates needed
+            UpdateCreditsDisplay(); // Attack spends player credits so should update
         }
 
         private void HandleProcessAITurn(Board board, StrategyPlanner planner)

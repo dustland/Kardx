@@ -62,16 +62,21 @@ namespace Kardx.UI
         public void StartDrawing()
         {
             if (sourceTransform == null)
+            {
+                Debug.LogWarning("[AttackArrow] Cannot start drawing: sourceTransform is null");
                 return;
+            }
 
             isActive = true;
             lineRenderer.enabled = true;
+            Debug.Log("[AttackArrow] Started drawing arrow. LineRenderer enabled: " + lineRenderer.enabled);
 
             // Set initial position to the source card
             Vector3 sourcePos = GetCanvasPosition(sourceTransform.position);
             lineRenderer.SetPosition(0, sourcePos);
             lineRenderer.SetPosition(1, sourcePos);
             lineRenderer.SetPosition(2, sourcePos);
+            Debug.Log($"[AttackArrow] Initial position set to: {sourcePos}");
         }
 
         public void UpdatePosition(Vector3 currentPosition)

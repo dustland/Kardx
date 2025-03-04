@@ -84,7 +84,21 @@ namespace Kardx.UI
             {
                 arrowObj = new GameObject("AttackArrow");
                 arrowObj.transform.SetParent(canvas.transform, false);
-                arrowObj.AddComponent<LineRenderer>();
+                
+                // Add and configure LineRenderer
+                LineRenderer lineRenderer = arrowObj.AddComponent<LineRenderer>();
+                lineRenderer.positionCount = 3; // Start, control, and end points
+                lineRenderer.startWidth = 5f;
+                lineRenderer.endWidth = 5f;
+                lineRenderer.startColor = new Color(1f, 0f, 0f, 0.8f); // Red with slight transparency
+                lineRenderer.endColor = new Color(1f, 0f, 0f, 0.8f);
+                lineRenderer.useWorldSpace = true;
+                
+                // Set material for the line renderer
+                lineRenderer.material = new Material(Shader.Find("Sprites/Default"));
+                
+                // Set sorting layer to ensure it appears above cards
+                lineRenderer.sortingOrder = 100;
             }
 
             attackArrow = arrowObj.GetComponent<AttackArrow>();
@@ -227,6 +241,7 @@ namespace Kardx.UI
                 OnDragStarted?.Invoke();
                 attackArrow.SetSource(transform);
                 attackArrow.StartDrawing();
+                Debug.Log($"[AbilityDragHandler] Started drawing attack arrow from {cardView.Card.Title}");
             }
 
             // Update the arrow position

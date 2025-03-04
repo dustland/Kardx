@@ -210,7 +210,6 @@ namespace Kardx.UI
                 categoryString = !string.IsNullOrEmpty(categoryString)
                     ? categoryString[0].ToString()
                     : string.Empty;
-                hasAttackedToggle.isOn = card != null ? card.HasAttackedThisTurn : false;
 
                 // Update UI elements safely
                 if (nameText != null)
@@ -239,6 +238,8 @@ namespace Kardx.UI
                         defenseText.color = Color.white;
                     }
                 }
+                if (hasAttackedToggle != null)
+                    hasAttackedToggle.isOn = card != null ? card.HasAttackedThisTurn : false;
 
                 // Handle abilities if available
                 if (abilities != null && abilities.Count > 0 && abilities[0] != null)
