@@ -316,6 +316,9 @@ namespace Kardx.UI
                 detachedCardView.transform.SetParent(targetSlot.CardContainer, false);
                 detachedCardView.transform.localPosition = Vector3.zero;
 
+                // Set the card face-up in the UI
+                detachedCardView.SetFaceDown(false);
+
                 // Explicitly disable all drag handlers for opponent cards
                 detachedCardView.SetDraggable(false);
 

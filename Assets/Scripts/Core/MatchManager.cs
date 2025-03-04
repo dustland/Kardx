@@ -389,6 +389,9 @@ namespace Kardx.Core
             if (card == null)
                 return false;
 
+            // Set card face-up when deployed to the battlefield
+            card.SetFaceDown(false);
+
             bool success = card.CardType.Category == CardCategory.Unit ? DeployUnitCard(card, position)
                 : card.CardType.Category == CardCategory.Order ? DeployOrderCard(card)
                 : false;
