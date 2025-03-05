@@ -91,41 +91,65 @@ namespace Kardx.Core.Planning
             // Check if the player has cards in hand
             if (currentPlayer.Hand.Count > 0)
             {
-                // Try to deploy cards that the player can afford
-                foreach (var card in currentPlayer.Hand.Cards)
+                // Create a random instance for decision making
+                System.Random random = new System.Random();
+                
+                // Randomly decide if the AI will deploy cards or just end turn (30% chance to just end turn)
+                bool willDeployCards = random.NextDouble() > 0.3;
+                
+                if (willDeployCards)
                 {
-                    if (simulatedCredits >= card.DeploymentCost)
+                    logger?.Log("AI decided to try deploying cards");
+                    
+                    // Create a list of cards in hand and shuffle them for more randomness
+                    var shuffledCards = currentPlayer.Hand.Cards.ToList();
+                    shuffledCards = shuffledCards.OrderBy(x => random.Next()).ToList();
+                    
+                    // Try to deploy cards that the player can afford in a random order
+                    foreach (var card in shuffledCards)
                     {
-                        // Find an empty slot on the battlefield using our simulated state
-                        int emptySlot = -1;
-                        for (int i = 0; i < simulatedOccupiedSlots.Length; i++)
+                        // Randomly decide if we want to deploy this specific card (70% chance to deploy)
+                        if (random.NextDouble() <= 0.7 && simulatedCredits >= card.DeploymentCost)
                         {
-                            if (!simulatedOccupiedSlots[i])
+                            // Find an empty slot on the battlefield using our simulated state
+                            int emptySlot = -1;
+                            for (int i = 0; i < simulatedOccupiedSlots.Length; i++)
                             {
-                                emptySlot = i;
-                                break;
+                                if (!simulatedOccupiedSlots[i])
+                                {
+                                    emptySlot = i;
+                                    break;
+                                }
+                            }
+
+                            // Check if there's space on the battlefield
+                            if (emptySlot >= 0)
+                            {
+                                // Use the new method to add a deploy card action with a target slot
+                                strategy.AddDeployCardAction(
+                                    card.InstanceId.ToString(),
+                                    $"Deploy {card.Title} (Cost: {card.DeploymentCost}) to slot {emptySlot}",
+                                    emptySlot
+                                );
+
+                                // Update our simulated state
+                                simulatedCredits -= card.DeploymentCost;
+                                simulatedOccupiedSlots[emptySlot] = true;
+
+                                logger?.Log(
+                                    $"Added deploy action for {card.Title} to slot {emptySlot}"
+                                );
                             }
                         }
-
-                        // Check if there's space on the battlefield
-                        if (emptySlot >= 0)
+                        else
                         {
-                            // Use the new method to add a deploy card action with a target slot
-                            strategy.AddDeployCardAction(
-                                card.InstanceId.ToString(),
-                                $"Deploy {card.Title} (Cost: {card.DeploymentCost}) to slot {emptySlot}",
-                                emptySlot
-                            );
-
-                            // Update our simulated state
-                            simulatedCredits -= card.DeploymentCost;
-                            simulatedOccupiedSlots[emptySlot] = true;
-
-                            logger?.Log(
-                                $"Added deploy action for {card.Title} to slot {emptySlot}"
-                            );
+                            logger?.Log($"AI decided to skip deploying card: {card.Title}");
                         }
                     }
+                }
+                else
+                {
+                    logger?.Log("AI decided to end turn without deploying cards");
                 }
             }
 
