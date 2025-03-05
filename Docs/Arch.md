@@ -30,6 +30,9 @@ The Kardx architecture is designed to create a maintainable, testable, and scala
 - UI components subscribe to these events and update accordingly
 - This decouples the data model from the UI, making both more maintainable
 - Events help orchestrate complex game flows without tight coupling
+- **To maintain simplicity, only `MatchManager` and `MatchView` serve as event senders**
+- **All other data classes and view classes are aggregated to these two key classes with simple method calls**
+- **This concentrated approach prevents event proliferation and maintains clear communication pathways**
 
 ### 4. Type System Consistency
 

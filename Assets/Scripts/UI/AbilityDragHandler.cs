@@ -286,12 +286,8 @@ namespace Kardx.UI
                     matchManager.InitiateAttack(cardView.Card, targetCard);
                 }
             }
-            else
-            {
-                // Cancel the attack
-                attackArrow.CancelDrawing();
-            }
-
+            // Hide the attack arrow immediately
+            attackArrow.CancelDrawing();
             // Clear all highlights
             ClearAllHighlights();
         }
