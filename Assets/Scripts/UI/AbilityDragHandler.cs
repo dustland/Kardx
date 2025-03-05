@@ -330,7 +330,7 @@ namespace Kardx.UI
                     else
                     {
                         // If the slot is empty, clear the highlight
-                        currentTarget.SetHighlight(Color.clear, false);
+                        currentTarget.ClearHighlight();
                     }
                 }
 
@@ -403,7 +403,7 @@ namespace Kardx.UI
             // Clear the current target highlight
             if (currentTarget != null)
             {
-                currentTarget.SetHighlight(Color.clear, false);
+                currentTarget.ClearHighlight();
                 currentTarget = null;
             }
 

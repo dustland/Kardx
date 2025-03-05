@@ -88,7 +88,12 @@ namespace Kardx.Core
         // Add the missing SetFaceDown method
         public void SetFaceDown(bool isFaceDown)
         {
-            FaceDown = isFaceDown;
+            // Only update the property if it's changing
+            if (FaceDown != isFaceDown)
+            {
+                Debug.Log($"[Card] {Title} SetFaceDown({isFaceDown}) called from: {new System.Diagnostics.StackTrace().ToString()}");
+                FaceDown = isFaceDown;
+            }
         }
 
         // Set the owner of the card

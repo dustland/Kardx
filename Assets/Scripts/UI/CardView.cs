@@ -533,6 +533,7 @@ namespace Kardx.UI
             // Update the card model if it exists
             if (card != null)
             {
+                Debug.Log($"[CardView] Setting card {card.Title} FaceDown={faceDown}. Called from: {new System.Diagnostics.StackTrace().ToString()}");
                 card.SetFaceDown(faceDown);
             }
 
@@ -549,7 +550,8 @@ namespace Kardx.UI
             // Set face down state on the card model
             if (card != null)
             {
-                card.SetFaceDown(faceDown);
+                // Make a single call to SetFaceDown which will update both model and UI
+                SetFaceDown(faceDown);
             }
 
             // Update the UI
@@ -574,49 +576,47 @@ namespace Kardx.UI
         public void ShowDetail()
         {
             Debug.Log("[CardView] Starting ShowDetail method");
-            if (isBeingDragged)
+            
+            if (card == null)
             {
-                Debug.Log("[CardView] is dragging, not showing detail");
+                Debug.LogWarning("[CardView] Cannot show detail - card is null");
                 return;
             }
 
-            Debug.Log(
-                $"[CardView] SharedDetailView is {(sharedDetailView != null ? "not null" : "null")}"
-            );
+            // If the card is being dragged, don't show the detail
+            if (isBeingDragged)
+            {
+                Debug.Log($"[CardView] Card {card.Title} is being dragged, not showing detail");
+                return;
+            }
+
+            // If the card is face down, don't show the detail
+            if (card.FaceDown)
+            {
+                Debug.Log($"[CardView] The card {card.Title} is face down, not showing detail. Card location: {transform.parent?.name ?? "unknown"}, Card visual state matches FaceDown: {cardBackOverlay?.gameObject.activeInHierarchy.ToString() ?? "unknown"}");
+                return;
+            }
+
+            // Shared detail view is used across all cards
             if (sharedDetailView != null)
             {
                 Debug.Log("[CardView] Using shared card detail view");
                 if (card != null)
                 {
-                    if (card.FaceDown)
-                    {
-                        Debug.Log(
-                            $"[CardView] The card {card.Title} is face down, not showing detail"
-                        );
-                        return;
-                    }
-                    else
-                    {
-                        Debug.Log($"[CardView] Showing card: {card.Title}");
-                        sharedDetailView.Show(card);
-                    }
+                    Debug.Log($"[CardView] Showing card: {card.Title}");
+                    sharedDetailView.Show(card);
                 }
                 else if (cardType != null)
                 {
-                    Debug.Log($"[CardView] Showing cardType: {cardType.Title}");
+                    Debug.Log($"[CardView] Showing cardType: {cardType}");
                     sharedDetailView.Show(cardType);
-                }
-                else
-                {
-                    Debug.LogWarning("[CardView] Both card and cardType are null");
                 }
             }
             else
             {
-                Debug.LogWarning(
-                    "[CardView] No shared CardDetailView has been initialized. Call CardView.InitializeSharedDetailView first."
-                );
+                Debug.LogWarning("[CardView] No shared detail view found");
             }
+
             Debug.Log("[CardView] ShowDetail method completed");
         }
 

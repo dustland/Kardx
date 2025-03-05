@@ -283,7 +283,7 @@ namespace Kardx.UI
                 else
                 {
                     // Make sure empty slots are NOT highlighted
-                    cardSlots[i].SetHighlight(Color.clear, false);
+                    cardSlots[i].ClearHighlight();
                 }
             }
         }
