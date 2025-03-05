@@ -291,9 +291,9 @@ namespace Kardx.UI
                 CardView cardView = slot.GetComponentInChildren<CardView>();
                 if (cardView != null && cardView.Card == card)
                 {
-                    // Destroy the card GameObject
-                    Destroy(cardView.gameObject);
-                    Debug.Log($"[PlayerBattlefieldView] Removed card UI for {card.Title}");
+                    // Play death animation instead of immediately destroying
+                    cardView.DieWithAnimation();
+                    Debug.Log($"[PlayerBattlefieldView] Removed card UI for {card.Title} with animation");
                     break;
                 }
             }
