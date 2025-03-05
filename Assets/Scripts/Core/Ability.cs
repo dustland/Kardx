@@ -183,24 +183,6 @@ namespace Kardx.Core
                     }
                     break;
 
-                case EffectCategory.Heal:
-                    // Implement healing logic
-                    // This would typically restore defense points
-                    UnityEngine.Debug.Log($"[Ability] {abilityType.Name} healing effect applied");
-                    break;
-
-                case EffectCategory.Buff:
-                    // Implement buff logic
-                    // This would typically add modifiers to targets
-                    UnityEngine.Debug.Log($"[Ability] {abilityType.Name} buff effect applied");
-                    break;
-
-                case EffectCategory.Debuff:
-                    // Implement debuff logic
-                    // This would typically add negative modifiers to targets
-                    UnityEngine.Debug.Log($"[Ability] {abilityType.Name} debuff effect applied");
-                    break;
-
                 default:
                     UnityEngine.Debug.Log(
                         $"[Ability] {abilityType.Name} effect of type {abilityType.Effect} applied"
