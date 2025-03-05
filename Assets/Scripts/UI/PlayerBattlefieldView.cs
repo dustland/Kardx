@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Kardx.Core;
+using UnityEngine.UI;
 
 namespace Kardx.UI
 {
@@ -222,6 +223,13 @@ namespace Kardx.UI
                 Debug.LogError("[PlayerBattlefieldView] Cannot deploy null card");
                 return false;
             }
+            
+            // Early return for order cards - they don't go on the battlefield
+            if (card.CardType.Category == CardCategory.Order)
+            {
+                Debug.Log($"[PlayerBattlefieldView] Skipping battlefield deployment for order card: {card.Title}");
+                return true; // Return true since this isn't an error
+            }
 
             // Find detached card view
             CardView detachedCardView = null;
@@ -287,6 +295,31 @@ namespace Kardx.UI
                     Destroy(cardView.gameObject);
                     Debug.Log($"[PlayerBattlefieldView] Removed card UI for {card.Title}");
                     break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Enables or disables raycasting on all battlefield slots
+        /// Used to prevent order cards from getting blocked by battlefield during drops
+        /// </summary>
+        public void SetSlotsRaycastActive(bool active)
+        {
+            // When dragging an order card, we may want to disable raycasting on battlefield slots
+            foreach (var slot in cardSlots)
+            {
+                // Get all graphics on the slot
+                Graphic[] graphics = slot.GetComponentsInChildren<Graphic>();
+                foreach (var graphic in graphics)
+                {
+                    graphic.raycastTarget = active;
+                }
+
+                // Toggle collider if present
+                Collider2D collider = slot.GetComponent<Collider2D>();
+                if (collider != null)
+                {
+                    collider.enabled = active;
                 }
             }
         }

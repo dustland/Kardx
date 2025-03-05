@@ -217,7 +217,7 @@ namespace Kardx.Core
             }
 
             // TEST: Let's always make sure the order card is in the deck at position 2
-            deck.Insert(2, new Card(orderCardTypes, ownerFaction));
+            deck.Insert(0, new Card(orderCardTypes, ownerFaction));
 
             return deck;
         }

@@ -239,16 +239,5 @@ namespace Kardx.UI
                 UpdateHand();
             }
         }
-
-        /// <summary>
-        /// Clears any highlights on the hand cards or other UI elements
-        /// </summary>
-        public void ClearHighlights()
-        {
-            // Clear any highlights on the hand that might be active
-            Debug.Log("[HandView] Clearing highlights");
-
-            // If more specific highlight clearing is needed, add it here
-        }
     }
 }

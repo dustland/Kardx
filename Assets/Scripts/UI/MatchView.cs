@@ -233,6 +233,53 @@ namespace Kardx.UI
         {
             Debug.Log($"[MatchView] Card deployed: {card.Title} at slot {slotIndex}");
 
+            // For order cards, we don't need to update the battlefield
+            if (card.CardType.Category == CardCategory.Order)
+            {
+                Debug.Log($"[MatchView] Deployed an order card: {card.Title}");
+
+                // Find the card GameObject that was dragged
+                CardView detachedCardView = null;
+                foreach (CardView cardView in FindObjectsByType<CardView>(FindObjectsSortMode.None))
+                {
+                    // Check if this card view represents our card and is likely detached (at the root)
+                    if (cardView.Card == card && cardView.transform.parent == cardView.transform.root)
+                    {
+                        detachedCardView = cardView;
+                        break;
+                    }
+                }
+
+                if (detachedCardView != null && orderArea != null)
+                {
+                    // Move the card to the order zone
+                    detachedCardView.transform.SetParent(orderArea, false);
+                    detachedCardView.transform.localPosition = Vector3.zero;
+
+                    // Start a coroutine to handle the order card animation
+                    StartCoroutine(ProcessOrderCard(detachedCardView.gameObject));
+                }
+                else
+                {
+                    Debug.LogWarning($"[MatchView] Could not find detached card view for order card {card.Title} or order area is null");
+                }
+
+                // Update credits display
+                UpdateCreditsDisplay();
+
+                // Update the player's hand
+                if (card.Owner == matchManager.Player && playerHandView != null)
+                {
+                    playerHandView.UpdateHand();
+                }
+                else if (card.Owner == matchManager.Opponent && opponentHandView != null)
+                {
+                    opponentHandView.UpdateHand();
+                }
+                return;
+            }
+
+            // Handle unit cards deployment to battlefield
             if (playerBattlefieldView != null && card.Owner == matchManager.Player)
             {
                 playerBattlefieldView.OnCardDeployed(card, slotIndex);
@@ -243,6 +290,20 @@ namespace Kardx.UI
                 opponentBattlefieldView.OnCardDeployed(card, slotIndex);
             }
             UpdateCreditsDisplay();
+        }
+
+        private IEnumerator ProcessOrderCard(GameObject orderCardObject)
+        {
+            if (orderCardObject == null)
+                yield break;
+
+            // Wait for 2 seconds to simulate the order effect
+            yield return new WaitForSeconds(2f);
+
+            // Destroy the card object after the delay
+            Destroy(orderCardObject);
+
+            Debug.Log("[MatchView] Order card effect completed and card removed");
         }
 
         private void HandleAttackCompleted(Card attackerCard, Card targetCard, int damageDealt, int remainingHealth)

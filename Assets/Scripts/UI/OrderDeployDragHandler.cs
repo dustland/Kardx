@@ -24,6 +24,7 @@ namespace Kardx.UI
         private CanvasGroup canvasGroup;
         private bool isDragging = false;
         private HandView handView;
+        private PlayerBattlefieldView battlefieldView;
 
         private void Awake()
         {
@@ -36,6 +37,7 @@ namespace Kardx.UI
             }
 
             InitializeHandView();
+            InitializeBattlefieldView();
         }
 
         private void InitializeHandView()
@@ -49,29 +51,55 @@ namespace Kardx.UI
                 handView = FindAnyObjectByType<HandView>();
                 if (handView == null)
                 {
-                    Debug.LogError("OrderDeployDragHandler: Cannot find HandView in hierarchy or scene");
+                    Debug.LogWarning("[OrderDeployDragHandler] Could not find HandView in the scene");
                 }
-                else
-                {
-                    Debug.Log("[OrderDeployDragHandler] Found HandView in scene directly");
-                }
+            }
+        }
+
+        private void InitializeBattlefieldView()
+        {
+            // Find the battlefield view in the scene
+            battlefieldView = FindAnyObjectByType<PlayerBattlefieldView>();
+            if (battlefieldView == null)
+            {
+                Debug.LogWarning("[OrderDeployDragHandler] Could not find PlayerBattlefieldView in the scene");
             }
         }
 
         public void OnBeginDrag(PointerEventData eventData)
         {
+            Debug.Log("[OrderDeployDragHandler] Begin Drag");
+
+            // If we can't drag, ignore the event
             if (!CanDrag())
+            {
                 return;
+            }
 
             isDragging = true;
+
+            // Store original position and parent
             originalPosition = transform.position;
             originalParent = transform.parent;
 
-            // Disable raycast blocking so we can detect drop targets underneath
-            canvasGroup.blocksRaycasts = false;
+            // Reparent to root canvas so card appears in front of everything
+            Canvas rootCanvas = FindRootCanvas();
+            if (rootCanvas != null)
+            {
+                transform.SetParent(rootCanvas.transform);
+            }
 
-            // Move to front of UI
-            transform.SetParent(transform.root);
+            // Disable raycast on this object so we can detect drops
+            if (canvasGroup != null)
+            {
+                canvasGroup.blocksRaycasts = false;
+            }
+
+            // Disable raycasting on battlefield slots to ensure order cards pass through
+            if (battlefieldView != null)
+            {
+                battlefieldView.SetSlotsRaycastActive(false);
+            }
         }
 
         public void OnDrag(PointerEventData eventData)
@@ -104,6 +132,12 @@ namespace Kardx.UI
                 canvasGroup.blocksRaycasts = true;
             }
 
+            // Re-enable raycasting on battlefield slots
+            if (battlefieldView != null)
+            {
+                battlefieldView.SetSlotsRaycastActive(true);
+            }
+
             // Modified check: Consider it dropped on a target only if it's the OrderDropHandler,
             // explicitly ignore PlayerCardSlot components
             bool wasDroppedOnTarget = false;
@@ -117,6 +151,7 @@ namespace Kardx.UI
             {
                 if (result.gameObject.GetComponent<OrderDropHandler>() != null)
                 {
+                    Debug.Log("[OrderDeployDragHandler] Dropped on valid target");
                     wasDroppedOnTarget = true;
                     break;
                 }
@@ -127,17 +162,7 @@ namespace Kardx.UI
             {
                 Debug.Log("[OrderDeployDragHandler] Not dropped on valid target, returning to original position");
                 ReturnToOriginalPosition();
-
-                // If we have a reference to HandView, we can ask it to clear highlights
-                if (handView != null)
-                {
-                    handView.ClearHighlights();
-                }
             }
-
-            // Note: We don't need to handle deployment here
-            // OrderDropHandler.OnDrop will handle the game logic for deployment
-            // and the card will be handled appropriately after that
         }
 
         private bool CanDrag()
@@ -159,6 +184,23 @@ namespace Kardx.UI
             // Return the card to its original parent and position
             transform.SetParent(originalParent);
             transform.localPosition = Vector3.zero;
+        }
+
+        // Add a method to find the root canvas
+        private Canvas FindRootCanvas()
+        {
+            // Try to find the root canvas in the scene
+            Canvas[] canvases = FindObjectsByType<Canvas>(FindObjectsSortMode.None);
+            foreach (Canvas canvas in canvases)
+            {
+                if (canvas.isRootCanvas)
+                {
+                    return canvas;
+                }
+            }
+
+            Debug.LogWarning("[OrderDeployDragHandler] No root canvas found in the scene");
+            return null;
         }
     }
 }

@@ -74,7 +74,7 @@ namespace Kardx.Core
             }
 
             // Shuffle the deck
-            deck.Shuffle();
+            // deck.Shuffle();
         }
 
         // Public properties
