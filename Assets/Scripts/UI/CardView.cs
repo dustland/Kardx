@@ -815,55 +815,36 @@ namespace Kardx.UI
         /// </summary>
         public void DieWithAnimation()
         {
-            // Disable any drag handlers during animation
-            var dragHandlers = GetComponents<MonoBehaviour>().OfType<IDragHandler>();
-            foreach (var handler in dragHandlers)
-            {
-                var behavior = handler as MonoBehaviour;
-                if (behavior != null)
-                    behavior.enabled = false;
-            }
-
-            // Get references to components
-            CanvasGroup canvasGroup = GetComponent<CanvasGroup>();
-            if (canvasGroup == null)
-                canvasGroup = gameObject.AddComponent<CanvasGroup>();
-
-            // Animation parameters
-            float animationDuration = 0.8f; // Slightly longer duration for more impact
-
             // Ensure the card is visible above other elements during animation
             transform.SetAsLastSibling();
 
-            // Original position for movement animation
-            Vector3 originalPosition = transform.position;
-            Vector3 floatUpPosition = originalPosition + new Vector3(0, 50f, 0); // Float upward
-
-            // Create a sequence of animations
-            Sequence deathSequence = DOTween.Sequence();
+            // Get or add a CanvasGroup component for fade animation
+            CanvasGroup canvasGroup = GetComponent<CanvasGroup>();
+            if (canvasGroup == null)
+            {
+                canvasGroup = gameObject.AddComponent<CanvasGroup>();
+            }
 
             // First slightly scale up the card for dramatic effect
-            deathSequence.Append(transform.DOScale(transform.localScale * 1.2f, 0.2f).SetEase(Ease.OutBack));
+            transform.DOScale(transform.localScale * 1.2f, 0.2f)
+                .SetEase(Ease.OutBack)
+                .OnComplete(() =>
+                {
+                    // Then use the utility class for the main death animation
+                    Sequence deathSequence = DOTweenAnimationUtility.AnimateCardDeath(
+                        transform,
+                        canvasGroup,
+                        floatDistance: 50f,
+                        duration: 0.8f,
+                        onComplete: () =>
+                        {
+                            Destroy(gameObject);
+                        }
+                    );
 
-            // Then start the main death animation
-
-            // Add movement animation (float upward)
-            deathSequence.Append(transform.DOMove(floatUpPosition, animationDuration * 0.8f).SetEase(Ease.OutQuad));
-
-            // Add scale animation (shrink to nothing)
-            deathSequence.Join(transform.DOScale(Vector3.zero, animationDuration * 0.7f).SetEase(Ease.InBack).SetDelay(0.1f));
-
-            // Add rotation animation (spin as it shrinks)
-            deathSequence.Join(transform.DORotate(new Vector3(0, 0, UnityEngine.Random.Range(-90, 90)), animationDuration, RotateMode.LocalAxisAdd).SetEase(Ease.InOutQuad));
-
-            // Add fade out animation
-            deathSequence.Join(canvasGroup.DOFade(0, animationDuration * 0.6f).SetEase(Ease.OutQuad).SetDelay(0.2f));
-
-            // Destroy the card when the animation completes
-            deathSequence.OnComplete(() =>
-            {
-                Destroy(gameObject);
-            });
+                    // Play the sequence
+                    deathSequence.Play();
+                });
         }
     }
 }
