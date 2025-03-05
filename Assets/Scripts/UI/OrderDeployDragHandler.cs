@@ -104,9 +104,23 @@ namespace Kardx.UI
                 canvasGroup.blocksRaycasts = true;
             }
 
-            // Check if we dropped on a valid target
-            bool wasDroppedOnTarget = eventData.pointerEnter != null &&
-                                     (eventData.pointerEnter.GetComponent<OrderDropHandler>() != null);
+            // Modified check: Consider it dropped on a target only if it's the OrderDropHandler,
+            // explicitly ignore PlayerCardSlot components
+            bool wasDroppedOnTarget = false;
+
+            // Cast rays to find all objects under the pointer
+            var raycastResults = new List<RaycastResult>();
+            EventSystem.current.RaycastAll(eventData, raycastResults);
+
+            // Check if any of the results is an OrderDropHandler
+            foreach (var result in raycastResults)
+            {
+                if (result.gameObject.GetComponent<OrderDropHandler>() != null)
+                {
+                    wasDroppedOnTarget = true;
+                    break;
+                }
+            }
 
             // If not dropped on a valid target, return the card to its original position
             if (!wasDroppedOnTarget)

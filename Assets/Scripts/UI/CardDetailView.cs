@@ -1,3 +1,5 @@
+using TMPro;
+using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -15,12 +17,21 @@ namespace Kardx.UI
         [SerializeField]
         private Image backgroundPanel; // Semi-transparent background panel
 
+        [SerializeField]
+        private TextMeshProUGUI cardNameText;
+
+        [SerializeField]
+        private TextMeshProUGUI descriptionText;
+
+        [SerializeField]
+        private TextMeshProUGUI categoryText;
+
         private void Awake()
         {
             // Ensure we have the required components
             if (cardView == null)
             {
-                cardView = GetComponentInChildren<CardView>();
+                cardView = GetComponent<CardView>();
                 Debug.Log(
                     $"[CardDetailView] Found CardView: {(cardView != null ? cardView.name : "null")}"
                 );
@@ -54,10 +65,41 @@ namespace Kardx.UI
             canvasGroup.blocksRaycasts = true;
             canvasGroup.interactable = true;
 
-            Debug.Log("[CardDetailView] Initialized with background panel and raycast blocking");
 
             // Make sure the card view is properly configured
             EnsureCardViewIsConfigured();
+
+            // Disable raycast targets on all child graphic elements except the background panel
+            DisableRaycastsOnChildren();
+        }
+
+        private void Initialize(CardType cardType)
+        {
+            Debug.Log("[CardDetailView] Initialized with cardType: " + cardType?.Title);
+
+            if (cardNameText != null)
+                cardNameText.text = cardType?.Title;
+            if (descriptionText != null)
+                descriptionText.text = cardType?.Description;
+            if (categoryText != null)
+                categoryText.text = cardType?.Category.ToString();
+        }
+
+        private void DisableRaycastsOnChildren()
+        {
+            // Get all Graphic components (Image, Text, etc.) in children
+            Graphic[] graphics = GetComponentsInChildren<Graphic>();
+
+            foreach (Graphic graphic in graphics)
+            {
+                // Skip the background panel itself
+                if (graphic.gameObject == backgroundPanel.gameObject)
+                    continue;
+
+                // Disable raycast targeting on all other UI elements
+                graphic.raycastTarget = false;
+                Debug.Log($"[CardDetailView] Disabled raycast targeting on {graphic.gameObject.name}");
+            }
         }
 
         private void EnsureCardViewIsConfigured()
@@ -121,6 +163,7 @@ namespace Kardx.UI
 
                 // Initialize the card data
                 cardView.Initialize(card);
+                Initialize(card?.CardType);
 
                 // Force the card to load its image immediately
                 if (cardView.GetComponent<Image>() != null)

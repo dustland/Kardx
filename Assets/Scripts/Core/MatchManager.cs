@@ -208,11 +208,16 @@ namespace Kardx.Core
             // Shuffle the card types before adding them to the deck
             var shuffledCardTypes = cardTypes.OrderBy(x => Guid.NewGuid()).ToList();
 
+            var orderCardTypes = shuffledCardTypes.FindLast(x => x.Category == CardCategory.Order);
+
             foreach (var cardType in shuffledCardTypes)
             {
                 // TODO: Add deck building rules here (e.g., card limits, faction restrictions)
                 deck.Add(new Card(cardType, ownerFaction));
             }
+
+            // TEST: Let's always make sure the order card is in the deck at position 2
+            deck.Insert(2, new Card(orderCardTypes, ownerFaction));
 
             return deck;
         }

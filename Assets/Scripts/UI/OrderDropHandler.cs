@@ -12,11 +12,8 @@ namespace Kardx.UI
     /// Handles the dropping of Order cards onto the battlefield.
     /// This component should be attached to a GameObject that covers the entire battlefield area.
     /// </summary>
-    public class OrderDropHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler, IPointerExitHandler
+    public class OrderDropHandler : MonoBehaviour, IDropHandler
     {
-        [SerializeField]
-        private Image highlightImage;
-
         private MatchView matchView;
 
         private void Awake()
@@ -29,11 +26,6 @@ namespace Kardx.UI
                 Debug.LogWarning("[OrderDropHandler] Could not find MatchView.");
             }
 
-            if (!highlightImage)
-                CreateHighlight();
-            else
-                ConfigureHighlightImage();
-
             // Ensure this GameObject can receive drops
             var graphic = GetComponent<Graphic>();
             if (graphic == null)
@@ -41,42 +33,6 @@ namespace Kardx.UI
                 var image = gameObject.AddComponent<Image>();
                 image.color = Color.clear;
                 image.raycastTarget = true;
-            }
-        }
-
-        private void ConfigureHighlightImage()
-        {
-            highlightImage.raycastTarget = false;
-            SetHighlight(false);
-        }
-
-        private void CreateHighlight()
-        {
-            // Create a child object for highlighting
-            var highlightObj = new GameObject("HighlightImage");
-            highlightObj.transform.SetParent(transform, false);
-            highlightObj.transform.localPosition = Vector3.zero;
-            highlightObj.transform.localScale = Vector3.one;
-
-            // Make it fill the parent
-            var rectTransform = highlightObj.AddComponent<RectTransform>();
-            rectTransform.anchorMin = Vector2.zero;
-            rectTransform.anchorMax = Vector2.one;
-            rectTransform.offsetMin = Vector2.zero;
-            rectTransform.offsetMax = Vector2.zero;
-
-            // Add the image component
-            highlightImage = highlightObj.AddComponent<Image>();
-            highlightImage.raycastTarget = false;
-            highlightImage.color = new Color(1f, 1f, 0f, 0.3f); // Semi-transparent yellow
-            SetHighlight(false);
-        }
-
-        public void SetHighlight(bool show)
-        {
-            if (highlightImage != null)
-            {
-                highlightImage.enabled = show;
             }
         }
 
@@ -90,9 +46,6 @@ namespace Kardx.UI
                 Debug.Log("[OrderDropHandler] No CardView found on dropped object");
                 return;
             }
-
-            // Clear highlight before handling the drop
-            SetHighlight(false);
 
             // Ensure the card's CanvasGroup.blocksRaycasts is set to true
             var canvasGroup = cardView.GetComponent<CanvasGroup>();
@@ -148,20 +101,6 @@ namespace Kardx.UI
                     $"[OrderDropHandler] Order card {cardView.Card.Title} deployed successfully"
                 );
             }
-        }
-
-        public void OnPointerEnter(PointerEventData eventData)
-        {
-            var draggingCard = eventData.pointerDrag?.GetComponent<CardView>()?.Card;
-            if (draggingCard != null && IsValidDropTarget(draggingCard))
-            {
-                SetHighlight(true);
-            }
-        }
-
-        public void OnPointerExit(PointerEventData eventData)
-        {
-            SetHighlight(false);
         }
 
         /// <summary>

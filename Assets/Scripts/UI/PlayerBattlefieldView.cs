@@ -96,6 +96,48 @@ namespace Kardx.UI
         }
 
         /// <summary>
+        /// Check if a card can be deployed to this battlefield (only unit cards)
+        /// </summary>
+        public bool IsValidCardForDeployment(Card card)
+        {
+            if (card == null)
+                return false;
+
+            // Only unit cards can be deployed to battlefield slots
+            return card.IsUnitCard;
+        }
+
+        /// <summary>
+        /// Highlight empty slots in the battlefield only if the card is a unit card.
+        /// </summary>
+        public void HighlightEmptySlotsForCard(Card card)
+        {
+            if (card == null)
+            {
+                Debug.LogError("[PlayerBattlefieldView] Cannot highlight empty slots - card is null");
+                return;
+            }
+
+            // Only highlight slots for unit cards
+            if (!IsValidCardForDeployment(card))
+            {
+                Debug.Log($"[PlayerBattlefieldView] Not highlighting slots for {card.Title} - not a unit card");
+                ClearCardHighlights();
+                return;
+            }
+
+            // Continue with normal battlefield slot highlighting
+            if (matchManager == null)
+            {
+                Debug.LogError("[PlayerBattlefieldView] Cannot highlight empty slots - matchManager is null");
+                return;
+            }
+
+            var battlefield = matchManager.Player.Battlefield;
+            HighlightEmptySlots(battlefield);
+        }
+
+        /// <summary>
         /// Highlight empty slots in the battlefield.
         /// </summary>
         public void HighlightEmptySlots(Battlefield battlefield)

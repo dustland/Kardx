@@ -14,10 +14,7 @@ namespace Kardx.UI
     {
         [Header("Card Data")]
         public bool autoUpdateUI = true;
-        [SerializeField]
         private Card card;
-
-        [SerializeField]
         private CardType cardType;
 
         [Header("Core Components")]
@@ -36,6 +33,9 @@ namespace Kardx.UI
 
         [SerializeField]
         private TextMeshProUGUI categoryText;
+
+        [SerializeField]
+        private TextMeshProUGUI categoryTagText;
 
         [SerializeField]
         private TextMeshProUGUI deploymentCostText;
@@ -205,11 +205,9 @@ namespace Kardx.UI
                 var defense = card != null ? card.CurrentDefense : cardType?.BaseDefense ?? 0;
                 var imageUrl = card != null ? card.ImageUrl : cardType?.ImageUrl;
                 var abilities = card != null ? card.CardType?.Abilities : cardType?.Abilities;
-                var categoryMark = card != null ? card.CardType?.Category : cardType?.Category;
-                var categoryString = categoryMark.HasValue ? categoryMark.ToString() : string.Empty;
-                categoryString = !string.IsNullOrEmpty(categoryString)
-                    ? categoryString[0].ToString()
-                    : string.Empty;
+                var categoryValue = card != null ? card.CardType?.Category : cardType?.Category;
+                var category = categoryValue.HasValue ? categoryValue.ToString() : string.Empty;
+                var categoryTag = !string.IsNullOrEmpty(category) ? category[0].ToString() : string.Empty;
 
                 // Update UI elements safely
                 if (nameText != null)
@@ -217,7 +215,9 @@ namespace Kardx.UI
                 if (descriptionText != null)
                     descriptionText.text = description;
                 if (categoryText != null)
-                    categoryText.text = categoryString;
+                    categoryText.text = category;
+                if (categoryTagText != null)
+                    categoryTagText.text = categoryTag;
                 if (deploymentCostText != null)
                     deploymentCostText.text = deploymentCost.ToString();
                 if (operationCostText != null)

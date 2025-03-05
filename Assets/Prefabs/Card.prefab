@@ -931,7 +931,8 @@ MonoBehaviour:
   artworkImage: {fileID: 4730272823816209214}
   nameText: {fileID: 7636406358263896690}
   descriptionText: {fileID: 0}
-  categoryText: {fileID: 2004088818548523290}
+  categoryText: {fileID: 0}
+  categoryTagText: {fileID: 2004088818548523290}
   deploymentCostText: {fileID: 7660826518443253100}
   operationCostText: {fileID: 3146065014060102945}
   attackText: {fileID: 5244797991633264376}
@@ -1281,7 +1282,7 @@ GameObject:
   - component: {fileID: 3631247416981971099}
   - component: {fileID: 2004088818548523290}
   m_Layer: 5
-  m_Name: CategoryText
+  m_Name: CategoryTag
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

@@ -74,7 +74,7 @@ namespace Kardx.UI
             if (playerBattlefieldView != null && cardView.Card != null)
             {
                 Debug.Log("[UnitDeployDragHandler] Highlighting empty slots via PlayerBattlefieldView");
-                playerBattlefieldView.HighlightEmptySlots(cardView.Card.Owner.Battlefield);
+                playerBattlefieldView.HighlightEmptySlotsForCard(cardView.Card);
             }
             else
             {

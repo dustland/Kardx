@@ -9,7 +9,7 @@ namespace Kardx.UI
     /// <summary>
     /// UI component representing a slot in the player's battlefield.
     /// </summary>
-    public class PlayerCardSlot : MonoBehaviour, IDropHandler
+    public class PlayerCardSlot : MonoBehaviour, IDropHandler, IPointerEnterHandler, IPointerExitHandler
     {
         /// <summary>
         /// Types of highlights that can be applied to a card slot
@@ -172,6 +172,47 @@ namespace Kardx.UI
             }
         }
 
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            // Check if there's a card being dragged
+            var draggingCard = eventData.pointerDrag?.GetComponent<CardView>()?.Card;
+
+            // Ignore order cards completely - don't highlight or accept them
+            if (draggingCard != null && draggingCard.IsOrderCard)
+            {
+                // Explicitly ignore order cards by not highlighting
+                return;
+            }
+
+            // For unit cards, highlight the slot if it's available
+            if (draggingCard != null && draggingCard.IsUnitCard)
+            {
+                // Check if this slot is empty using the battlefield view's MatchManager to access the model
+                var matchManager = battlefieldView.GetMatchManager();
+                if (matchManager != null && 
+                    matchManager.Player.Battlefield.GetCardAt(slotIndex) == null)
+                {
+                    SetHighlightState(HighlightType.DropTarget);
+                }
+            }
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            // Only clear highlight if we're not in global highlighting mode
+            // Check the current highlight state to determine what to do
+            if (currentHighlightType == HighlightType.DropTarget)
+            {
+                // If this was highlighted by a direct hover, clear it
+                SetHighlightState(HighlightType.None);
+            }
+            else if (currentHighlightType == HighlightType.Available)
+            {
+                // Keep the Available highlight as it was likely set by the battlefield view's highlighting
+                // This keeps the empty slots highlighted during dragging
+            }
+        }
+
         public void OnDrop(PointerEventData eventData)
         {
             if (!IsHighlighted())
@@ -188,6 +229,13 @@ namespace Kardx.UI
                 return;
             }
 
+            // Early exit if this is an Order card - we want these to be handled by the OrderDropHandler on the canvas
+            if (cardView.Card.IsOrderCard)
+            {
+                Debug.Log($"[PlayerCardSlot] Ignoring Order card {cardView.Card.Title} - this should be handled by OrderDropHandler");
+                return;
+            }
+
             // Re-enable raycast blocking on the dragged card
             var canvasGroup = cardView.GetComponent<CanvasGroup>();
             if (canvasGroup != null)
@@ -195,7 +243,7 @@ namespace Kardx.UI
                 canvasGroup.blocksRaycasts = true;
             }
 
-            Debug.Log($"[PlayerCardSlot] Card {cardView.Card.Title} dropped on slot {slotIndex}");
+            Debug.Log($"[PlayerCardSlot] Unit Card {cardView.Card.Title} dropped on slot {slotIndex}");
 
             // Get access to the match manager directly from battlefield view
             var matchManager = battlefieldView.GetMatchManager();
@@ -203,27 +251,14 @@ namespace Kardx.UI
             {
                 Card card = cardView.Card;
 
-                // Call the appropriate game logic method directly on MatchManager
-                bool success = false;
-
+                // Only deploy unit cards - order cards should be handled by OrderDropHandler
                 if (card.IsUnitCard)
                 {
                     // For unit cards, deploy to the specific slot
                     Debug.Log($"[PlayerCardSlot] Deploying unit card to slot {slotIndex}");
-                    success = matchManager.DeployCard(card, slotIndex);
+                    bool success = matchManager.DeployCard(card, slotIndex);
+                    Debug.Log($"[PlayerCardSlot] Deployment {(success ? "succeeded" : "failed")}");
                 }
-                else if (card.IsOrderCard)
-                {
-                    // For order cards, just deploy 
-                    Debug.Log("[PlayerCardSlot] Deploying order card");
-                    success = matchManager.DeployCard(card, -1);
-                }
-
-                Debug.Log($"[PlayerCardSlot] Deployment {(success ? "succeeded" : "failed")}");
-
-                // We don't destroy the card anymore - HandleCardDeployed will handle it
-                // The drag handlers now leave the cards for HandleCardDeployed to reposition
-                // If deployment was successful, the UI will be updated through the OnCardDeployed event from MatchManager
             }
             else
             {
