@@ -22,7 +22,6 @@ namespace Kardx.UI
         private Vector3 originalPosition;
         private Transform originalParent;
         private CanvasGroup canvasGroup;
-        private bool isDragging = false;
         private HandView handView;
         private PlayerBattlefieldView battlefieldView;
 
@@ -76,11 +75,12 @@ namespace Kardx.UI
                 return;
             }
 
-            isDragging = true;
+            // Set the CardView.IsBeingDragged flag
+            cardView.IsBeingDragged = true;
 
-            // Store original position and parent
-            originalPosition = transform.position;
+            // Store original parent and position
             originalParent = transform.parent;
+            originalPosition = transform.position;
 
             // Reparent to root canvas so card appears in front of everything
             Canvas rootCanvas = FindRootCanvas();
@@ -104,7 +104,7 @@ namespace Kardx.UI
 
         public void OnDrag(PointerEventData eventData)
         {
-            if (!isDragging)
+            if (!cardView.IsBeingDragged)
                 return;
 
             // Move the card with the cursor
@@ -121,10 +121,11 @@ namespace Kardx.UI
         {
             Debug.Log("[OrderDeployDragHandler] End Drag");
 
-            if (!isDragging)
+            if (!cardView.IsBeingDragged)
                 return;
 
-            isDragging = false;
+            // Reset the CardView.IsBeingDragged flag
+            cardView.IsBeingDragged = false;
 
             // Re-enable raycasts now that we're done dragging
             if (canvasGroup != null)

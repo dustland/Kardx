@@ -13,58 +13,51 @@ namespace Kardx.UI
     public class UnitDeployDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
         [SerializeField]
-        private float dragOffset = 0.5f;
-
-        private CardView cardView;
-        private PlayerBattlefieldView playerBattlefieldView;
+        private float dragOffset = 15f;
+        
         private Vector3 originalPosition;
         private Transform originalParent;
+        private CardView cardView;
         private CanvasGroup canvasGroup;
-        private bool isDragging = false;
+        private PlayerBattlefieldView playerBattlefieldView;
 
         private void Awake()
         {
+            // Cache component references
             cardView = GetComponent<CardView>();
             canvasGroup = GetComponent<CanvasGroup>();
 
-            if (canvasGroup == null)
-            {
-                canvasGroup = gameObject.AddComponent<CanvasGroup>();
-            }
-
-            InitializeBattlefieldView();
+            // Find the player battlefield view in the scene
+            playerBattlefieldView = FindAnyObjectByType<PlayerBattlefieldView>();
         }
 
-        private void InitializeBattlefieldView()
+        private void OnEnable()
         {
-            // Get the PlayerBattlefieldView through the containing hierarchy
-            playerBattlefieldView = GetComponentInParent<PlayerBattlefieldView>();
-
-            if (playerBattlefieldView == null)
+            if (cardView == null)
             {
-                // If we can't find it directly, try finding it in the scene
-                playerBattlefieldView = FindAnyObjectByType<PlayerBattlefieldView>();
-                if (playerBattlefieldView == null)
-                {
-                    Debug.LogError("UnitDeployDragHandler: Cannot find PlayerBattlefieldView in hierarchy or scene");
-                }
-                else
-                {
-                    Debug.Log("[UnitDeployDragHandler] Found PlayerBattlefieldView in scene directly");
-                }
+                cardView = GetComponent<CardView>();
+            }
+            
+            if (canvasGroup == null)
+            {
+                canvasGroup = GetComponent<CanvasGroup>();
             }
         }
 
         public void OnBeginDrag(PointerEventData eventData)
         {
+            // Ensure the card can be dragged
             if (!CanDrag())
                 return;
 
-            isDragging = true;
+            // Set the CardView.IsBeingDragged flag
+            cardView.IsBeingDragged = true;
+
+            // Store the original position and parent
             originalPosition = transform.position;
             originalParent = transform.parent;
 
-            // Disable raycast blocking so we can detect drop targets underneath
+            // Disable raycasting on this card while dragging
             canvasGroup.blocksRaycasts = false;
 
             // Place the card on the root to ensure proper layering
@@ -84,7 +77,7 @@ namespace Kardx.UI
 
         public void OnDrag(PointerEventData eventData)
         {
-            if (!isDragging)
+            if (!cardView.IsBeingDragged)
                 return;
 
             // Move the card with the cursor
@@ -101,10 +94,11 @@ namespace Kardx.UI
         {
             Debug.Log("[UnitDeployDragHandler] End Drag");
 
-            if (!isDragging)
+            if (!cardView.IsBeingDragged)
                 return;
 
-            isDragging = false;
+            // Reset the CardView.IsBeingDragged flag
+            cardView.IsBeingDragged = false;
 
             // Re-enable raycast blocking
             canvasGroup.blocksRaycasts = true;

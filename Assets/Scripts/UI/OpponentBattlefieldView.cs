@@ -280,6 +280,11 @@ namespace Kardx.UI
                     cardSlots[i].SetHighlight(highlightColor, true);
                     Debug.Log($"[OpponentBattlefieldView] Highlighted target: {opponentCard.Title}");
                 }
+                else
+                {
+                    // Make sure empty slots are NOT highlighted
+                    cardSlots[i].SetHighlight(Color.clear, false);
+                }
             }
         }
 

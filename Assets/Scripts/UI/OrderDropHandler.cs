@@ -91,9 +91,15 @@ namespace Kardx.UI
                 return;
             }
 
+            // Mark this card as being deployed as an order card to prevent attack behaviors
+            // Store the original isBeingDragged state to restore it later
+            bool originalDragState = cardView.IsBeingDragged;
+            cardView.IsBeingDragged = false; // Prevent other handlers from processing this card
+            
             if (!matchManager.DeployCard(cardView.Card, -1))
             {
                 Debug.Log($"[OrderDropHandler] Failed to deploy Order card {cardView.Card.Title}");
+                cardView.IsBeingDragged = originalDragState; // Restore the original state
             }
             else
             {

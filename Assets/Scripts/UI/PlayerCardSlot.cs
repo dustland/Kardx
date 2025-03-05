@@ -45,6 +45,7 @@ namespace Kardx.UI
         private PlayerBattlefieldView battlefieldView;
         private CardView currentCardView;
         private HighlightType currentHighlightType = HighlightType.None;
+        private HighlightType previousHighlightType = HighlightType.None;
 
         public int SlotIndex => slotIndex;
         public Transform CardContainer => cardContainer ?? transform;
@@ -93,36 +94,40 @@ namespace Kardx.UI
         /// </summary>
         public void SetHighlightState(HighlightType highlightType)
         {
-            currentHighlightType = highlightType;
-
-            if (highlightImage == null)
-                return;
-
-            switch (highlightType)
+            if (currentHighlightType != highlightType)
             {
-                case HighlightType.None:
-                    highlightImage.gameObject.SetActive(false);
-                    break;
+                previousHighlightType = currentHighlightType;
+                currentHighlightType = highlightType;
 
-                case HighlightType.Available:
-                    highlightImage.gameObject.SetActive(true);
-                    highlightImage.color = availableHighlightColor;
-                    break;
+                if (highlightImage == null)
+                    return;
 
-                case HighlightType.DropTarget:
-                    highlightImage.gameObject.SetActive(true);
-                    highlightImage.color = dropTargetHighlightColor;
-                    break;
+                switch (highlightType)
+                {
+                    case HighlightType.None:
+                        highlightImage.gameObject.SetActive(false);
+                        break;
 
-                case HighlightType.Selected:
-                    highlightImage.gameObject.SetActive(true);
-                    highlightImage.color = selectedHighlightColor;
-                    break;
+                    case HighlightType.Available:
+                        highlightImage.gameObject.SetActive(true);
+                        highlightImage.color = availableHighlightColor;
+                        break;
 
-                case HighlightType.Invalid:
-                    highlightImage.gameObject.SetActive(true);
-                    highlightImage.color = invalidHighlightColor;
-                    break;
+                    case HighlightType.DropTarget:
+                        highlightImage.gameObject.SetActive(true);
+                        highlightImage.color = dropTargetHighlightColor;
+                        break;
+
+                    case HighlightType.Selected:
+                        highlightImage.gameObject.SetActive(true);
+                        highlightImage.color = selectedHighlightColor;
+                        break;
+
+                    case HighlightType.Invalid:
+                        highlightImage.gameObject.SetActive(true);
+                        highlightImage.color = invalidHighlightColor;
+                        break;
+                }
             }
         }
 
@@ -175,7 +180,8 @@ namespace Kardx.UI
         public void OnPointerEnter(PointerEventData eventData)
         {
             // Check if there's a card being dragged
-            var draggingCard = eventData.pointerDrag?.GetComponent<CardView>()?.Card;
+            var draggingCardView = eventData.pointerDrag?.GetComponent<CardView>();
+            var draggingCard = draggingCardView?.Card;
 
             // Ignore order cards completely - don't highlight or accept them
             if (draggingCard != null && draggingCard.IsOrderCard)
@@ -184,12 +190,23 @@ namespace Kardx.UI
                 return;
             }
 
-            // For unit cards, highlight the slot if it's available
+            // Get the match manager
+            var matchManager = battlefieldView.GetMatchManager();
+            if (matchManager == null)
+                return;
+
+            // For unit cards, highlight the slot if it's available AND only if the card is from the hand (not battlefield)
             if (draggingCard != null && draggingCard.IsUnitCard)
             {
-                // Check if this slot is empty using the battlefield view's MatchManager to access the model
-                var matchManager = battlefieldView.GetMatchManager();
-                if (matchManager != null && 
+                // Check if the card is in the player's hand (new unit deployment)
+                // and NOT on the battlefield (attacking)
+                bool isCardInHand = matchManager.Player.Hand.Contains(draggingCard);
+                bool isCardOnBattlefield = matchManager.Player.Battlefield.Contains(draggingCard);
+                
+                // Only highlight if:
+                // 1. Card is in hand (not on battlefield)
+                // 2. This slot is empty
+                if (isCardInHand && !isCardOnBattlefield && 
                     matchManager.Player.Battlefield.GetCardAt(slotIndex) == null)
                 {
                     SetHighlightState(HighlightType.DropTarget);
@@ -199,17 +216,12 @@ namespace Kardx.UI
 
         public void OnPointerExit(PointerEventData eventData)
         {
-            // Only clear highlight if we're not in global highlighting mode
             // Check the current highlight state to determine what to do
             if (currentHighlightType == HighlightType.DropTarget)
             {
-                // If this was highlighted by a direct hover, clear it
-                SetHighlightState(HighlightType.None);
-            }
-            else if (currentHighlightType == HighlightType.Available)
-            {
-                // Keep the Available highlight as it was likely set by the battlefield view's highlighting
-                // This keeps the empty slots highlighted during dragging
+                // If this was highlighted as DropTarget, restore the previous state
+                // (which might be Available or None)
+                SetHighlightState(previousHighlightType);
             }
         }
 

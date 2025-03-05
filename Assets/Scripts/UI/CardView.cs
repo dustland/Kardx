@@ -16,6 +16,14 @@ namespace Kardx.UI
         public bool autoUpdateUI = true;
         private Card card;
         private CardType cardType;
+        private bool isBeingDragged = false; // Track if card is being dragged
+
+        // Public property to track drag state
+        public bool IsBeingDragged 
+        { 
+            get { return isBeingDragged; } 
+            set { isBeingDragged = value; }
+        }
 
         [Header("Core Components")]
         [SerializeField]
@@ -82,7 +90,6 @@ namespace Kardx.UI
         private OrderDeployDragHandler orderDeployDragHandler;
         private CanvasGroup canvasGroup;
         private bool isDraggable = true;
-        private bool isDragging = false;
         private bool isHighlighted = false;
 
         private static CardDetailView sharedDetailView;
@@ -98,8 +105,8 @@ namespace Kardx.UI
 
         private void Awake()
         {
-            // Initialize isDragging to false
-            isDragging = false;
+            // Initialize isBeingDragged to false
+            isBeingDragged = false;
 
             // Ensure we have the basic required components
             if (GetComponent<RectTransform>() == null)
@@ -128,10 +135,10 @@ namespace Kardx.UI
             // Set up event handlers for ability dragging
             if (abilityDragHandler != null)
             {
-                abilityDragHandler.OnDragStarted += () => isDragging = true;
+                abilityDragHandler.OnDragStarted += () => isBeingDragged = true;
                 abilityDragHandler.OnDragEnded += (success) =>
                 {
-                    isDragging = false;
+                    isBeingDragged = false;
                     if (success)
                     {
                         CancelInvoke(nameof(ShowDetail));
@@ -170,11 +177,11 @@ namespace Kardx.UI
             if (isInBattlefield)
             {
                 Debug.Log(
-                    $"[CardView] Card is in player battlefield. isDragging: {isDragging}, Card: {(card != null ? card.Title : "null")}"
+                    $"[CardView] Card is in player battlefield. isBeingDragged: {isBeingDragged}, Card: {(card != null ? card.Title : "null")}"
                 );
             }
 
-            if (!isDragging)
+            if (!isBeingDragged)
             {
                 ShowDetail();
             }
@@ -445,11 +452,11 @@ namespace Kardx.UI
                 Debug.Log($"[CardView] Card {card?.Title} is not draggable or is an opponent card");
             }
 
-            // When a card is no longer draggable, reset the isDragging flag
+            // When a card is no longer draggable, reset the isBeingDragged flag
             if (!canDrag)
             {
-                isDragging = false;
-                Debug.Log($"[CardView] Card {card?.Title} is no longer draggable, resetting isDragging to false");
+                isBeingDragged = false;
+                Debug.Log($"[CardView] Card {card?.Title} is no longer draggable, resetting isBeingDragged to false");
             }
         }
 
@@ -512,9 +519,9 @@ namespace Kardx.UI
 
         public void ResetDraggingState()
         {
-            isDragging = false;
+            isBeingDragged = false;
             Debug.Log(
-                $"[CardView] Explicitly reset isDragging flag for {(card != null ? card.Title : "unknown")}"
+                $"[CardView] Explicitly reset isBeingDragged flag for {(card != null ? card.Title : "unknown")}"
             );
         }
 
@@ -564,7 +571,7 @@ namespace Kardx.UI
         public void ShowDetail()
         {
             Debug.Log("[CardView] Starting ShowDetail method");
-            if (isDragging)
+            if (isBeingDragged)
             {
                 Debug.Log("[CardView] is dragging, not showing detail");
                 return;
@@ -678,8 +685,8 @@ namespace Kardx.UI
         {
             if (abilityDragHandler != null)
             {
-                abilityDragHandler.OnDragStarted -= () => isDragging = true;
-                abilityDragHandler.OnDragEnded -= (success) => isDragging = false;
+                abilityDragHandler.OnDragStarted -= () => isBeingDragged = true;
+                abilityDragHandler.OnDragEnded -= (success) => isBeingDragged = false;
             }
         }
 

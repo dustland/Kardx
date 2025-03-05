@@ -15,7 +15,9 @@ namespace Kardx.UI
             IPointerDownHandler,
             IPointerUpHandler,
             IDragHandler,
-            IBeginDragHandler
+            IBeginDragHandler,
+            IEndDragHandler,
+            IPointerExitHandler
     {
         [SerializeField]
         private float minDragDistance = 10f; // Minimum drag distance to start targeting
@@ -31,7 +33,6 @@ namespace Kardx.UI
         private MatchView matchView;
         private MatchManager matchManager;
         private Vector2 pointerStartPosition;
-        private bool isDragging = false;
         private OpponentCardSlot currentTarget = null;
 
         // Events for drag state
@@ -141,7 +142,7 @@ namespace Kardx.UI
         private void OnDisable()
         {
             // Unsubscribe from events
-            if (isDragging)
+            if (cardView != null && cardView.IsBeingDragged)
             {
                 EndDragging();
             }
@@ -150,7 +151,7 @@ namespace Kardx.UI
         // Helper method to cleanly end the dragging state
         private void EndDragging()
         {
-            isDragging = false;
+            cardView.IsBeingDragged = false;
 
             if (attackArrow != null)
             {
@@ -211,61 +212,27 @@ namespace Kardx.UI
 
         public void OnPointerDown(PointerEventData eventData)
         {
-            // Store the pointer position for drag initialization
-            pointerStartPosition = eventData.position;
-
-            Debug.Log($"[AbilityDragHandler] Pointer down at {pointerStartPosition}");
-
-            // Fire the event
-            OnPointerDownEvent?.Invoke();
-        }
-
-        public void OnDrag(PointerEventData eventData)
-        {
-            if (!isDragging || cardView == null || !CanCardAttack())
+            // Abort if the card cannot attack
+            if (!CanCardAttack())
             {
                 return;
             }
 
-            // Update the attack arrow position
-            if (attackArrow != null)
-            {
-                // Pass the screen position directly to the attack arrow
-                attackArrow.UpdateEndPosition(eventData.position);
-                Debug.Log($"[AbilityDragHandler] Dragging to {eventData.position}");
-            }
+            // Store the initial pointer position for arrow drawing
+            pointerStartPosition = eventData.position;
+            Debug.Log($"[AbilityDragHandler] Pointer down at: {pointerStartPosition}");
 
-            // matchView.SetLogText($"Start: {pointerStartPosition}\nEnd: {eventData.position}");
-
-            // Check for valid targets
-            OpponentCardSlot newTarget = GetTargetUnderPointer(eventData);
-
-            // If the target has changed, update highlighting
-            if (newTarget != currentTarget)
-            {
-                // Unhighlight the previous target
-                if (currentTarget != null)
-                {
-                    currentTarget.SetHighlight(Color.clear, false);
-                }
-
-                // Highlight the new target if valid
-                currentTarget = newTarget;
-                if (currentTarget != null)
-                {
-                    bool isValidTarget = IsValidTarget(currentTarget);
-                    currentTarget.SetHighlight(new Color(1f, 0.2f, 0f, 0.9f), isValidTarget);
-                }
-            }
+            // Invoke the pointer down event
+            OnPointerDownEvent?.Invoke();
         }
 
         public void OnPointerUp(PointerEventData eventData)
         {
             // If this component is disabled or we're not dragging, don't handle the event
-            if (!enabled || !isDragging)
+            if (!enabled || cardView == null || !cardView.IsBeingDragged)
                 return;
 
-            isDragging = false;
+            cardView.IsBeingDragged = false;
 
             // Check if we're over a valid target
             Card targetCard = FindTargetCardUnderPointer(eventData);
@@ -302,7 +269,7 @@ namespace Kardx.UI
             }
 
             // Initialize drag state
-            isDragging = true;
+            cardView.IsBeingDragged = true;
 
             // Initialize the attack arrow if needed
             if (attackArrow == null)
@@ -326,6 +293,90 @@ namespace Kardx.UI
 
             // Highlight valid targets
             HighlightValidTargets(eventData);
+
+            // Invoke the drag started event
+            OnDragStarted?.Invoke();
+        }
+
+        public void OnDrag(PointerEventData eventData)
+        {
+            if (cardView == null || !cardView.IsBeingDragged || !CanCardAttack())
+            {
+                return;
+            }
+
+            // Update the arrow end position
+            if (attackArrow != null)
+            {
+                attackArrow.UpdateEndPosition(eventData.position);
+            }
+
+            // Update target highlights based on current pointer position
+            OpponentCardSlot currentSlot = GetTargetUnderPointer(eventData);
+            
+            // Only proceed if we're over a different slot than before
+            if (currentSlot != currentTarget)
+            {
+                // Clear previous target highlight
+                if (currentTarget != null)
+                {
+                    // Use the same color as in HighlightValidTargets
+                    Card previousTargetCard = matchManager?.Opponent?.Battlefield?.GetCardAt(currentTarget.SlotIndex);
+                    if (previousTargetCard != null)
+                    {
+                        Color availableColor = new Color(1f, 0.2f, 0f, 0.9f); // Bright orange-red with high alpha
+                        currentTarget.SetHighlight(availableColor, true);
+                    }
+                    else
+                    {
+                        // If the slot is empty, clear the highlight
+                        currentTarget.SetHighlight(Color.clear, false);
+                    }
+                }
+
+                // Set new target highlight
+                currentTarget = currentSlot;
+                if (currentTarget != null && IsValidTarget(currentTarget))
+                {
+                    // Make the current hover target more prominent
+                    Color dropTargetColor = new Color(1f, 0.8f, 0f, 1.0f); // Bright golden color
+                    currentTarget.SetHighlight(dropTargetColor, true);
+                }
+            }
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            if (cardView == null || !cardView.IsBeingDragged || !CanCardAttack())
+            {
+                return;
+            }
+
+            // Refresh the valid targets highlights
+            HighlightValidTargets(eventData);
+        }
+
+        public void OnEndDrag(PointerEventData eventData)
+        {
+            if (cardView == null)
+                return;
+
+            // Reset dragging state
+            cardView.IsBeingDragged = false;
+
+            // Hide the attack arrow
+            if (attackArrow != null)
+            {
+                attackArrow.CancelDrawing();
+            }
+
+            // Clear all highlights
+            ClearAllHighlights();
+        }
+
+        void IPointerUpHandler.OnPointerUp(PointerEventData eventData)
+        {
+            OnPointerUp(eventData);
         }
 
         private void HighlightValidTargets(PointerEventData eventData)
@@ -349,6 +400,14 @@ namespace Kardx.UI
 
         private void ClearAllHighlights()
         {
+            // Clear the current target highlight
+            if (currentTarget != null)
+            {
+                currentTarget.SetHighlight(Color.clear, false);
+                currentTarget = null;
+            }
+
+            // Then clear all highlights through the matchView
             if (matchView != null)
             {
                 matchView.ClearAllHighlights();
@@ -415,17 +474,21 @@ namespace Kardx.UI
 
         private OpponentCardSlot GetTargetUnderPointer(PointerEventData eventData)
         {
-            // Raycast to find objects under the pointer
             List<RaycastResult> results = new List<RaycastResult>();
             EventSystem.current.RaycastAll(eventData, results);
 
-            // Look for an OpponentCardSlot in the results
-            foreach (RaycastResult result in results)
+            foreach (var result in results)
             {
+                // Only look for OpponentCardSlot components (not PlayerCardSlot)
                 OpponentCardSlot slot = result.gameObject.GetComponent<OpponentCardSlot>();
                 if (slot != null)
                 {
-                    return slot;
+                    // Only return the slot if it contains a card
+                    Card targetCard = matchManager?.Opponent?.Battlefield?.GetCardAt(slot.SlotIndex);
+                    if (targetCard != null)
+                    {
+                        return slot;
+                    }
                 }
             }
 
