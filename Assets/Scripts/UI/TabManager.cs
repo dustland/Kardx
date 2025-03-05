@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Kardx.UI.Components.Common
+namespace Kardx.UI
 {
     public class TabManager : MonoBehaviour
     {

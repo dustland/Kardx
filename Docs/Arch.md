@@ -75,7 +75,7 @@ The Kardx architecture is designed to create a maintainable, testable, and scala
 
    - Encapsulates both static data (CardType) and runtime state
    - Uses Guid for unique instance identification
-   - Maintains its own state (FaceDown, CurrentDefence, etc.)
+   - Maintains its own state (FaceDown, CurrentDefense, etc.)
 
 2. **Player**: Manages a player's state including cards and resources
 

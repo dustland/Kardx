@@ -185,7 +185,7 @@ namespace Kardx.Core.Acting
 
             // Handle special effects
             if (
-                abilityType.Effect.Category == EffectCategory.Special
+                abilityType.Effect == EffectCategory.Special
                 && !string.IsNullOrEmpty(abilityType.SpecialEffectId)
             )
             {
@@ -208,7 +208,7 @@ namespace Kardx.Core.Acting
             }
 
             // Handle standard effects
-            switch (abilityType.Effect.Category)
+            switch (abilityType.Effect)
             {
                 case EffectCategory.Damage:
                     return ApplyDamageEffect(ability, targets);
@@ -220,7 +220,7 @@ namespace Kardx.Core.Acting
                     return ApplyDebuffEffect(ability, targets);
                 // Implement other effect types as needed
                 default:
-                    Debug.LogWarning($"Effect type {abilityType.Effect.Category} not implemented");
+                    Debug.LogWarning($"Effect type {abilityType.Effect} not implemented");
                     return false;
             }
         }
@@ -234,8 +234,8 @@ namespace Kardx.Core.Acting
 
             foreach (var target in targets)
             {
-                // Apply damage logic here
-                // For now, we'll just log it
+                // Apply damage to the target
+                target.TakeDamage(damageValue);
                 Debug.Log($"Applying {damageValue} damage to {target.Title}");
             }
 
@@ -251,8 +251,8 @@ namespace Kardx.Core.Acting
 
             foreach (var target in targets)
             {
-                // Apply healing logic here
-                // For now, we'll just log it
+                // Apply healing to the target
+                target.Heal(healValue);
                 Debug.Log($"Healing {target.Title} for {healValue}");
             }
 
@@ -273,7 +273,7 @@ namespace Kardx.Core.Acting
                 var modifier = new Modifier(
                     Guid.NewGuid().ToString(),
                     $"Buff from {ability.AbilityType.Name}",
-                    ability.AbilityType.Effect.Attribute,
+                    ability.AbilityType.EffectAttribute,
                     buffValue,
                     ModifierType.Buff,
                     duration
@@ -281,7 +281,7 @@ namespace Kardx.Core.Acting
 
                 target.AddModifier(modifier);
                 Debug.Log(
-                    $"Applied {buffValue} {ability.AbilityType.Effect.Attribute} buff to {target.Title} for {duration} turns"
+                    $"Applied {buffValue} {ability.AbilityType.EffectAttribute} buff to {target.Title} for {duration} turns"
                 );
             }
 
@@ -302,7 +302,7 @@ namespace Kardx.Core.Acting
                 var modifier = new Modifier(
                     Guid.NewGuid().ToString(),
                     $"Debuff from {ability.AbilityType.Name}",
-                    ability.AbilityType.Effect.Attribute,
+                    ability.AbilityType.EffectAttribute,
                     -debuffValue, // Negative value for debuffs
                     ModifierType.Debuff,
                     duration
@@ -310,7 +310,7 @@ namespace Kardx.Core.Acting
 
                 target.AddModifier(modifier);
                 Debug.Log(
-                    $"Applied {debuffValue} {ability.AbilityType.Effect.Attribute} debuff to {target.Title} for {duration} turns"
+                    $"Applied {debuffValue} {ability.AbilityType.EffectAttribute} debuff to {target.Title} for {duration} turns"
                 );
             }
 

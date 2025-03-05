@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-namespace Kardx.UI.Components
+namespace Kardx.UI
 {
     using Card = Kardx.Core.Card;
     using CardType = Kardx.Core.CardType;
@@ -73,7 +73,7 @@ namespace Kardx.UI.Components
             foreach (var img in images)
             {
                 img.enabled = true;
-                Debug.Log($"[CardDetailView] Enabled image component: {img.name}");
+                // Debug.Log($"[CardDetailView] Enabled image component: {img.name}");
             }
 
             // Make sure the card view itself is active

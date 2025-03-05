@@ -33,16 +33,20 @@ For developers who want to understand the project better:
 Install these packages to work with the project:
 
 1. **Windsurf Integration**
-   - Install from Git URL: `https://github.com/Asuta/com.unity.ide.windsurf.git.windsurf.git`
+   - Install from Git URL: `https://github.com/Asuta/com.unity.ide.windsurf.git`
    - Windsurf offers better performance than Cursor IDE
 
-2. **NewtonSoft JSON**
+1. **DOTween**
+ 	 - This is a Unity package for animation, required in this project.
+
+1. **Unity Extension**
+   - It is strongly recommended to install the Unity extension for VSCode in Windsurf. Since it did not release as open-vsx, you should look for this extension (and also C# and C# DevKit) in VSCode (version later than 1.96) and download it as vsx file and then manually install in Windsurf.
+
+1. **NewtonSoft JSON**
    - Add from Package Manager: `com.unity.nuget.newtonsoft-json`
    - Used for JSON serialization/deserialization
 
-### Code Formatting
-
-C# code is formatted with the CSharpier plugin in Windsurf.
+C# code is formatted with the C# extension installed with Unity extension. It's recommended to enable Format On Save in the configuration.
 
 ## Project Structure
 

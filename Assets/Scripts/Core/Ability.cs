@@ -122,5 +122,96 @@ namespace Kardx.Core
         {
             return Math.Max(0, abilityType.CooldownTurns - turnsSinceLastUse);
         }
+
+        /// <summary>
+        /// Uses the ability on the specified targets.
+        /// </summary>
+        /// <param name="targets">List of target cards for the ability</param>
+        /// <returns>True if the ability was used successfully</returns>
+        public bool Use(List<Card> targets)
+        {
+            // Check if ability can be used
+            if (!CanUse())
+            {
+                UnityEngine.Debug.LogWarning(
+                    $"[Ability] Cannot use ability {abilityType.Name} - conditions not met"
+                );
+                return false;
+            }
+
+            // Validate targets
+            if (
+                abilityType.Targeting != TargetingType.None
+                && (targets == null || targets.Count == 0)
+            )
+            {
+                UnityEngine.Debug.LogWarning(
+                    $"[Ability] Cannot use ability {abilityType.Name} - no valid targets"
+                );
+                return false;
+            }
+
+            // Filter valid targets
+            var validTargets = GetValidTargets(targets);
+            if (validTargets.Count == 0 && abilityType.Targeting != TargetingType.None)
+            {
+                UnityEngine.Debug.LogWarning(
+                    $"[Ability] Cannot use ability {abilityType.Name} - no valid targets after filtering"
+                );
+                return false;
+            }
+
+            // Apply ability effects based on the ability type
+            // This is where the actual ability logic would be implemented
+            // For now, we'll just log that the ability was used
+            UnityEngine.Debug.Log(
+                $"[Ability] Used ability {abilityType.Name} from card {ownerCard.Title} on {validTargets.Count} targets"
+            );
+
+            // Apply effects based on ability type
+            switch (abilityType.Effect)
+            {
+                case EffectCategory.Damage:
+                    // Apply damage to targets
+                    foreach (var target in validTargets)
+                    {
+                        int damageAmount = abilityType.EffectValue;
+                        target.TakeDamage(damageAmount);
+                        UnityEngine.Debug.Log(
+                            $"[Ability] {abilityType.Name} dealt {damageAmount} damage to {target.Title}"
+                        );
+                    }
+                    break;
+
+                case EffectCategory.Heal:
+                    // Implement healing logic
+                    // This would typically restore defense points
+                    UnityEngine.Debug.Log($"[Ability] {abilityType.Name} healing effect applied");
+                    break;
+
+                case EffectCategory.Buff:
+                    // Implement buff logic
+                    // This would typically add modifiers to targets
+                    UnityEngine.Debug.Log($"[Ability] {abilityType.Name} buff effect applied");
+                    break;
+
+                case EffectCategory.Debuff:
+                    // Implement debuff logic
+                    // This would typically add negative modifiers to targets
+                    UnityEngine.Debug.Log($"[Ability] {abilityType.Name} debuff effect applied");
+                    break;
+
+                default:
+                    UnityEngine.Debug.Log(
+                        $"[Ability] {abilityType.Name} effect of type {abilityType.Effect} applied"
+                    );
+                    break;
+            }
+
+            // Mark the ability as used
+            MarkAsUsed();
+
+            return true;
+        }
     }
 }

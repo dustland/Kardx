@@ -27,7 +27,7 @@ namespace Kardx.Utils
             public string Subtype { get; set; }
             public int DeploymentCost { get; set; }
             public int OperationCost { get; set; }
-            public int BaseDefence { get; set; }
+            public int BaseDefense { get; set; }
             public int BaseAttack { get; set; }
             public int BaseCounterAttack { get; set; }
             public CardRarity Rarity { get; set; }
@@ -78,7 +78,7 @@ namespace Kardx.Utils
                         subtype: cardData.Subtype,
                         deploymentCost: cardData.DeploymentCost,
                         operationCost: cardData.OperationCost,
-                        baseDefence: cardData.BaseDefence,
+                        baseDefense: cardData.BaseDefense,
                         baseAttack: cardData.BaseAttack,
                         baseCounterAttack: cardData.BaseCounterAttack,
                         rarity: cardData.Rarity,
@@ -158,7 +158,7 @@ namespace Kardx.Utils
                 subtype: "Warrior",
                 deploymentCost: 2,
                 operationCost: 1,
-                baseDefence: 2,
+                baseDefense: 2,
                 baseAttack: 1,
                 baseCounterAttack: 1,
                 rarity: CardRarity.Standard,
@@ -175,7 +175,7 @@ namespace Kardx.Utils
                 subtype: "Spell",
                 deploymentCost: 2,
                 operationCost: 1,
-                baseDefence: 0,
+                baseDefense: 0,
                 baseAttack: 0,
                 baseCounterAttack: 0,
                 rarity: CardRarity.Standard,

@@ -14,23 +14,20 @@ namespace Kardx.Core
         private Kardx.Utils.ILogger logger;
         private Board board;
         private StrategyPlanner strategyPlanner;
-        private int startingHandSize = 4;
-        private int maxTurns = 50;
         private const int CREDITS_PER_TURN = 1;
 
         // Public properties
         public bool IsMatchInProgress { get; private set; }
-        public string CurrentPlayerId => board.CurrentPlayerId;
+        public string CurrentPlayerId => board?.CurrentTurnPlayer?.Id;
         public int TurnNumber => board.TurnNumber;
         public Player Player => board.Player;
         public Player Opponent => board.Opponent;
         public Board Board => board;
-        public Player CurrentPlayer => board.CurrentPlayer;
+        public Player CurrentPlayer => board.CurrentTurnPlayer;
 
         // Essential events for UI updates
         public event Action<Card, int> OnCardDeployed;
         public event Action<Card> OnCardDrawn;
-        public event Action<Card> OnCardDiscarded;
         public event Action<Strategy> OnStrategyDetermined;
         public event Action<Decision> OnDecisionExecuting;
         public event Action<Decision> OnDecisionExecuted;
@@ -44,7 +41,7 @@ namespace Kardx.Core
         public event Action<Card> OnCardDied;
 
         // Event for signaling when AI needs to process its turn
-        public event Action<Board, StrategyPlanner, Action> OnProcessAITurn;
+        public event Action<Board, StrategyPlanner> OnProcessAITurn;
 
         /// <summary>
         /// Creates a new instance of the MatchManager class.
@@ -57,9 +54,9 @@ namespace Kardx.Core
         }
 
         /// <summary>
-        /// Starts a new match with default players.
+        /// Initializes the match with default players but doesn't start the game flow.
         /// </summary>
-        public void StartMatch()
+        public void Initialize()
         {
             var player1 = new Player(
                 "Player 1",
@@ -76,61 +73,68 @@ namespace Kardx.Core
             board = new Board(player1, player2);
 
             // Create the strategy planner for the opponent (player2)
-            strategyPlanner = new StrategyPlanner(StrategySource.Dummy, player2, this, logger);
+            strategyPlanner = new StrategyPlanner(this, StrategySource.Dummy, logger);
 
             // Subscribe to strategy planner events
-            if (strategyPlanner != null)
+            strategyPlanner.OnStrategyDetermined += (strategy) =>
             {
-                strategyPlanner.OnStrategyDetermined += (strategy) =>
-                    OnStrategyDetermined?.Invoke(strategy);
+                OnStrategyDetermined?.Invoke(strategy);
+            };
 
-                strategyPlanner.OnDecisionExecuting += (decision) =>
-                    OnDecisionExecuting?.Invoke(decision);
+            strategyPlanner.OnDecisionExecuting += (decision) =>
+            {
+                OnDecisionExecuting?.Invoke(decision);
+            };
 
-                strategyPlanner.OnDecisionExecuted += (decision) =>
-                    OnDecisionExecuted?.Invoke(decision);
+            strategyPlanner.OnDecisionExecuted += (decision) =>
+            {
+                OnDecisionExecuted?.Invoke(decision);
+            };
+        }
 
-                // Subscribe to additional events for opponent actions
-                SubscribeToStrategyPlannerEvents(strategyPlanner);
+        /// <summary>
+        /// Starts a new match with the initialized players.
+        /// </summary>
+        public void StartMatch()
+        {
+            // Ensure the game is initialized
+            if (board == null)
+            {
+                Initialize();
             }
 
-            logger?.Log($"[MatchManager] Match started between {player1.Id} and {player2.Id}");
+            // Reset match state
             IsMatchInProgress = true;
-            OnMatchStarted?.Invoke($"Match started between {player1.Id} and {player2.Id}");
 
-            // Start the first turn
-            if (board == null)
-                throw new InvalidOperationException("Match not started");
+            // Notify listeners that the match has started
+            OnMatchStarted?.Invoke("Match started");
 
-            var currentPlayer = board.CurrentPlayer;
-            logger?.Log($"[MatchManager] Starting first turn for player {currentPlayer.Id}");
+            // Start first turn
+            StartTurn();
+        }
 
-            // Initialize the player for the first turn
-            // Add credits based on the turn number
-            int creditsToAdd = CREDITS_PER_TURN * board.TurnNumber;
-            currentPlayer.AddCredits(creditsToAdd);
-            logger?.Log(
-                $"[MatchManager] Added {creditsToAdd} credits to player {currentPlayer.Id}"
-            );
+        private void StartTurn()
+        {
+            // Notify listeners that a new turn is starting
+            OnTurnStarted?.Invoke(this, board.CurrentTurnPlayer);
 
-            // Draw a card for the player
-            Card drawnCard = currentPlayer.DrawCard();
+            // Reset card attack status
+            board.CurrentTurnPlayer.ResetCardAttackStatus();
+
+            // Draw a card as the frist step for each turn
+            Card drawnCard = DrawCard(); // Player cards are face up
             if (drawnCard != null)
             {
-                OnCardDrawn?.Invoke(drawnCard);
                 logger?.Log($"[{CurrentPlayerId}] Card drawn: {drawnCard.Title}");
             }
 
-            // Notify listeners that a new turn is starting
-            OnTurnStarted?.Invoke(this, currentPlayer);
-
-            // Reset card attack status
-            currentPlayer.ResetCardAttackStatus();
-
             // If it's the opponent's turn, process it automatically
-            if (currentPlayer.Id == board.Player2.Id)
+            if (!board.IsPlayerTurn())
             {
-                ProcessOpponentTurn();
+                logger?.Log("Let the opponent run the first turn");
+
+                // Trigger the event for the UI layer to handle AI processing
+                OnProcessAITurn?.Invoke(board, strategyPlanner);
             }
         }
 
@@ -143,7 +147,7 @@ namespace Kardx.Core
                 throw new InvalidOperationException("Match not started");
 
             // End the current turn
-            var currentPlayer = board.CurrentPlayer;
+            var currentPlayer = board.CurrentTurnPlayer;
             logger?.Log($"[MatchManager] Ending turn for player {currentPlayer.Id}");
 
             // Process end of turn effects
@@ -154,10 +158,12 @@ namespace Kardx.Core
 
             // Start the next turn
             // Switch to the next player
-            board.SwitchCurrentPlayer();
-            board.IncrementTurnNumber();
-
-            var nextPlayer = board.CurrentPlayer;
+            var nextPlayer = board.SwitchCurrentPlayer();
+            // Increment turn number only on player turn, so that two player will add the same credits
+            if (board.IsPlayerTurn())
+            {
+                board.IncrementTurnNumber();
+            }
             logger?.Log(
                 $"[MatchManager] Starting turn {board.TurnNumber} for player {nextPlayer.Id}"
             );
@@ -169,10 +175,9 @@ namespace Kardx.Core
             logger?.Log($"[MatchManager] Added {creditsToAdd} credits to player {nextPlayer.Id}");
 
             // Draw a card for the player
-            Card drawnCard = nextPlayer.DrawCard(nextPlayer.Id == board.Player2.Id);
+            Card drawnCard = DrawCard();
             if (drawnCard != null)
             {
-                OnCardDrawn?.Invoke(drawnCard);
                 logger?.Log($"[{CurrentPlayerId}] Card drawn: {drawnCard.Title}");
             }
 
@@ -183,28 +188,16 @@ namespace Kardx.Core
             OnTurnStarted?.Invoke(this, nextPlayer);
 
             // Reset card attack status for both players
-            board.Player1.ResetCardAttackStatus();
-            board.Player2.ResetCardAttackStatus();
+            nextPlayer.ResetCardAttackStatus();
 
             // If it's the opponent's turn, process it automatically
-            if (nextPlayer.Id == board.Player2.Id)
+            if (!board.IsPlayerTurn())
             {
-                ProcessOpponentTurn();
+                logger?.Log("Processing opponent turn");
+
+                // Trigger the event for the UI layer to handle AI processing
+                OnProcessAITurn?.Invoke(board, strategyPlanner);
             }
-        }
-
-        /// <summary>
-        /// Processes the opponent's turn automatically.
-        /// </summary>
-        private void ProcessOpponentTurn()
-        {
-            if (board == null)
-                throw new InvalidOperationException("Match not started");
-
-            logger?.Log("Processing opponent turn");
-
-            // Trigger the event for the UI layer to handle AI processing
-            OnProcessAITurn?.Invoke(board, strategyPlanner, NextTurn);
         }
 
         private List<Card> LoadDeck(Faction ownerFaction)
@@ -234,7 +227,15 @@ namespace Kardx.Core
             logger?.Log($"Match ended after {TurnNumber} turns");
         }
 
-        public bool CanDeployCard(Card card)
+        public Card DrawCard()
+        {
+            var player = board.CurrentTurnPlayer;
+            var drawnCard = player.DrawCard(!board.IsPlayerTurn());
+            OnCardDrawn?.Invoke(drawnCard);
+            return drawnCard;
+        }
+
+        public bool CanDeployUnitCard(Card card)
         {
             if (!IsMatchInProgress || card == null)
             {
@@ -242,125 +243,160 @@ namespace Kardx.Core
                 return false;
             }
 
-            var currentPlayer = board.CurrentPlayer;
+            var currentPlayer = board.CurrentTurnPlayer;
             if (currentPlayer == null)
             {
                 logger?.LogError("[MatchManager] Cannot deploy card: current player is null");
                 return false;
             }
 
-            // Count non-null slots in the battlefield instead of using Count
-            var occupiedSlots = currentPlayer.Battlefield.Count(c => c != null);
+            // Check if it's a unit card
+            if (card.CardType.Category != CardCategory.Unit)
+            {
+                logger?.LogError("[MatchManager] Cannot deploy card: not a unit card");
+                return false;
+            }
+
+            // Check if there's at least one empty slot on the battlefield
+            bool hasEmptySlot = false;
+            for (int i = 0; i < Battlefield.SLOT_COUNT; i++)
+            {
+                if (currentPlayer.Battlefield.IsSlotEmpty(i))
+                {
+                    hasEmptySlot = true;
+                    break;
+                }
+            }
 
             return currentPlayer.Hand.Contains(card)
                 && currentPlayer.Credits >= card.DeploymentCost
-                && occupiedSlots < Player.BATTLEFIELD_SLOT_COUNT;
+                && hasEmptySlot;
         }
 
-        public bool DeployCard(Card card, int position)
+        public bool CanDeployOrderCard(Card card)
         {
-            if (!CanDeployCard(card))
+            if (!IsMatchInProgress || card == null)
+            {
+                logger?.LogError("[MatchManager] Cannot deploy order card: card is null");
+                return false;
+            }
+
+            var currentPlayer = board.CurrentTurnPlayer;
+            if (currentPlayer == null)
+            {
+                logger?.LogError("[MatchManager] Cannot deploy order card: current player is null");
+                return false;
+            }
+
+            // Check if it's an order card
+            if (card.CardType.Category != CardCategory.Order)
+            {
+                logger?.LogError("[MatchManager] Cannot deploy card: not an order card");
+                return false;
+            }
+
+            // Order cards just need to be in hand and have enough credits
+            return currentPlayer.Hand.Contains(card)
+                && currentPlayer.Credits >= card.DeploymentCost;
+        }
+
+        // For backward compatibility
+        public bool CanDeployCard(Card card)
+        {
+            if (card == null)
+                return false;
+
+            return card.CardType.Category == CardCategory.Unit ? CanDeployUnitCard(card)
+                : card.CardType.Category == CardCategory.Order ? CanDeployOrderCard(card)
+                : false;
+        }
+
+        private bool DeployUnitCard(Card card, int position)
+        {
+            var currentPlayer = board.CurrentTurnPlayer;
+
+            if (!CanDeployUnitCard(card))
             {
                 // Add more detailed logging to help diagnose the issue
-                var player = board.CurrentPlayer;
                 if (card == null)
                 {
-                    logger?.LogError("[MatchManager] Cannot deploy card: card is null");
+                    logger?.LogError("[MatchManager] Cannot deploy unit card: card is null");
                 }
-                else if (!player.Hand.Contains(card))
+                else if (!currentPlayer.Hand.Contains(card))
                 {
                     logger?.LogError(
-                        $"[MatchManager] Cannot deploy card {card.Title}: not in player's hand"
+                        $"[MatchManager] Cannot deploy unit card {card.Title}: not in player's hand"
                     );
                 }
-                else if (player.Credits < card.DeploymentCost)
+                else if (currentPlayer.Credits < card.DeploymentCost)
                 {
                     logger?.LogError(
-                        $"[MatchManager] Cannot deploy card {card.Title}: insufficient credits (has {player.Credits}, needs {card.DeploymentCost})"
+                        $"[MatchManager] Cannot deploy unit card {card.Title}: insufficient credits (has {currentPlayer.Credits}, needs {card.DeploymentCost})"
                     );
                 }
-                else if (position < 0 || position >= Player.BATTLEFIELD_SLOT_COUNT)
+                else if (position < 0 || position >= Battlefield.SLOT_COUNT)
                 {
                     logger?.LogError(
-                        $"[MatchManager] Cannot deploy card {card.Title}: invalid position {position}"
+                        $"[MatchManager] Cannot deploy unit card {card.Title}: invalid position {position}"
                     );
                 }
-                else if (player.Battlefield[position] != null)
+                else if (!currentPlayer.Battlefield.IsSlotEmpty(position))
                 {
                     logger?.LogError(
-                        $"[MatchManager] Cannot deploy card {card.Title}: position {position} is already occupied"
-                    );
-                }
-                else
-                {
-                    logger?.LogError(
-                        $"[MatchManager] Cannot deploy card {card.Title}: unknown reason"
+                        $"[MatchManager] Cannot deploy unit card {card.Title}: position {position} is already occupied"
                     );
                 }
                 return false;
             }
 
-            var currentPlayer = board.CurrentPlayer;
+            bool success = currentPlayer.DeployUnitCard(card, position);
+            return success;
+        }
 
-            // Try to deploy the card
-            if (!currentPlayer.DeployCard(card, position))
+        private bool DeployOrderCard(Card card)
+        {
+            if (!CanDeployOrderCard(card))
+            {
+                // Add more detailed logging to help diagnose the issue
+                var player = board.CurrentTurnPlayer;
+                if (card == null)
+                {
+                    logger?.LogError("[MatchManager] Cannot deploy order card: card is null");
+                }
+                else if (!player.Hand.Contains(card))
+                {
+                    logger?.LogError(
+                        $"[MatchManager] Cannot deploy order card {card.Title}: not in player's hand"
+                    );
+                }
+                else if (player.Credits < card.DeploymentCost)
+                {
+                    logger?.LogError(
+                        $"[MatchManager] Cannot deploy order card {card.Title}: insufficient credits (has {player.Credits}, needs {card.DeploymentCost})"
+                    );
+                }
+                return false;
+            }
+
+            var currentPlayer = board.CurrentTurnPlayer;
+            bool success = currentPlayer.DeployOrderCard(card);
+            return success;
+        }
+
+        // For backward compatibility
+        public bool DeployCard(Card card, int position)
+        {
+            if (card == null)
                 return false;
 
-            // The Player.DeployCard method already sets the card to face-up
-            // No need to set it again here
+            // Set card face-up when deployed to the battlefield
+            card.SetFaceDown(false);
 
-            // Notify listeners
+            bool success = card.CardType.Category == CardCategory.Unit ? DeployUnitCard(card, position)
+                : card.CardType.Category == CardCategory.Order ? DeployOrderCard(card)
+                : false;
             OnCardDeployed?.Invoke(card, position);
-            logger?.Log($"[{CurrentPlayerId}] Card deployed: {card.Title} at position {position}");
-
-            return true;
-        }
-
-        private void SubscribeToStrategyPlannerEvents(StrategyPlanner planner)
-        {
-            if (planner == null)
-                return;
-
-            // Since we're now using matchManager.DeployCard directly in the StrategyPlanner,
-            // we don't need to handle card deployments here anymore as the OnCardDeployed event
-            // will be triggered automatically by the DeployCard method.
-
-            // We can still handle other decision types here if needed
-            planner.OnDecisionExecuted += (decision) => {
-                // Handle other decision types if needed
-                // For example, card discards, attacks, etc.
-            };
-        }
-
-        /// <summary>
-        /// Checks if a card can attack another card
-        /// </summary>
-        /// <param name="attackerCard">The attacking card</param>
-        /// <param name="defenderCard">The defending card</param>
-        /// <returns>True if the attack is valid, false otherwise</returns>
-        public bool CanAttack(Card attackerCard, Card defenderCard)
-        {
-            if (attackerCard == null || defenderCard == null)
-                return false;
-
-            // Check if the attacker has already attacked this turn
-            if (attackerCard.HasAttackedThisTurn)
-                return false;
-
-            // Check if the cards belong to different players
-            if (attackerCard.Owner == defenderCard.Owner)
-                return false;
-
-            // Check if both cards are on the battlefield
-            bool attackerOnBattlefield = attackerCard.Owner.Battlefield.Contains(attackerCard);
-            bool defenderOnBattlefield = defenderCard.Owner.Battlefield.Contains(defenderCard);
-
-            if (!attackerOnBattlefield || !defenderOnBattlefield)
-                return false;
-
-            // Add any other attack validation rules here
-
-            return true;
+            return success;
         }
 
         /// <summary>
@@ -373,25 +409,14 @@ namespace Kardx.Core
         {
             logger?.Log($"Initiating attack from {attackerCard.Title} to {defenderCard.Title}");
 
-            // Check if the attack is valid
-            if (!CanAttack(attackerCard, defenderCard))
+            // Basic null checks
+            if (attackerCard == null || defenderCard == null || board == null)
             {
-                logger?.Log($"Invalid attack from {attackerCard.Title} to {defenderCard.Title}");
+                logger?.Log("Attack failed: Null card or board reference");
                 return false;
             }
 
-            // Process the attack
-            return ProcessAttack(attackerCard, defenderCard);
-        }
-
-        /// <summary>
-        /// Processes an attack between two cards
-        /// </summary>
-        /// <param name="attackerCard">The attacking card</param>
-        /// <param name="defenderCard">The defending card</param>
-        /// <returns>True if the attack was processed successfully, false otherwise</returns>
-        public bool ProcessAttack(Card attackerCard, Card defenderCard)
-        {
+            // Check if the attack is valid
             if (!CanAttack(attackerCard, defenderCard))
             {
                 logger?.Log($"Invalid attack from {attackerCard.Title} to {defenderCard.Title}");
@@ -409,22 +434,24 @@ namespace Kardx.Core
             defenderCard.TakeDamage(attackDamage);
 
             // Apply counter-attack damage to attacker if defender is still alive
-            if (defenderCard.CurrentDefence > 0)
+            if (defenderCard.CurrentDefense > 0)
             {
                 attackerCard.TakeDamage(counterAttackDamage);
             }
+
+            attackerCard.Owner.SpendCredits(attackerCard.OperationCost);
+
+            // Check if any cards died as a result of the attack
+            CheckCardDeath(attackerCard);
+            CheckCardDeath(defenderCard);
 
             // Notify listeners about the attack
             OnAttackCompleted?.Invoke(
                 attackerCard,
                 defenderCard,
                 attackDamage,
-                counterAttackDamage
+                defenderCard.CurrentDefense
             );
-
-            // Check if any cards died as a result of the attack
-            CheckCardDeath(attackerCard);
-            CheckCardDeath(defenderCard);
 
             return true;
         }
@@ -435,9 +462,9 @@ namespace Kardx.Core
         /// <param name="card">The card to check</param>
         private void CheckCardDeath(Card card)
         {
-            if (card.CurrentDefence <= 0)
+            if (card.CurrentDefense <= 0)
             {
-                // Remove the card from the battlefield using the proper method
+                // Remove the card from the battlefield
                 card.Owner.RemoveFromBattlefield(card);
 
                 logger?.Log($"Card {card.Title} has died and been moved to the discard pile");
@@ -445,6 +472,63 @@ namespace Kardx.Core
                 // Fire event to notify UI
                 OnCardDied?.Invoke(card);
             }
+        }
+
+        /// <summary>
+        /// Checks if it's currently the human player's turn.
+        /// </summary>
+        /// <returns>True if it's the human player's turn, false otherwise.</returns>
+        public bool IsPlayerTurn()
+        {
+            if (board == null || CurrentPlayer == null)
+                return false;
+
+            return CurrentPlayer == Player;
+        }
+
+        /// <summary>
+        /// Checks if a card can attack another card
+        /// </summary>
+        /// <param name="attackerCard">The attacking card</param>
+        /// <param name="defenderCard">The defending card</param>
+        /// <returns>True if the attack is valid, false otherwise</returns>
+        public bool CanAttack(Card attackerCard, Card defenderCard)
+        {
+            if (attackerCard == null || defenderCard == null)
+                return false;
+
+            // Check if the attacker has already attacked this turn
+            if (attackerCard.HasAttackedThisTurn)
+            {
+                logger?.Log("[MatchManager] Attack failed: Attacker has already attacked this turn");
+                return false;
+            }
+
+            // Check if the cards belong to different players
+            if (attackerCard.Owner == defenderCard.Owner)
+            {
+                logger?.Log("[MatchManager] Attack failed: Cards belong to the same player");
+                return false;
+            }
+
+            // Check if both cards are on the battlefield
+            bool attackerOnBattlefield = attackerCard.Owner.Battlefield.Contains(attackerCard);
+            bool defenderOnBattlefield = defenderCard.Owner.Battlefield.Contains(defenderCard);
+
+            if (!attackerOnBattlefield || !defenderOnBattlefield)
+            {
+                logger?.Log("[MatchManager] Attack failed: One or more cards are not on the battlefield");
+                return false;
+            }
+
+            // Add any other attack validation rules here
+            if (attackerCard.OperationCost > attackerCard.Owner.Credits)
+            {
+                logger?.Log("[MatchManager] Attack failed: Attacker does not have enough credits");
+                return false;
+            }
+
+            return true;
         }
     }
 }

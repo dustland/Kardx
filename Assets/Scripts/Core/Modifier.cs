@@ -21,6 +21,7 @@ namespace Kardx.Core
         public int? Duration => duration;
         public int TurnsRemaining => turnsRemaining;
         public DateTime? StartTime => startTime;
+        public bool ExpiresAtEndOfTurn => duration.HasValue && duration.Value == 1 && turnsRemaining <= 1;
 
         public Modifier(
             string id,

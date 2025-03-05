@@ -48,10 +48,10 @@ public class Card
     private bool isFaceDown;
     private Faction ownerFaction;
     private List<Modifier> modifiers = new();
-    private int currentDefence;
+    private int currentDefense;
     private string currentAbilityId;
 
-    public int Defence => cardType.BaseDefence + GetAttributeModifier("defence");
+    public int Defense => cardType.BaseDefense + GetAttributeModifier("defense");
     public int Attack => cardType.BaseAttack + GetAttributeModifier("attack");
     public int DeploymentCost => cardType.DeploymentCost;
 }
@@ -308,7 +308,7 @@ public class MatchManager
   "rarity": "Standard",
   "stats": {
     "attack": 2,
-    "defence": 3,
+    "defense": 3,
     "deploymentCost": 2
   },
   "abilities": [
@@ -364,7 +364,7 @@ public class MatchManager
       "rarity": "Standard",
       "stats": {
         "attack": 2,
-        "defence": 3,
+        "defense": 3,
         "deploymentCost": 2
       },
       "abilities": [

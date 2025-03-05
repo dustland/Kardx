@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-namespace Kardx.UI.Scenes
+namespace Kardx.UI
 {
     public class SceneSwitcher : MonoBehaviour
     {

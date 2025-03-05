@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Kardx.Utils;
@@ -40,8 +39,8 @@ namespace Kardx.Core.Planning
         /// Gets the next strategy for the player based on the current game state.
         /// </summary>
         /// <param name="board">The current game board.</param>
-        /// <returns>A coroutine that yields a strategy containing a sequence of decisions to execute.</returns>
-        public IEnumerator GetNextStrategy(Board board)
+        /// <returns>A strategy containing a sequence of decisions to execute.</returns>
+        public Strategy GetNextStrategy(Board board)
         {
             if (board == null)
                 throw new ArgumentNullException(nameof(board));
@@ -53,9 +52,6 @@ namespace Kardx.Core.Planning
 
             logger?.Log($"Generating simple strategy for player {player.Id}");
 
-            // Simulate some processing time
-            yield return new WaitForSeconds(0.5f);
-
             // Create a simple strategy
             var strategy = CreateSimpleStrategy(board);
 
@@ -63,7 +59,7 @@ namespace Kardx.Core.Planning
             EnsureEndTurnAction(strategy);
 
             logger?.Log($"Generated strategy with {strategy.Decisions.Count} decisions");
-            yield return strategy;
+            return strategy;
         }
 
         /// <summary>
@@ -76,26 +72,27 @@ namespace Kardx.Core.Planning
             var strategy = new Strategy("Make simple moves based on available cards and credits");
 
             // Get the current player from the board
-            Player currentPlayer = board.CurrentPlayer;
+            Player currentPlayer = board.CurrentTurnPlayer;
+            if (board.IsPlayerTurn())
+            {
+                logger?.LogError($"Current player is {currentPlayer.Id}, should not be using this strategy provider");
+            }
 
             // Create a simulated state for planning without modifying the actual player state
             int simulatedCredits = currentPlayer.Credits;
-            bool[] simulatedOccupiedSlots = new bool[Player.BATTLEFIELD_SLOT_COUNT];
+            bool[] simulatedOccupiedSlots = new bool[Battlefield.SLOT_COUNT];
 
             // Initialize the simulated occupied slots based on the current battlefield state
-            for (int i = 0; i < currentPlayer.Battlefield.Count; i++)
+            for (int i = 0; i < Battlefield.SLOT_COUNT; i++)
             {
-                simulatedOccupiedSlots[i] = currentPlayer.Battlefield[i] != null;
+                simulatedOccupiedSlots[i] = !currentPlayer.Battlefield.IsSlotEmpty(i);
             }
 
             // Check if the player has cards in hand
             if (currentPlayer.Hand.Count > 0)
             {
-                // Sort cards by deployment cost (cheapest first)
-                var sortedCards = currentPlayer.Hand.OrderBy(c => c.DeploymentCost).ToList();
-
                 // Try to deploy cards that the player can afford
-                foreach (var card in sortedCards)
+                foreach (var card in currentPlayer.Hand.Cards)
                 {
                     if (simulatedCredits >= card.DeploymentCost)
                     {
@@ -143,16 +140,5 @@ namespace Kardx.Core.Planning
         {
             strategy.EnsureEndTurn();
         }
-    }
-
-    /// <summary>
-    /// Enumerates the types of strategies that can be used by the dummy strategy provider.
-    /// </summary>
-    public enum StrategyType
-    {
-        /// <summary>
-        /// Makes the simplest valid moves with minimal decision-making.
-        /// </summary>
-        Simple,
     }
 }

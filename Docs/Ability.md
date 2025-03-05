@@ -159,7 +159,7 @@ public interface ISpecialEffectHandler
 | `OnDamaged`         | Triggered when damaged          | Damage trigger   |
 | `OnDestroyed`       | Triggered when destroyed        | Death effect     |
 | `OnAttack`          | Triggered when attacking        | Attack trigger   |
-| `OnDefend`          | Triggered when defending        | Defence trigger  |
+| `OnDefend`          | Triggered when defending        | Defense trigger  |
 | `OnDraw`            | Triggered when drawn            | Draw trigger     |
 | `OnDiscard`         | Triggered when discarded        | Discard trigger  |
 | `OnCombatDamage`    | When dealing combat damage      | Damage trigger   |
@@ -189,14 +189,14 @@ public interface ISpecialEffectHandler
 | --------------- | ------------------ | -------------------------------------------------- |
 | `Damage`        | Deal damage        | `{"value": 2, "damageType": "physical"}`           |
 | `Heal`          | Heal unit          | `{"value": 2, "overHeal": false}`                  |
-| `Buff`          | Positive effect    | `{"attack": 1, "defence": 2, "duration": 2}`       |
-| `Debuff`        | Negative effect    | `{"attack": -1, "defence": -1, "duration": 2}`     |
+| `Buff`          | Positive effect    | `{"attack": 1, "defense": 2, "duration": 2}`       |
+| `Debuff`        | Negative effect    | `{"attack": -1, "defense": -1, "duration": 2}`     |
 | `Draw`          | Draw cards         | `{"count": 1, "specific": "order"}`                |
 | `Discard`       | Discard cards      | `{"count": 1, "random": true}`                     |
 | `Move`          | Move card          | `{"destination": "battlefield", "position": 2}`    |
 | `Summon`        | Summon unit        | `{"cardTypeId": "INF-001", "position": 0}`         |
 | `Transform`     | Transform          | `{"cardTypeId": "INF-002", "keepModifiers": true}` |
-| `Modifier`      | Attribute modifier | `{"attack": 2, "defence": -1}`                     |
+| `Modifier`      | Attribute modifier | `{"attack": 2, "defense": -1}`                     |
 | `Counter`       | Add counter        | `{"counterType": "charge", "value": 1}`            |
 | `Destroy`       | Directly destroy   | `{"ignoreEffects": false}`                         |
 | `ReturnToHand`  | Return to hand     | `{"position": "top"}`                              |
@@ -227,13 +227,13 @@ public interface ISpecialEffectHandler
 {
   "id": "total_mobilization",
   "name": "Total Mobilization",
-  "description": "Give your HQ +2 defence and generate 1 additional credit per turn for 3 turns",
+  "description": "Give your HQ +2 defense and generate 1 additional credit per turn for 3 turns",
   "trigger": "OnDeploy",
   "targeting": "None",
   "effect": "Special",
   "specialEffectId": "strategicDecision",
   "customParameters": {
-    "hqDefenceBonus": 2,
+    "hqDefenseBonus": 2,
     "creditIncrement": 1,
     "duration": 3,
     "victoryPointCost": 2
