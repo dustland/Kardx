@@ -86,73 +86,73 @@ namespace Kardx.UI
 
         private void CreateArrowComponents()
         {
-            // Create arrow body if needed
-            if (arrowBody == null)
-            {
-                GameObject bodyObj = new GameObject("ArrowBody");
-                bodyObj.transform.SetParent(transform, false);
-                arrowBody = bodyObj.AddComponent<RectTransform>();
-
-                // Configure the body transform to stretch across the entire arrow
-                arrowBody.anchorMin = new Vector2(0, 0.5f);
-                arrowBody.anchorMax = new Vector2(1, 0.5f);
-                arrowBody.pivot = new Vector2(0.5f, 0.5f);
-                arrowBody.anchoredPosition = Vector2.zero;
-                arrowBody.sizeDelta = new Vector2(0, arrowWidth); // Width is controlled by parent
-
-                // Add an image component
-                Image bodyImage = bodyObj.AddComponent<Image>();
-                bodyImage.color = arrowColor;
-
-                // Set the sprite or create a simple rectangle
-                if (arrowBodySprite != null)
-                {
-                    bodyImage.sprite = arrowBodySprite;
-                }
-                else
-                {
-                    bodyImage.sprite = CreateRectangleSprite();
-                }
-            }
-
-            // Create arrow head if needed
-            if (arrowHead == null)
-            {
-                GameObject headObj = new GameObject("ArrowHead");
-                headObj.transform.SetParent(transform, false);
-                arrowHead = headObj.AddComponent<RectTransform>();
-
-                // Configure the head transform to be at the end of the arrow
-                arrowHead.anchorMin = new Vector2(1, 0.5f);
-                arrowHead.anchorMax = new Vector2(1, 0.5f);
-                arrowHead.pivot = new Vector2(0, 0.5f);
-                arrowHead.sizeDelta = new Vector2(arrowHeadSize, arrowHeadSize);
-                arrowHead.anchoredPosition = Vector2.zero;
-
-                // Add an image component
-                Image headImage = headObj.AddComponent<Image>();
-                headImage.color = arrowColor;
-
-                // Set the sprite or create a simple triangle
-                if (arrowHeadSprite != null)
-                {
-                    headImage.sprite = arrowHeadSprite;
-                }
-                else
-                {
-                    headImage.sprite = CreateTriangleSprite();
-                }
-            }
-
+            // Create arrow body
+            GameObject bodyGO = new GameObject("ArrowBody");
+            arrowBody = bodyGO.AddComponent<RectTransform>();
+            arrowBody.SetParent(transform, false);
+            
+            // Set the body to expand from the left edge to the right edge
+            arrowBody.anchorMin = new Vector2(0, 0.5f);
+            arrowBody.anchorMax = new Vector2(1, 0.5f);
+            arrowBody.pivot = new Vector2(0.5f, 0.5f);
+            arrowBody.sizeDelta = new Vector2(0, arrowWidth);
+            arrowBody.anchoredPosition = Vector2.zero;
+            
+            // Add image to body
+            Image bodyImage = bodyGO.AddComponent<Image>();
+            bodyImage.sprite = arrowBodySprite != null ? arrowBodySprite : CreateBodySprite();
+            bodyImage.color = arrowColor;
+            
+            // Create arrow head
+            GameObject headGO = new GameObject("ArrowHead");
+            arrowHead = headGO.AddComponent<RectTransform>();
+            arrowHead.SetParent(transform, false);
+            
+            // Position the head at the RIGHT edge of the arrow
+            arrowHead.anchorMin = new Vector2(1, 0.5f);
+            arrowHead.anchorMax = new Vector2(1, 0.5f);
+            arrowHead.pivot = new Vector2(0, 0.5f); // Pivot at the left side of the head
+            arrowHead.sizeDelta = new Vector2(arrowHeadSize, arrowHeadSize);
+            arrowHead.anchoredPosition = Vector2.zero;
+            
+            // Add image to head and rotate it 180 degrees
+            Image headImage = headGO.AddComponent<Image>();
+            headImage.sprite = arrowHeadSprite != null ? arrowHeadSprite : CreateTriangleSprite();
+            headImage.color = arrowColor;
+            // Rotate the head 180 degrees to point in the right direction
+            headGO.transform.localRotation = Quaternion.Euler(0, 0, 180);
+            
             Debug.Log("[AttackArrow] Created arrow components");
         }
 
-        private Sprite CreateRectangleSprite()
+        private Sprite CreateBodySprite()
         {
-            Texture2D texture = new Texture2D(1, 1);
-            texture.SetPixel(0, 0, Color.white);
+            int width = 32;
+            int height = 32;
+            Texture2D texture = new Texture2D(width, height);
+            
+            // Clear texture with transparent pixels
+            Color[] colors = new Color[width * height];
+            for (int i = 0; i < colors.Length; i++)
+            {
+                colors[i] = Color.clear;
+            }
+            texture.SetPixels(colors);
+            
+            // Draw a rectangle in the center
+            int thickness = height / 2; // Make the line thicker for better visibility
+            int yStart = (height - thickness) / 2;
+            
+            for (int x = 0; x < width; x++)
+            {
+                for (int y = yStart; y < yStart + thickness; y++)
+                {
+                    texture.SetPixel(x, y, Color.white);
+                }
+            }
+            
             texture.Apply();
-            return Sprite.Create(texture, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f));
+            return Sprite.Create(texture, new Rect(0, 0, width, height), new Vector2(0.5f, 0.5f));
         }
 
         private Sprite CreateTriangleSprite()
@@ -168,19 +168,51 @@ namespace Kardx.UI
             }
             texture.SetPixels(colors);
 
-            // Draw a triangle
-            for (int y = 0; y < size; y++)
+            // Define the points of a classic arrow head triangle
+            // Pointing right-to-left (arrow head on the left side)
+            Vector2[] points = new Vector2[]
             {
-                int width = size - y * size / (size - 1);
-                for (int x = 0; x < width; x++)
+                new Vector2(0, size/2),            // Tip of the arrow (left middle)
+                new Vector2(size-1, 0),            // Bottom right corner
+                new Vector2(size-1, size-1)        // Top right corner
+            };
+
+            // Draw the triangle
+            for (int x = 0; x < size; x++)
+            {
+                for (int y = 0; y < size; y++)
                 {
-                    texture.SetPixel(x, y + (size - 1) / 2 - y / 2, Color.white);
-                    texture.SetPixel(x, (size - 1) / 2 + y / 2, Color.white);
+                    if (IsPointInTriangle(new Vector2(x, y), points[0], points[1], points[2]))
+                    {
+                        texture.SetPixel(x, y, Color.white);
+                    }
                 }
             }
 
             texture.Apply();
+            // Create with pivot at the tip of the arrow (left side)
             return Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0, 0.5f));
+        }
+
+        // Helper to check if a point is inside a triangle
+        private bool IsPointInTriangle(Vector2 pt, Vector2 v1, Vector2 v2, Vector2 v3)
+        {
+            float d1, d2, d3;
+            bool hasNeg, hasPos;
+
+            d1 = Sign(pt, v1, v2);
+            d2 = Sign(pt, v2, v3);
+            d3 = Sign(pt, v3, v1);
+
+            hasNeg = (d1 < 0) || (d2 < 0) || (d3 < 0);
+            hasPos = (d1 > 0) || (d2 > 0) || (d3 > 0);
+
+            return !(hasNeg && hasPos);
+        }
+
+        private float Sign(Vector2 p1, Vector2 p2, Vector2 p3)
+        {
+            return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
         }
 
         public void Initialize(MatchView matchView)
