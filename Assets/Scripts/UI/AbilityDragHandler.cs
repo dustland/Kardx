@@ -101,6 +101,7 @@ namespace Kardx.UI
             }
             else
             {
+                attackArrow.Initialize(matchView);
                 // Ensure it's initially disabled
                 attackArrow.gameObject.SetActive(false);
             }
@@ -233,6 +234,8 @@ namespace Kardx.UI
                 attackArrow.UpdateEndPosition(eventData.position);
                 Debug.Log($"[AbilityDragHandler] Dragging to {eventData.position}");
             }
+
+            // matchView.SetLogText($"Start: {pointerStartPosition}\nEnd: {eventData.position}");
 
             // Check for valid targets
             OpponentCardSlot newTarget = GetTargetUnderPointer(eventData);

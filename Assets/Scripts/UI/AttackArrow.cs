@@ -17,6 +17,12 @@ namespace Kardx.UI
         private RectTransform arrowHead;
 
         [SerializeField]
+        private Sprite arrowBodySprite;
+
+        [SerializeField]
+        private Sprite arrowHeadSprite;
+
+        [SerializeField]
         private Color arrowColor = new Color(1f, 0f, 0f, 0.8f);
 
         [SerializeField]
@@ -27,38 +33,27 @@ namespace Kardx.UI
 
         private Canvas parentCanvas;
         private bool isActive = false;
-        private Vector2 targetPosition;
+        private Vector2 startPosition;
+
+        private MatchView matchView;
 
         private void Awake()
         {
-            // Reset the RectTransform completely
-            ResetRectTransform();
-
             // Find the parent canvas
             parentCanvas = GetComponentInParent<Canvas>();
-            if (parentCanvas == null)
+            if (parentCanvas != null)
             {
-                // Find any canvas in the scene
-                parentCanvas = FindAnyObjectByType<Canvas>(FindObjectsInactive.Include);
-                if (parentCanvas != null)
-                {
-                    transform.SetParent(parentCanvas.transform, false);
+                transform.SetParent(parentCanvas.transform, false);
 
-                    // Reset again after reparenting
-                    ResetRectTransform();
-                }
-            }
-
-            // Create arrow components if they don't exist
-            if (arrowBody == null || arrowHead == null)
-            {
-                CreateArrowComponents();
+                // Reset again after reparenting
+                ResetRectTransform();
             }
             else
             {
-                // Configure existing components
-                ConfigureArrowComponents();
+                Debug.LogError("[AttackArrow] Parent canvas not found. Arrow will not be displayed.");
             }
+
+            CreateArrowComponents();
 
             // Initially hide the arrow
             gameObject.SetActive(false);
@@ -89,40 +84,6 @@ namespace Kardx.UI
             }
         }
 
-        private void ConfigureArrowComponents()
-        {
-            if (arrowBody != null)
-            {
-                Image bodyImage = arrowBody.GetComponent<Image>();
-                if (bodyImage != null)
-                {
-                    bodyImage.color = arrowColor;
-                }
-
-                // Set the arrow body to stretch from left to right
-                arrowBody.anchorMin = new Vector2(0, 0.5f);
-                arrowBody.anchorMax = new Vector2(0, 0.5f);
-                arrowBody.pivot = new Vector2(0, 0.5f);
-                arrowBody.anchoredPosition = Vector2.zero;
-            }
-
-            if (arrowHead != null)
-            {
-                Image headImage = arrowHead.GetComponent<Image>();
-                if (headImage != null)
-                {
-                    headImage.color = arrowColor;
-                }
-
-                // Set the arrow head anchors and pivot
-                arrowHead.anchorMin = new Vector2(0, 0.5f);
-                arrowHead.anchorMax = new Vector2(0, 0.5f);
-                arrowHead.pivot = new Vector2(0, 0.5f);
-                arrowHead.sizeDelta = new Vector2(arrowHeadSize, arrowHeadSize);
-                arrowHead.anchoredPosition = Vector2.zero;
-            }
-        }
-
         private void CreateArrowComponents()
         {
             // Create arrow body if needed
@@ -131,22 +92,27 @@ namespace Kardx.UI
                 GameObject bodyObj = new GameObject("ArrowBody");
                 bodyObj.transform.SetParent(transform, false);
                 arrowBody = bodyObj.AddComponent<RectTransform>();
+
+                // Configure the body transform to stretch across the entire arrow
+                arrowBody.anchorMin = new Vector2(0, 0.5f);
+                arrowBody.anchorMax = new Vector2(1, 0.5f);
+                arrowBody.pivot = new Vector2(0.5f, 0.5f);
+                arrowBody.anchoredPosition = Vector2.zero;
+                arrowBody.sizeDelta = new Vector2(0, arrowWidth); // Width is controlled by parent
+
+                // Add an image component
                 Image bodyImage = bodyObj.AddComponent<Image>();
                 bodyImage.color = arrowColor;
 
-                // Create a simple texture for the arrow body
-                Texture2D bodyTexture = new Texture2D(1, 1);
-                bodyTexture.SetPixel(0, 0, Color.white);
-                bodyTexture.Apply();
-                Sprite bodySprite = Sprite.Create(bodyTexture, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f));
-                bodyImage.sprite = bodySprite;
-
-                // Set the arrow body to stretch from left to right
-                arrowBody.anchorMin = new Vector2(0, 0.5f);
-                arrowBody.anchorMax = new Vector2(0, 0.5f);
-                arrowBody.pivot = new Vector2(0, 0.5f);
-                arrowBody.sizeDelta = new Vector2(100, arrowWidth);
-                arrowBody.anchoredPosition = Vector2.zero;
+                // Set the sprite or create a simple rectangle
+                if (arrowBodySprite != null)
+                {
+                    bodyImage.sprite = arrowBodySprite;
+                }
+                else
+                {
+                    bodyImage.sprite = CreateRectangleSprite();
+                }
             }
 
             // Create arrow head if needed
@@ -155,26 +121,41 @@ namespace Kardx.UI
                 GameObject headObj = new GameObject("ArrowHead");
                 headObj.transform.SetParent(transform, false);
                 arrowHead = headObj.AddComponent<RectTransform>();
-                Image headImage = headObj.AddComponent<Image>();
-                headImage.color = arrowColor;
 
-                // Create a triangle texture for the arrow head
-                Texture2D headTexture = CreateTriangleTexture();
-                Sprite headSprite = Sprite.Create(headTexture, new Rect(0, 0, headTexture.width, headTexture.height), new Vector2(0, 0.5f));
-                headImage.sprite = headSprite;
-
-                // Set the arrow head size and position
-                arrowHead.anchorMin = new Vector2(0, 0.5f);
-                arrowHead.anchorMax = new Vector2(0, 0.5f);
+                // Configure the head transform to be at the end of the arrow
+                arrowHead.anchorMin = new Vector2(1, 0.5f);
+                arrowHead.anchorMax = new Vector2(1, 0.5f);
                 arrowHead.pivot = new Vector2(0, 0.5f);
                 arrowHead.sizeDelta = new Vector2(arrowHeadSize, arrowHeadSize);
                 arrowHead.anchoredPosition = Vector2.zero;
+
+                // Add an image component
+                Image headImage = headObj.AddComponent<Image>();
+                headImage.color = arrowColor;
+
+                // Set the sprite or create a simple triangle
+                if (arrowHeadSprite != null)
+                {
+                    headImage.sprite = arrowHeadSprite;
+                }
+                else
+                {
+                    headImage.sprite = CreateTriangleSprite();
+                }
             }
 
             Debug.Log("[AttackArrow] Created arrow components");
         }
 
-        private Texture2D CreateTriangleTexture()
+        private Sprite CreateRectangleSprite()
+        {
+            Texture2D texture = new Texture2D(1, 1);
+            texture.SetPixel(0, 0, Color.white);
+            texture.Apply();
+            return Sprite.Create(texture, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f));
+        }
+
+        private Sprite CreateTriangleSprite()
         {
             int size = 32;
             Texture2D texture = new Texture2D(size, size);
@@ -199,7 +180,12 @@ namespace Kardx.UI
             }
 
             texture.Apply();
-            return texture;
+            return Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0, 0.5f));
+        }
+
+        public void Initialize(MatchView matchView)
+        {
+            this.matchView = matchView;
         }
 
         public void StartDrawing()
@@ -209,18 +195,18 @@ namespace Kardx.UI
                 Debug.LogError("[AttackArrow] Cannot start drawing: Arrow components missing");
                 return;
             }
-            
+
             isActive = true;
             gameObject.SetActive(true);
-            
+
             // Reset transform to avoid any accumulated issues
             ResetRectTransform();
-            
+
             // Make sure arrow components are active but initially invisible
             // They will be properly shown when positions are updated
             arrowBody.gameObject.SetActive(false);
             arrowHead.gameObject.SetActive(false);
-            
+
             Debug.Log($"[AttackArrow] Started drawing, GameObject active: {gameObject.activeSelf}");
         }
 
@@ -231,21 +217,16 @@ namespace Kardx.UI
                 Debug.LogWarning("[AttackArrow] Cannot update start position: Arrow is not active");
                 return;
             }
-            
+
             // Ensure the GameObject is active
             if (!gameObject.activeSelf)
             {
                 gameObject.SetActive(true);
             }
-            
+
             // Store the start position
-            Vector2 startScreenPos = startPosition;
-            
-            // Set the arrow's position directly
-            RectTransform rectTransform = GetComponent<RectTransform>();
-            rectTransform.position = startScreenPos;
-            
-            Debug.Log($"[AttackArrow] Updated start position to {startScreenPos}");
+            this.startPosition = startPosition;
+            Debug.Log($"[AttackArrow] Updated start position to {startPosition}");
         }
 
         public void UpdateEndPosition(Vector2 endPosition)
@@ -255,26 +236,37 @@ namespace Kardx.UI
                 Debug.LogWarning("[AttackArrow] Cannot update end position: Arrow is not active");
                 return;
             }
-            
+
             // Ensure the GameObject is active
             if (!gameObject.activeSelf)
             {
                 gameObject.SetActive(true);
             }
-            
-            // Store the end position
-            Vector2 endScreenPos = endPosition;
-            
+
             // Update the arrow with the current position and the new end position
-            UpdateArrowTransform(transform.position, endScreenPos);
-            
-            Debug.Log($"[AttackArrow] Updated end position to {endScreenPos}");
+            UpdateArrowTransform(startPosition, endPosition);
+
+            Debug.Log($"[AttackArrow] Updated end position to {endPosition}");
         }
 
         private void UpdateArrowTransform(Vector2 sourcePos, Vector2 targetPos)
         {
-            // Calculate the direction and distance
-            Vector2 direction = targetPos - sourcePos;
+            if (parentCanvas == null)
+            {
+                parentCanvas = GetComponentInParent<Canvas>();
+                if (parentCanvas == null)
+                {
+                    Debug.LogError("[AttackArrow] No canvas found for position conversion");
+                    return;
+                }
+            }
+
+            // Convert screen positions to local canvas positions for proper distance calculation
+            Vector2 canvasSourcePos = ScreenToCanvasPoint(sourcePos);
+            Vector2 canvasTargetPos = ScreenToCanvasPoint(targetPos);
+            
+            // Calculate the direction and distance in canvas space
+            Vector2 direction = canvasTargetPos - canvasSourcePos;
             float distance = direction.magnitude;
 
             // Don't draw if too short
@@ -291,23 +283,44 @@ namespace Kardx.UI
 
             // Calculate angle in degrees
             float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
-            
-            // Position the arrow body at the source position
-            arrowBody.position = sourcePos;
-            
-            // Calculate the midpoint between source and target for the body pivot
-            Vector2 midPoint = (sourcePos + targetPos) / 2;
-            arrowBody.position = midPoint;
-            
-            // Set the body length and rotation
-            arrowBody.sizeDelta = new Vector2(distance, arrowWidth);
-            arrowBody.rotation = Quaternion.Euler(0, 0, angle);
-            
-            // Position the arrow head directly at the target position
-            arrowHead.position = targetPos;
-            arrowHead.rotation = Quaternion.Euler(0, 0, angle);
 
-            Debug.Log($"[AttackArrow] Arrow drawn from {sourcePos} to {targetPos}, distance: {distance}, angle: {angle}");
+            // Set position - we need to position in screen space, but size in canvas space
+            transform.position = (sourcePos + targetPos) * 0.5f;
+            transform.rotation = Quaternion.Euler(0, 0, angle);
+
+            // Set the size of the arrow to span the entire distance in canvas coordinates
+            GetComponent<RectTransform>().sizeDelta = new Vector2(distance, arrowWidth);
+
+            if (matchView != null)
+            {
+                matchView.SetLogText($"Screen: {sourcePos} → {targetPos}\nCanvas: {canvasSourcePos} → {canvasTargetPos}\nDistance: {distance}");
+            }
+
+            Debug.Log($"[AttackArrow] Arrow from {sourcePos} to {targetPos}, canvas distance: {distance}");
+        }
+        
+        // Convert screen position to canvas local position
+        private Vector2 ScreenToCanvasPoint(Vector2 screenPoint)
+        {
+            if (parentCanvas == null) return screenPoint;
+            
+            // Get the appropriate camera
+            Camera camera = null;
+            if (parentCanvas.renderMode == RenderMode.ScreenSpaceCamera)
+                camera = parentCanvas.worldCamera;
+            else if (parentCanvas.renderMode == RenderMode.WorldSpace)
+                camera = parentCanvas.worldCamera ?? Camera.main;
+                
+            // Get local point in the canvas rect
+            RectTransform canvasRect = parentCanvas.GetComponent<RectTransform>();
+            Vector2 localPoint;
+            
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRect, screenPoint, camera, out localPoint))
+            {
+                return localPoint;
+            }
+            
+            return screenPoint;
         }
 
         public void CancelDrawing()

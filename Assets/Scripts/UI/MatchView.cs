@@ -49,6 +49,9 @@ namespace Kardx.UI
         [SerializeField]
         private TextMeshProUGUI opponentCreditsText;
 
+        [SerializeField]
+        private TextMeshProUGUI logText;
+
         [Header("View Components")]
         // References to the actual components - set during initialization
         private PlayerBattlefieldView playerBattlefieldView;
@@ -441,6 +444,14 @@ namespace Kardx.UI
                 matchManager.OnCardDied -= HandleCardDied;
                 matchManager.OnMatchStarted -= HandleMatchStarted;
                 matchManager.OnMatchEnded -= HandleMatchEnded;
+            }
+        }
+
+        public void SetLogText(string message)
+        {
+            if (logText != null)
+            {
+                logText.text = message;
             }
         }
     }
