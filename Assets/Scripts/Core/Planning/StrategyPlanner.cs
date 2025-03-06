@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Kardx.Utils;
 using UnityEngine;
+using System.Threading;
 
 namespace Kardx.Core.Planning
 {
@@ -14,6 +15,7 @@ namespace Kardx.Core.Planning
         private readonly Kardx.Utils.ILogger logger;
         private readonly MatchManager matchManager;
         private readonly StrategySource strategySource;
+        private readonly MonoBehaviour coroutineRunner;
 
         /// <summary>
         /// Event fired when a strategy has been determined.
@@ -31,20 +33,28 @@ namespace Kardx.Core.Planning
         public event Action<Decision> OnDecisionExecuted;
 
         /// <summary>
+        /// Event fired when a strategy execution is complete.
+        /// </summary>
+        public event Action<Strategy> OnStrategyComplete;
+
+        /// <summary>
         /// Creates a new instance of the StrategyPlanner class.
         /// </summary>
         /// <param name="matchManager">The match manager to use for executing strategies.</param>
         /// <param name="strategySource">The source of strategies to use.</param>
         /// <param name="logger">Optional logger for debugging.</param>
+        /// <param name="coroutineRunner">Optional MonoBehaviour to run coroutines.</param>
         public StrategyPlanner(
             MatchManager matchManager,
             StrategySource strategySource = StrategySource.Dummy,
-            Kardx.Utils.ILogger logger = null
+            Kardx.Utils.ILogger logger = null,
+            MonoBehaviour coroutineRunner = null
         )
         {
             this.matchManager = matchManager ?? throw new ArgumentNullException(nameof(matchManager));
             this.strategySource = strategySource;
             this.logger = logger ?? new SimpleLogger("StrategyPlanner");
+            this.coroutineRunner = coroutineRunner;
         }
 
         /// <summary>
@@ -58,6 +68,13 @@ namespace Kardx.Core.Planning
 
             // Get the current player from the board
             Player currentPlayer = board.CurrentTurnPlayer;
+
+            // Ensure the current player is the opponent
+            if (currentPlayer != board.Opponent)
+            {
+                logger?.LogError("[StrategyPlanner] Invalid current player, should be opponent.");
+                return;
+            }
 
             // Get the appropriate strategy provider for the current player
             IStrategyProvider strategyProvider = CreateStrategyProvider(currentPlayer);
@@ -75,29 +92,51 @@ namespace Kardx.Core.Planning
             OnStrategyDetermined?.Invoke(strategy);
 
             // Execute the strategy
-            ExecuteStrategy(strategy, board);
+            ExecuteStrategy(board, currentPlayer, strategy);
         }
 
         /// <summary>
         /// Executes a strategy on the board.
         /// </summary>
-        /// <param name="strategy">The strategy to execute.</param>
         /// <param name="board">The board to execute the strategy on.</param>
-        public void ExecuteStrategy(Strategy strategy, Board board)
+        /// <param name="player">The player executing the strategy.</param>
+        /// <param name="strategy">The strategy to execute.</param>
+        public void ExecuteStrategy(Board board, Player player, Strategy strategy)
         {
-            if (strategy == null)
-                throw new ArgumentNullException(nameof(strategy));
+            if (board == null || player == null || strategy == null || strategy.Decisions.Count == 0)
+            {
+                logger?.LogWarning("[StrategyPlanner] Cannot execute strategy: Invalid parameters provided");
+                return;
+            }
 
-            if (board == null)
-                throw new ArgumentNullException(nameof(board));
+            if (coroutineRunner != null)
+            {
+                coroutineRunner.StartCoroutine(ExecuteStrategyCoroutine(board, player, strategy));
+            }
+            else
+            {
+                // Fall back to immediate execution if no coroutine runner is available
+                ExecuteStrategyImmediate(board, player, strategy);
+            }
+        }
 
-            logger?.Log($"Executing strategy with {strategy.Decisions.Count} decisions");
+        /// <summary>
+        /// Executes a strategy on the board using a coroutine.
+        /// </summary>
+        /// <param name="board">The board to execute the strategy on.</param>
+        /// <param name="player">The player executing the strategy.</param>
+        /// <param name="strategy">The strategy to execute.</param>
+        private System.Collections.IEnumerator ExecuteStrategyCoroutine(Board board, Player player, Strategy strategy)
+        {
+            logger?.Log($"[StrategyPlanner] Executing strategy with {strategy.Decisions.Count} decisions");
 
-            // Execute each decision in the strategy
             foreach (var decision in strategy.Decisions)
             {
                 // Notify listeners that a decision is about to be executed
                 OnDecisionExecuting?.Invoke(decision);
+
+                // Wait for a second using Unity's coroutine system
+                yield return new UnityEngine.WaitForSeconds(1f);
 
                 // Execute the decision on the board
                 ExecuteActionOnBoard(decision, board);
@@ -105,6 +144,37 @@ namespace Kardx.Core.Planning
                 // Notify listeners that a decision has been executed
                 OnDecisionExecuted?.Invoke(decision);
             }
+
+            // Notify listeners that the strategy execution is complete
+            OnStrategyComplete?.Invoke(strategy);
+        }
+
+        /// <summary>
+        /// Executes a strategy on the board immediately.
+        /// </summary>
+        /// <param name="board">The board to execute the strategy on.</param>
+        /// <param name="player">The player executing the strategy.</param>
+        /// <param name="strategy">The strategy to execute.</param>
+        private void ExecuteStrategyImmediate(Board board, Player player, Strategy strategy)
+        {
+            logger?.Log($"[StrategyPlanner] Executing strategy with {strategy.Decisions.Count} decisions immediately");
+
+            foreach (var decision in strategy.Decisions)
+            {
+                // Notify listeners that a decision is about to be executed
+                OnDecisionExecuting?.Invoke(decision);
+
+                // No waiting in immediate mode
+
+                // Execute the decision on the board
+                ExecuteActionOnBoard(decision, board);
+
+                // Notify listeners that a decision has been executed
+                OnDecisionExecuted?.Invoke(decision);
+            }
+
+            // Notify listeners that the strategy execution is complete
+            OnStrategyComplete?.Invoke(strategy);
         }
 
         /// <summary>
@@ -135,7 +205,7 @@ namespace Kardx.Core.Planning
                         if (targetSlot >= 0 && targetSlot < currentPlayer.Battlefield.SlotCount)
                         {
                             logger?.Log(
-                                $"Attempting to deploy {currentPlayer.Id}'s card {cardToDeploy.Title} (Category: {cardToDeploy.CardType.Category}) to slot {targetSlot}"
+                                $"[StrategyPlanner] Attempting to deploy {currentPlayer.Id}'s card {cardToDeploy.Title} (Category: {cardToDeploy.CardType.Category}) to slot {targetSlot}"
                             );
 
                             bool success;
@@ -144,13 +214,13 @@ namespace Kardx.Core.Planning
                             {
                                 success = matchManager.DeployCard(cardToDeploy, targetSlot);
                                 logger?.Log(
-                                    $"Deployed card {cardToDeploy.Title} to slot {targetSlot} via MatchManager, success: {success}"
+                                    $"[StrategyPlanner] Deployed card {cardToDeploy.Title} to slot {targetSlot} via MatchManager, success: {success}"
                                 );
                             }
                             else
                             {
                                 logger?.LogError(
-                                    "MatchManager not available, using direct Player.DeployUnitCard method which won't update UI"
+                                    "[StrategyPlanner] MatchManager not available, using direct Player.DeployUnitCard method which won't update UI"
                                 );
                             }
                         }

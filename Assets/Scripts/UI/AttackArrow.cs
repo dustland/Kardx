@@ -323,11 +323,6 @@ namespace Kardx.UI
             // Set the size of the arrow to span the entire distance in canvas coordinates
             GetComponent<RectTransform>().sizeDelta = new Vector2(distance, arrowWidth);
 
-            if (matchView != null)
-            {
-                matchView.SetLogText($"Screen: {sourcePos} → {targetPos}\nCanvas: {canvasSourcePos} → {canvasTargetPos}\nDistance: {distance}");
-            }
-
             Debug.Log($"[AttackArrow] Arrow from {sourcePos} to {targetPos}, canvas distance: {distance}");
         }
         

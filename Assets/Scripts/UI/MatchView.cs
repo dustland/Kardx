@@ -414,6 +414,8 @@ namespace Kardx.UI
         // Method to end the player's turn
         public void EndTurn()
         {
+            ValidateGameState();
+
             if (matchManager == null)
                 return;
 

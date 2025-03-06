@@ -410,7 +410,10 @@ namespace Kardx.Core
             bool success = card.CardType.Category == CardCategory.Unit ? DeployUnitCard(card, position)
                 : card.CardType.Category == CardCategory.Order ? DeployOrderCard(card)
                 : false;
-            OnCardDeployed?.Invoke(card, position);
+            if (success)
+            {
+                OnCardDeployed?.Invoke(card, position);
+            }
             return success;
         }
 
