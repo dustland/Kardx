@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 5735508668157805069}
   - component: {fileID: 6456407936292904980}
   - component: {fileID: 3966118091178058284}
-  - component: {fileID: 1677900204657454514}
+  - component: {fileID: 1193307908770267329}
   m_Layer: 5
   m_Name: OpponentCardSlot
   m_TagString: Untagged
@@ -76,7 +76,7 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
---- !u!114 &1677900204657454514
+--- !u!114 &1193307908770267329
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -85,7 +85,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 4490461323352344462}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3b964fe85b16448dcb5ccc4bee6259b5, type: 3}
+  m_Script: {fileID: 11500000, guid: afdf57fa804294a26870d33a4204002c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   highlightImage: {fileID: 0}

@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 5735508668157805069}
   - component: {fileID: 6456407936292904980}
   - component: {fileID: 3966118091178058284}
-  - component: {fileID: 7633875920932954224}
+  - component: {fileID: 5274874450685852638}
   m_Layer: 5
   m_Name: PlayerCardSlot
   m_TagString: Untagged
@@ -76,7 +76,7 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
---- !u!114 &7633875920932954224
+--- !u!114 &5274874450685852638
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -85,8 +85,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 4490461323352344462}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2123022ba862142979cce487497641d1, type: 3}
+  m_Script: {fileID: 11500000, guid: 531f39855439a44588fbdbc34a73a98b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   highlightImage: {fileID: 0}
-  position: 0
+  cardContainer: {fileID: 0}
+  availableHighlightColor: {r: 0, g: 1, b: 0, a: 0.3}
+  dropTargetHighlightColor: {r: 0, g: 1, b: 0, a: 0.6}
+  selectedHighlightColor: {r: 1, g: 1, b: 0, a: 0.5}
+  invalidHighlightColor: {r: 1, g: 0, b: 0, a: 0.3}

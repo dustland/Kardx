@@ -691,7 +691,6 @@ GameObject:
   - component: {fileID: 7195361316880930439}
   - component: {fileID: 6574974792361662003}
   - component: {fileID: 5929579383067090856}
-  - component: {fileID: 8694285473835119482}
   m_Layer: 5
   m_Name: CardArea
   m_TagString: Untagged
@@ -766,34 +765,6 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
---- !u!114 &8694285473835119482
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 909024035554141669}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6b144d1a6a50c4d49a18b8b285b55e93, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  autoUpdateUI: 1
-  backgroundImage: {fileID: 0}
-  artworkImage: {fileID: 1896003884705756953}
-  nameText: {fileID: 121241409076812652}
-  descriptionText: {fileID: 6251684222740182078}
-  categoryText: {fileID: 0}
-  categoryTagText: {fileID: 0}
-  deploymentCostText: {fileID: 6871507073942871320}
-  operationCostText: {fileID: 5699158700235386478}
-  attackText: {fileID: 5199820254296678654}
-  defenseText: {fileID: 0}
-  abilityText: {fileID: 2141038047567318173}
-  abilityDescriptionText: {fileID: 8513557567576385631}
-  hasAttackedToggle: {fileID: 0}
-  cardBackOverlay: {fileID: 0}
-  highlightEffect: {fileID: 0}
 --- !u!1 &1195949620471029252
 GameObject:
   m_ObjectHideFlags: 0
@@ -1290,8 +1261,8 @@ GameObject:
   - component: {fileID: 1099851595808143032}
   - component: {fileID: 8730863181411427504}
   - component: {fileID: 4210494796478505206}
-  - component: {fileID: 4302176922871980540}
-  - component: {fileID: 5022013963476120254}
+  - component: {fileID: 698710022237263019}
+  - component: {fileID: 6667678584565022653}
   m_Layer: 0
   m_Name: CardPanel
   m_TagString: Untagged
@@ -1379,7 +1350,7 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
---- !u!114 &4302176922871980540
+--- !u!114 &698710022237263019
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1388,15 +1359,17 @@ MonoBehaviour:
   m_GameObject: {fileID: 6527893478445647135}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0775f91310aa34c35a386fea6b3b4f80, type: 3}
+  m_Script: {fileID: 11500000, guid: 4fdf56b384bad46548c7c8308265e044, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  cardView: {fileID: 5022013963476120254}
+  cardView: {fileID: 6667678584565022653}
   backgroundPanel: {fileID: 8840080309162483606}
   cardNameText: {fileID: 2064681673847718567}
   descriptionText: {fileID: 6251684222740182078}
   categoryText: {fileID: 4632704147892304106}
---- !u!114 &5022013963476120254
+  scaleInDuration: 0.4
+  scaleOutDuration: 0.25
+--- !u!114 &6667678584565022653
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1405,15 +1378,15 @@ MonoBehaviour:
   m_GameObject: {fileID: 6527893478445647135}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6b144d1a6a50c4d49a18b8b285b55e93, type: 3}
+  m_Script: {fileID: 11500000, guid: 3b1cfbc43066d4cb3ae39d4852e8d402, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   autoUpdateUI: 1
-  backgroundImage: {fileID: 0}
+  backgroundImage: {fileID: 8840080309162483606}
   artworkImage: {fileID: 1896003884705756953}
   nameText: {fileID: 121241409076812652}
-  descriptionText: {fileID: 6251684222740182078}
-  categoryText: {fileID: 4632704147892304106}
+  descriptionText: {fileID: 0}
+  categoryText: {fileID: 0}
   categoryTagText: {fileID: 7224325562066428420}
   deploymentCostText: {fileID: 6871507073942871320}
   operationCostText: {fileID: 5699158700235386478}
@@ -1421,6 +1394,7 @@ MonoBehaviour:
   defenseText: {fileID: 7084003578576755478}
   abilityText: {fileID: 2141038047567318173}
   abilityDescriptionText: {fileID: 8513557567576385631}
+  ownerText: {fileID: 0}
   hasAttackedToggle: {fileID: 0}
   cardBackOverlay: {fileID: 0}
   highlightEffect: {fileID: 0}
@@ -1929,7 +1903,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 4302176922871980540}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: Kardx.UI.CardDetailView, Assembly-CSharp
         m_MethodName: Hide
         m_Mode: 1
