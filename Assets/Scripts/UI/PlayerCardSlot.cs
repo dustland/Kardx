@@ -43,7 +43,6 @@ namespace Kardx.UI
 
         private int slotIndex;
         private PlayerBattlefieldView battlefieldView;
-        private CardView currentCardView;
         private HighlightType currentHighlightType = HighlightType.None;
         private HighlightType previousHighlightType = HighlightType.None;
 
@@ -281,33 +280,16 @@ namespace Kardx.UI
             battlefieldView.ClearCardHighlights();
         }
 
-        // Method to clear the current card view
-        public void ClearCardView()
-        {
-            // CardSlot should not be responsible for destroying GameObjects
-            // It should only update its reference, while actual destruction
-            // should be handled by MatchView
-
-            // Simply clear the reference to the card
-            currentCardView = null;
-        }
-
-        // Method to set a new card view
-        public void SetCardView(CardView cardView)
-        {
-            currentCardView = cardView;
-        }
-
         // Adds a public getter to check if this slot has a card
         public bool HasCard()
         {
-            return currentCardView != null;
+            return CardContainer.GetComponentInChildren<CardView>() != null;
         }
         
         // Adds a public getter to get the current card view
         public CardView GetCardView()
         {
-            return currentCardView;
+            return CardContainer.GetComponentInChildren<CardView>();
         }
 
         private bool IsHighlighted()
