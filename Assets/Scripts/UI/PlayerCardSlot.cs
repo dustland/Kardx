@@ -298,6 +298,18 @@ namespace Kardx.UI
             currentCardView = cardView;
         }
 
+        // Adds a public getter to check if this slot has a card
+        public bool HasCard()
+        {
+            return currentCardView != null;
+        }
+        
+        // Adds a public getter to get the current card view
+        public CardView GetCardView()
+        {
+            return currentCardView;
+        }
+
         private bool IsHighlighted()
         {
             // Accept both DropTarget and Available states as valid drop targets

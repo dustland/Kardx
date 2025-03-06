@@ -44,5 +44,18 @@ namespace Kardx.UI
         {
             return matchManager;
         }
+
+        /// <summary>
+        /// Gets all card views currently on this battlefield
+        /// </summary>
+        /// <returns>Array of CardView components on this battlefield</returns>
+        public abstract CardView[] GetCardViews();
+
+        /// <summary>
+        /// Gets the card view at the specified position
+        /// </summary>
+        /// <param name="position">Position on the battlefield (0-based index)</param>
+        /// <returns>CardView at the specified position, or null if no card exists there</returns>
+        public abstract CardView GetCardViewAt(int position);
     }
 }

@@ -239,5 +239,14 @@ namespace Kardx.UI
                 UpdateHand();
             }
         }
+
+        /// <summary>
+        /// Gets all card views currently in this hand
+        /// </summary>
+        /// <returns>Array of CardView components in this hand</returns>
+        public CardView[] GetCardViews()
+        {
+            return handTransform.GetComponentsInChildren<CardView>(includeInactive: false);
+        }
     }
 }

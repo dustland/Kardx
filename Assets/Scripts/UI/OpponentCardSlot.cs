@@ -93,19 +93,13 @@ namespace Kardx.UI
             Debug.Log($"[OpponentCardSlot] Created highlight image for slot {slotIndex}");
         }
 
-        public void SetHighlight(Color color, bool active)
+        public void SetHighlight(Color color, bool active = true)
         {
-            isHighlighted = active;
-
             if (highlightImage != null)
             {
                 highlightImage.color = color;
                 highlightImage.enabled = active;
-                Debug.Log($"[OpponentCardSlot] Set highlight: active={active}, color={color}, image={highlightImage.name}");
-            }
-            else
-            {
-                Debug.LogWarning($"[OpponentCardSlot] Cannot set highlight: highlightImage is null on slot {slotIndex}");
+                isHighlighted = active;
             }
         }
 
@@ -167,6 +161,18 @@ namespace Kardx.UI
         public void SetCardView(CardView cardView)
         {
             currentCardView = cardView;
+        }
+
+        // Adds a public getter to check if this slot has a card
+        public bool HasCard()
+        {
+            return currentCardView != null;
+        }
+        
+        // Adds a public getter to get the current card view
+        public CardView GetCardView()
+        {
+            return currentCardView;
         }
     }
 }

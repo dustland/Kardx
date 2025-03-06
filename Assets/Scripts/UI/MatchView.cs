@@ -52,6 +52,10 @@ namespace Kardx.UI
         [SerializeField]
         private TextMeshProUGUI logText;
 
+        [Header("Debug Tools")]
+        [SerializeField]
+        private Button validateStateButton;
+
         [Header("View Components")]
         // References to the actual components - set during initialization
         private PlayerBattlefieldView playerBattlefieldView;
@@ -152,6 +156,12 @@ namespace Kardx.UI
         {
             // Set up the match
             SetupMatch();
+
+            // Set up the validate state button
+            if (validateStateButton != null)
+            {
+                validateStateButton.onClick.AddListener(ValidateGameState);
+            }
         }
 
         private void SetupMatch()
@@ -211,7 +221,7 @@ namespace Kardx.UI
             var currentPlayer = matchManager.CurrentPlayer;
             bool isPlayerTurn = currentPlayer == matchManager.Player;
 
-            turnText.text = isPlayerTurn ? "Your Turn" : "Opponent's Turn";
+            turnText.text = isPlayerTurn ? $"Your Turn: {matchManager.TurnNumber}" : $"Opponent's Turn: {matchManager.TurnNumber}";
         }
 
         private void UpdateCreditsDisplay()
@@ -513,6 +523,290 @@ namespace Kardx.UI
             if (logText != null)
             {
                 logText.text = message;
+            }
+        }
+
+        /// <summary>
+        /// Validates the consistency between UI representation and the data model
+        /// </summary>
+        public void ValidateGameState()
+        {
+            if (matchManager == null)
+            {
+                SetLogText("Cannot validate: MatchManager is null");
+                return;
+            }
+
+            List<string> inconsistencies = new List<string>();
+
+            // Validate player hand
+            ValidatePlayerHand(inconsistencies);
+
+            // Validate player battlefield
+            ValidatePlayerBattlefield(inconsistencies);
+
+            // Validate opponent hand
+            ValidateOpponentHand(inconsistencies);
+
+            // Validate opponent battlefield
+            ValidateOpponentBattlefield(inconsistencies);
+
+            // Validate order area
+            ValidateOrderArea(inconsistencies);
+
+            // Validate player resources
+            ValidatePlayerResources(inconsistencies);
+
+            // Display results
+            if (inconsistencies.Count == 0)
+            {
+                SetLogText("VALIDATION PASSED: UI is consistent with data model");
+            }
+            else
+            {
+                string result = $"VALIDATION FAILED: Found {inconsistencies.Count} inconsistencies:\n";
+                foreach (var issue in inconsistencies.Take(10)) // Limit to 10 issues to avoid overflow
+                {
+                    result += $"• {issue}\n";
+                }
+
+                if (inconsistencies.Count > 10)
+                {
+                    result += $"...and {inconsistencies.Count - 10} more issues.";
+                }
+
+                SetLogText(result);
+                Debug.LogError(result);
+            }
+        }
+
+        private void ValidatePlayerHand(List<string> inconsistencies)
+        {
+            if (playerHandView == null) return;
+
+            var modelCards = matchManager.Player.Hand.GetCards();
+            var uiCards = playerHandView.GetCardViews().Select(cv => cv.Card).ToList();
+
+            // Check for cards in model but missing from UI
+            foreach (var card in modelCards)
+            {
+                if (!uiCards.Any(c => c.InstanceId.Equals(card.InstanceId)))
+                {
+                    inconsistencies.Add($"Player hand: Card '{card.Title}' (ID: {card.InstanceId}) exists in model but not in UI");
+                }
+            }
+
+            // Check for cards in UI but missing from model
+            foreach (var card in uiCards)
+            {
+                if (!modelCards.Any(c => c.InstanceId.Equals(card.InstanceId)))
+                {
+                    inconsistencies.Add($"Player hand: Card '{card.Title}' (ID: {card.InstanceId}) exists in UI but not in model");
+                }
+            }
+
+            // Check if counts match
+            if (modelCards.Count != uiCards.Count)
+            {
+                inconsistencies.Add($"Player hand: Count mismatch - Model: {modelCards.Count}, UI: {uiCards.Count}");
+            }
+        }
+
+        private void ValidatePlayerBattlefield(List<string> inconsistencies)
+        {
+            if (playerBattlefieldView == null) return;
+
+            var modelCards = matchManager.Player.Battlefield.Cards.ToList();
+            var uiCards = playerBattlefieldView.GetCardViews().Select(cv => cv.Card).ToList();
+
+            // Check for cards in model but missing from UI
+            foreach (var card in modelCards)
+            {
+                if (!uiCards.Any(c => c.InstanceId.Equals(card.InstanceId)))
+                {
+                    inconsistencies.Add($"Player battlefield: Card '{card.Title}' (ID: {card.InstanceId}) exists in model but not in UI");
+                }
+            }
+
+            // Check for cards in UI but missing from model
+            foreach (var card in uiCards)
+            {
+                if (card != null && !modelCards.Any(c => c.InstanceId.Equals(card.InstanceId)))
+                {
+                    inconsistencies.Add($"Player battlefield: Card '{card.Title}' (ID: {card.InstanceId}) exists in UI but not in model");
+                }
+            }
+
+            // Check if cards are in the correct positions
+            for (int i = 0; i < Battlefield.SLOT_COUNT; i++)
+            {
+                var modelCard = matchManager.Player.Battlefield.GetCardAt(i);
+                var uiCardView = playerBattlefieldView.GetCardViewAt(i);
+                var uiCard = uiCardView?.Card;
+
+                if (modelCard != null && uiCard == null)
+                {
+                    inconsistencies.Add($"Player battlefield: Slot {i} has card '{modelCard.Title}' in model but empty in UI");
+                }
+                else if (modelCard == null && uiCard != null)
+                {
+                    inconsistencies.Add($"Player battlefield: Slot {i} is empty in model but has card '{uiCard.Title}' in UI");
+                }
+                else if (modelCard != null && uiCard != null && !modelCard.InstanceId.Equals(uiCard.InstanceId))
+                {
+                    inconsistencies.Add($"Player battlefield: Slot {i} has card '{modelCard.Title}' in model but '{uiCard.Title}' in UI");
+                }
+            }
+        }
+
+        private void ValidateOpponentHand(List<string> inconsistencies)
+        {
+            if (opponentHandView == null) return;
+
+            var modelCards = matchManager.Opponent.Hand.GetCards();
+            var uiCards = opponentHandView.GetCardViews().Select(cv => cv.Card).ToList();
+
+            // Check card counts only, not individual cards (since opponent cards are face-down)
+            if (modelCards.Count != uiCards.Count)
+            {
+                inconsistencies.Add($"Opponent hand: Count mismatch - Model: {modelCards.Count}, UI: {uiCards.Count}");
+            }
+        }
+
+        private void ValidateOpponentBattlefield(List<string> inconsistencies)
+        {
+            if (opponentBattlefieldView == null) return;
+
+            var modelCards = matchManager.Opponent.Battlefield.Cards.ToList();
+            var uiCards = opponentBattlefieldView.GetCardViews().Select(cv => cv.Card).ToList();
+
+            // Check for cards in model but missing from UI
+            foreach (var card in modelCards)
+            {
+                if (!uiCards.Any(c => c.InstanceId.Equals(card.InstanceId)))
+                {
+                    inconsistencies.Add($"Opponent battlefield: Card '{card.Title}' (ID: {card.InstanceId}) exists in model but not in UI");
+                }
+            }
+
+            // Check for cards in UI but missing from model
+            foreach (var card in uiCards)
+            {
+                if (card != null && !modelCards.Any(c => c.InstanceId.Equals(card.InstanceId)))
+                {
+                    inconsistencies.Add($"Opponent battlefield: Card '{card.Title}' (ID: {card.InstanceId}) exists in UI but not in model");
+                }
+            }
+
+            // Check if cards are in the correct positions
+            for (int i = 0; i < Battlefield.SLOT_COUNT; i++)
+            {
+                var modelCard = matchManager.Opponent.Battlefield.GetCardAt(i);
+                var uiCardView = opponentBattlefieldView.GetCardViewAt(i);
+                var uiCard = uiCardView?.Card;
+
+                if (modelCard != null && uiCard == null)
+                {
+                    inconsistencies.Add($"Opponent battlefield: Slot {i} has card '{modelCard.Title}' in model but empty in UI");
+                }
+                else if (modelCard == null && uiCard != null)
+                {
+                    inconsistencies.Add($"Opponent battlefield: Slot {i} is empty in model but has card '{uiCard.Title}' in UI");
+                }
+                else if (modelCard != null && uiCard != null && !modelCard.InstanceId.Equals(uiCard.InstanceId))
+                {
+                    inconsistencies.Add($"Opponent battlefield: Slot {i} has card '{modelCard.Title}' in model but '{uiCard.Title}' in UI");
+                }
+            }
+        }
+
+        private void ValidateOrderArea(List<string> inconsistencies)
+        {
+            if (orderArea == null) return;
+
+            // Get order cards from model
+            // Since we don't have a direct OrderArea property, we'll check played order cards
+            var playerOrderCards = matchManager.Player.GetCardsInPlay().Where(c => c.IsOrderCard).ToList();
+            var opponentOrderCards = matchManager.Opponent.GetCardsInPlay().Where(c => c.IsOrderCard).ToList();
+
+            // Get card views from order area
+            var orderCardViews = orderArea.GetComponentsInChildren<CardView>(includeInactive: false);
+            var uiOrderCards = orderCardViews.Select(cv => cv.Card).ToList();
+
+            // Combine model order cards
+            var allModelOrderCards = new List<Card>();
+            allModelOrderCards.AddRange(playerOrderCards);
+            allModelOrderCards.AddRange(opponentOrderCards);
+
+            // Check for cards in model but missing from UI
+            foreach (var card in allModelOrderCards)
+            {
+                if (!uiOrderCards.Any(c => c.InstanceId.Equals(card.InstanceId)))
+                {
+                    inconsistencies.Add($"Order area: Card '{card.Title}' (ID: {card.InstanceId}) exists in model but not in UI");
+                }
+            }
+
+            // Check for cards in UI but missing from model
+            foreach (var card in uiOrderCards)
+            {
+                if (!allModelOrderCards.Any(c => c.InstanceId.Equals(card.InstanceId)))
+                {
+                    inconsistencies.Add($"Order area: Card '{card.Title}' (ID: {card.InstanceId}) exists in UI but not in model");
+                }
+            }
+
+            // Check total count
+            if (allModelOrderCards.Count != uiOrderCards.Count)
+            {
+                inconsistencies.Add($"Order area: Count mismatch - Model: {allModelOrderCards.Count}, UI: {uiOrderCards.Count}");
+            }
+        }
+
+        private void ValidatePlayerResources(List<string> inconsistencies)
+        {
+            // Check Credits display
+            if (playerCreditsText != null)
+            {
+                int displayedCredits = 0;
+                if (int.TryParse(playerCreditsText.text.Replace("Credits: ", ""), out displayedCredits))
+                {
+                    if (displayedCredits != matchManager.Player.Credits)
+                    {
+                        inconsistencies.Add($"Player credits: UI displays {displayedCredits} but model has {matchManager.Player.Credits}");
+                    }
+                }
+            }
+
+            if (opponentCreditsText != null)
+            {
+                int displayedCredits = 0;
+                if (int.TryParse(opponentCreditsText.text.Replace("Credits: ", ""), out displayedCredits))
+                {
+                    if (displayedCredits != matchManager.Opponent.Credits)
+                    {
+                        inconsistencies.Add($"Opponent credits: UI displays {displayedCredits} but model has {matchManager.Opponent.Credits}");
+                    }
+                }
+            }
+
+            // Check turn display
+            if (turnText != null)
+            {
+                string turnDisplay = turnText.text;
+                if (turnDisplay.Contains(matchManager.TurnNumber.ToString()))
+                {
+                    bool isPlayerTurn = matchManager.CurrentPlayer == matchManager.Player;
+                    if ((isPlayerTurn && !turnDisplay.Contains("Your Turn")) ||
+                        (!isPlayerTurn && !turnDisplay.Contains("Opponent's Turn")))
+                    {
+                        inconsistencies.Add($"Turn indicator: Wrong player shown. Model indicates {(isPlayerTurn ? "player" : "opponent")}'s turn");
+                    }
+                }
+                else
+                {
+                    inconsistencies.Add($"Turn indicator: Wrong turn number. UI shows {turnDisplay} but model has turn {matchManager.TurnNumber}");
+                }
             }
         }
     }

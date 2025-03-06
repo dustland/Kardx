@@ -323,5 +323,82 @@ namespace Kardx.UI
                 }
             }
         }
+
+        public void SetHighlightLogic(bool highlightEnabled)
+        {
+            isHighlightingEmptySlots = highlightEnabled;
+            UpdateHighlights();
+        }
+
+        /// <summary>
+        /// Updates the highlight state of all card slots based on current game state
+        /// </summary>
+        private void UpdateHighlights()
+        {
+            if (matchManager == null)
+                return;
+                
+            foreach (var slot in cardSlots)
+            {
+                if (slot == null)
+                    continue;
+                    
+                if (isHighlightingEmptySlots)
+                {
+                    // Highlight only empty slots when in deployment mode
+                    bool isEmpty = !slot.HasCard();
+                    if (isEmpty)
+                    {
+                        slot.SetHighlightState(PlayerCardSlot.HighlightType.Available);
+                    }
+                    else
+                    {
+                        slot.SetHighlightState(PlayerCardSlot.HighlightType.None);
+                    }
+                }
+                else
+                {
+                    // Clear all highlights when not in deployment mode
+                    slot.SetHighlightState(PlayerCardSlot.HighlightType.None);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets all card views currently on this battlefield
+        /// </summary>
+        /// <returns>Array of CardView components on this battlefield</returns>
+        public override CardView[] GetCardViews()
+        {
+            List<CardView> cardViews = new List<CardView>();
+            
+            foreach (var slot in cardSlots)
+            {
+                if (slot != null && slot.HasCard())
+                {
+                    var cardView = slot.GetCardView();
+                    if (cardView != null)
+                    {
+                        cardViews.Add(cardView);
+                    }
+                }
+            }
+            
+            return cardViews.ToArray();
+        }
+
+        /// <summary>
+        /// Gets the card view at the specified position
+        /// </summary>
+        /// <param name="position">Position on the battlefield (0-based index)</param>
+        /// <returns>CardView at the specified position, or null if no card exists there</returns>
+        public override CardView GetCardViewAt(int position)
+        {
+            if (position < 0 || position >= cardSlots.Count)
+                return null;
+                
+            var slot = cardSlots[position];
+            return slot != null ? slot.GetCardView() : null;
+        }
     }
 }

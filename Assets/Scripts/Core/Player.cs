@@ -357,26 +357,21 @@ namespace Kardx.Core
         }
 
         /// <summary>
-        /// Gets all cards currently in play (on the battlefield and headquarters).
+        /// Gets a collection of all cards the player currently has in play
+        /// (both on the battlefield and in the order area)
         /// </summary>
-        /// <returns>A list of all cards in play for this player.</returns>
+        /// <returns>List of all cards currently in play for this player</returns>
         public List<Card> GetCardsInPlay()
         {
-            var result = new List<Card>();
-
-            // Add cards from the battlefield
-            if (battlefield != null)
-            {
-                result.AddRange(battlefield.Cards);
-            }
-
-            // Add headquarters card if it exists
-            if (headquartersCard != null)
-            {
-                result.Add(headquartersCard);
-            }
-
-            return result;
+            List<Card> cardsInPlay = new List<Card>();
+            
+            // Add cards from battlefield
+            cardsInPlay.AddRange(battlefield.Cards);
+            
+            // Add cards from any other play areas (like order area)
+            // For now, just return battlefield cards since we don't have a separate order area collection
+            
+            return cardsInPlay;
         }
 
         /// <summary>
