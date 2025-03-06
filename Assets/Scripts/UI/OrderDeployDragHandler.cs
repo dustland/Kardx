@@ -121,6 +121,13 @@ namespace Kardx.UI
         {
             Debug.Log("[OrderDeployDragHandler] End Drag");
 
+            // ALWAYS re-enable raycasting on battlefield slots, regardless of other conditions
+            if (battlefieldView != null)
+            {
+                battlefieldView.SetSlotsRaycastActive(true);
+                Debug.Log("[OrderDeployDragHandler] Re-enabled raycasting on battlefield slots");
+            }
+
             if (!cardView.IsBeingDragged)
                 return;
 
@@ -131,12 +138,6 @@ namespace Kardx.UI
             if (canvasGroup != null)
             {
                 canvasGroup.blocksRaycasts = true;
-            }
-
-            // Re-enable raycasting on battlefield slots
-            if (battlefieldView != null)
-            {
-                battlefieldView.SetSlotsRaycastActive(true);
             }
 
             // Modified check: Consider it dropped on a target only if it's the OrderDropHandler,
@@ -202,6 +203,16 @@ namespace Kardx.UI
 
             Debug.LogWarning("[OrderDeployDragHandler] No root canvas found in the scene");
             return null;
+        }
+
+        private void OnDisable()
+        {
+            // Safety measure: ensure battlefieldView slots are re-enabled when this component is disabled
+            if (battlefieldView != null)
+            {
+                battlefieldView.SetSlotsRaycastActive(true);
+                Debug.Log("[OrderDeployDragHandler] Re-enabled raycasting on battlefield slots (from OnDisable)");
+            }
         }
     }
 }
