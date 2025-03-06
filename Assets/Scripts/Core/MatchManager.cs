@@ -236,7 +236,11 @@ namespace Kardx.Core
         {
             var player = board.CurrentTurnPlayer;
             var drawnCard = player.DrawCard(!board.IsPlayerTurn());
-            OnCardDrawn?.Invoke(drawnCard);
+            if (drawnCard != null)
+            {
+                logger?.Log($"[{player.Id}] Card drawn: {drawnCard.Title}");
+                OnCardDrawn?.Invoke(drawnCard);
+            }
             return drawnCard;
         }
 
@@ -393,6 +397,12 @@ namespace Kardx.Core
         {
             if (card == null)
                 return false;
+
+            if (card.Owner != board.CurrentTurnPlayer)
+            {
+                logger?.LogError($"[MatchManager] Cannot deploy card {card.Title}: card belongs to {card.Owner.Id} but current player is {board.CurrentTurnPlayer.Id}");
+                return false;
+            }
 
             // Set card face-up when deployed to the battlefield
             card.SetFaceDown(false);

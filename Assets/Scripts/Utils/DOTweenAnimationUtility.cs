@@ -498,6 +498,92 @@ namespace Kardx.Utils
             return panel.DOAnchorPos(endPosition, duration).SetEase(Ease.OutQuint);
         }
 
+        /// <summary>
+        /// Creates a heartbeat animation for UI elements, useful for providing visual feedback
+        /// when important events occur (like card deployment)
+        /// </summary>
+        /// <param name="targetTransform">The transform to animate</param>
+        /// <param name="targetImage">Optional image component to animate color</param>
+        /// <param name="heartbeatColor">Color to pulse to if image is provided</param>
+        /// <param name="pulseScale">Maximum scale during pulse (1.0 = no change)</param>
+        /// <param name="pulseDuration">Duration of a single pulse</param>
+        /// <param name="pulseCount">Number of pulses to perform</param>
+        /// <param name="onComplete">Optional callback when animation completes</param>
+        /// <returns>The animation sequence</returns>
+        public static Sequence AnimateHeartbeat(
+            Transform targetTransform,
+            Image targetImage = null,
+            Color? heartbeatColor = null,
+            float pulseScale = 1.15f,
+            float pulseDuration = 0.5f,
+            int pulseCount = 2,
+            Action onComplete = null)
+        {
+            if (targetTransform == null)
+                return null;
+                
+            // Store original values we'll revert to
+            Vector3 originalScale = targetTransform.localScale;
+            Color originalColor = targetImage != null ? targetImage.color : Color.white;
+            Color pulseColor = heartbeatColor ?? new Color(0.8f, 0.2f, 0.2f, 0.5f); // Default to reddish
+            
+            // Kill any ongoing animations
+            DOTween.Kill(targetTransform);
+            if (targetImage != null)
+                DOTween.Kill(targetImage);
+            
+            // Create the main sequence for scale animation
+            Sequence heartbeatSequence = DOTween.Sequence();
+            
+            // Add multiple pulses to the sequence
+            for (int i = 0; i < pulseCount; i++)
+            {
+                // Quick expansion (systole)
+                heartbeatSequence.Append(
+                    targetTransform.DOScale(originalScale * pulseScale, pulseDuration * 0.3f)
+                    .SetEase(Ease.OutQuad)
+                );
+                
+                // Slower contraction (diastole)
+                heartbeatSequence.Append(
+                    targetTransform.DOScale(originalScale, pulseDuration * 0.7f)
+                    .SetEase(Ease.InOutQuad)
+                );
+            }
+            
+            // Add callback to sequence if provided
+            if (onComplete != null)
+            {
+                heartbeatSequence.OnComplete(() => onComplete());
+            }
+            
+            // If we have an image component, create a parallel color sequence
+            if (targetImage != null)
+            {
+                Sequence colorSequence = DOTween.Sequence();
+                
+                for (int i = 0; i < pulseCount; i++)
+                {
+                    // Blend to highlight color
+                    colorSequence.Append(
+                        targetImage.DOColor(pulseColor, pulseDuration * 0.3f)
+                        .SetEase(Ease.OutQuad)
+                    );
+                    
+                    // Return to original color
+                    colorSequence.Append(
+                        targetImage.DOColor(originalColor, pulseDuration * 0.7f)
+                        .SetEase(Ease.InOutQuad)
+                    );
+                }
+                
+                // Play color sequence
+                colorSequence.Play();
+            }
+            
+            return heartbeatSequence;
+        }
+
         #endregion
 
         #region Utility Methods

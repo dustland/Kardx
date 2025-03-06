@@ -8,8 +8,8 @@ namespace Kardx.Core
     /// </summary>
     public class Hand : CardCollection
     {
-        private const int MAX_HAND_SIZE = 10;
-        
+        private const int MAX_HAND_SIZE = 5;
+
         public Hand(Player owner) : base(owner) { }
         
         public override void AddCard(Card card)

@@ -67,6 +67,9 @@ namespace Kardx.UI
         private TextMeshProUGUI abilityDescriptionText;
 
         [SerializeField]
+        private TextMeshProUGUI ownerText;
+
+        [SerializeField]
         private Toggle hasAttackedToggle;
 
         [Header("Card Back")]
@@ -218,6 +221,7 @@ namespace Kardx.UI
                 var categoryValue = card != null ? card.CardType?.Category : cardType?.Category;
                 var category = categoryValue.HasValue ? categoryValue.ToString() : string.Empty;
                 var categoryTag = !string.IsNullOrEmpty(category) ? category[0].ToString() : string.Empty;
+                var owner = card != null ? card.Owner.Id : string.Empty;
 
                 // Update UI elements safely
                 if (nameText != null)
@@ -266,6 +270,9 @@ namespace Kardx.UI
                     if (abilityDescriptionText != null)
                         abilityDescriptionText.text = "";
                 }
+
+                if (ownerText != null)
+                    ownerText.text = owner;
 
                 UpdateCardFrame();
                 if (card != null)

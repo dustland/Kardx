@@ -1,6 +1,8 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using DG.Tweening;
+using Kardx.Utils;
 
 namespace Kardx.UI
 {
@@ -15,6 +17,18 @@ namespace Kardx.UI
     public class OrderDropHandler : MonoBehaviour, IDropHandler
     {
         private MatchView matchView;
+
+        [SerializeField]
+        private float heartbeatDuration = 0.5f;
+
+        [SerializeField]
+        private float heartbeatScale = 1.15f;
+
+        [SerializeField]
+        private int heartbeatPulses = 2;
+
+        [SerializeField]
+        private Color heartbeatColor = new Color(0.8f, 0.2f, 0.2f, 0.5f); // Reddish glow
 
         private void Awake()
         {
@@ -106,6 +120,9 @@ namespace Kardx.UI
                 Debug.Log(
                     $"[OrderDropHandler] Order card {cardView.Card.Title} deployed successfully"
                 );
+
+                // Find the deployed card in the order area and animate it
+                PlayHeartbeatAnimation(cardView.Card);
             }
         }
 
@@ -157,6 +174,56 @@ namespace Kardx.UI
                 return false;
             }
             return true;
+        }
+
+        /// <summary>
+        /// Plays a heartbeat animation on the card in the order area to provide visual feedback
+        /// when a new order card is deployed.
+        /// </summary>
+        /// <param name="deployedCard">The card that was just deployed</param>
+        private void PlayHeartbeatAnimation(Core.Card deployedCard)
+        {
+            if (deployedCard == null)
+                return;
+
+            // Find the CardView for this card in the order area
+            // We need to search for it because the original cardView GameObject will be destroyed
+            // and a new one created in the order area
+            CardView[] cardViews = transform.GetComponentsInChildren<CardView>();
+            CardView targetCardView = null;
+
+            // Find the card view matching our deployed card
+            foreach (var cv in cardViews)
+            {
+                if (cv.Card != null && cv.Card.InstanceId.Equals(deployedCard.InstanceId))
+                {
+                    targetCardView = cv;
+                    break;
+                }
+            }
+
+            // If we found the CardView, animate it
+            if (targetCardView != null)
+            {
+                // Get the Image component to animate (card background)
+                Image cardImage = targetCardView.GetComponent<Image>();
+
+                Debug.Log($"[OrderDropHandler] Animating deployed card: {deployedCard.Title}");
+
+                // Use the DOTweenAnimationUtility to play the heartbeat animation on the card
+                DOTweenAnimationUtility.AnimateHeartbeat(
+                    targetTransform: targetCardView.transform,
+                    targetImage: cardImage,
+                    heartbeatColor: heartbeatColor,
+                    pulseScale: heartbeatScale,
+                    pulseDuration: heartbeatDuration,
+                    pulseCount: heartbeatPulses
+                );
+            }
+            else
+            {
+                Debug.LogWarning($"[OrderDropHandler] Could not find deployed card view for animation: {deployedCard.Title}");
+            }
         }
     }
 }
