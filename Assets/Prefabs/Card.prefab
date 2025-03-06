@@ -936,7 +936,7 @@ MonoBehaviour:
   deploymentCostText: {fileID: 7660826518443253100}
   operationCostText: {fileID: 3146065014060102945}
   attackText: {fileID: 5244797991633264376}
-  defenseText: {fileID: 0}
+  defenseText: {fileID: 2888376061793279572}
   abilityText: {fileID: 6103096867747156372}
   abilityDescriptionText: {fileID: 782688637163469766}
   hasAttackedToggle: {fileID: 6917065891617564501}

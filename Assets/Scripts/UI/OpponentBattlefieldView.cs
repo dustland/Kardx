@@ -173,7 +173,7 @@ namespace Kardx.UI
                 CardView cardView = slot.GetComponentInChildren<CardView>();
                 if (cardView != null && cardView.Card == card)
                 {
-                    // Play death animation instead of immediately destroying
+                    // Play death animation
                     cardView.DieWithAnimation();
                     Debug.Log($"[OpponentBattlefieldView] Removed card UI for {card.Title} with animation");
                     break;

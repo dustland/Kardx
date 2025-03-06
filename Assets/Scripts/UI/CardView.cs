@@ -3,13 +3,13 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using UnityEngine;
+using UnityEngine.UI;
+using TMPro;
+using UnityEngine.EventSystems;
 using DG.Tweening;
 using Kardx.Core;
 using Kardx.Utils;
-using TMPro;
-using UnityEngine;
-using UnityEngine.EventSystems;
-using UnityEngine.UI;
 
 namespace Kardx.UI
 {
@@ -684,6 +684,113 @@ namespace Kardx.UI
             }
         }
 
+        /// <summary>
+        /// Plays a death animation and destroys the card GameObject when complete
+        /// </summary>
+        public void DieWithAnimation()
+        {
+            // Ensure the card is visible above other elements during animation
+            transform.SetAsLastSibling();
+
+            // Get or add a CanvasGroup component for fade animation
+            CanvasGroup canvasGroup = GetComponent<CanvasGroup>();
+            if (canvasGroup == null)
+            {
+                canvasGroup = gameObject.AddComponent<CanvasGroup>();
+            }
+
+            // First slightly scale up the card for dramatic effect
+            transform.DOScale(transform.localScale * 1.2f, 0.2f)
+                .SetEase(Ease.OutBack)
+                .OnComplete(() =>
+                {
+                    // Then use the utility class for the main death animation
+                    Sequence deathSequence = DOTweenAnimationUtility.AnimateCardDeath(
+                        transform,
+                        canvasGroup,
+                        floatDistance: 50f,
+                        duration: 0.8f,
+                        onComplete: () =>
+                        {
+                            Destroy(gameObject);
+                        }
+                    );
+
+                    // Play the sequence
+                    deathSequence.Play();
+                });
+        }
+
+        /// <summary>
+        /// Plays an attack animation toward a target position or in a forward direction
+        /// </summary>
+        /// <param name="targetPosition">Position to attack toward (optional)</param>
+        /// <param name="lungeDistance">How far to lunge if no target is specified</param>
+        /// <param name="duration">Duration of the attack animation</param>
+        /// <param name="flashColor">Color to flash during impact (null for default orange flash, Color.clear for no flash)</param>
+        /// <param name="onImpactCallback">Action to execute at the moment of impact</param>
+        /// <param name="playSound">Whether to play sound effect</param>
+        /// <returns>The DOTween sequence for further chaining if needed</returns>
+        public Sequence AttackWithAnimation(
+            Vector3? targetPosition = null,
+            float lungeDistance = 30f, 
+            float duration = 0.5f,
+            Color? flashColor = null, 
+            Action onImpactCallback = null,
+            bool playSound = true)
+        {
+            // Log the attack animation
+            Debug.Log($"[CardView] Playing attack animation for card: {(card != null ? card.Title : "unknown")}");
+            
+            // Ensure the card is visible above other elements during animation
+            transform.SetAsLastSibling();
+            
+            // Play sound effect if requested
+            if (playSound)
+            {
+                // Try to play sound using a generic approach without direct AudioService reference
+                // This maintains loose coupling with the audio system
+                var audioManager = FindAnyObjectByType<MonoBehaviour>();
+                if (audioManager != null)
+                {
+                    // Try to invoke PlaySFX method via reflection if it exists
+                    var method = audioManager.GetType().GetMethod("PlaySFX");
+                    if (method != null)
+                    {
+                        try
+                        {
+                            method.Invoke(audioManager, new object[] { "CardAttack" });
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogWarning($"[CardView] Error playing attack sound: {ex.Message}");
+                        }
+                    }
+                }
+            }
+
+            // If flashColor is null, use default orange flash
+            if (flashColor == null)
+            {
+                flashColor = new Color(1f, 0.5f, 0f, 0.8f); // Orange flash
+            }
+            
+            // Use the utility class for attack animation
+            Sequence attackSequence = DOTweenAnimationUtility.AnimateCardAttack(
+                transform,
+                targetPosition,
+                lungeDistance,
+                duration,
+                flashColor,
+                onImpactCallback
+            );
+            
+            // Play the sequence
+            attackSequence.Play();
+            
+            return attackSequence;
+        }
+
         private void OnDestroy()
         {
             if (abilityDragHandler != null)
@@ -808,43 +915,6 @@ namespace Kardx.UI
             }
 
             return cardView;
-        }
-
-        /// <summary>
-        /// Plays a death animation and destroys the card GameObject when complete
-        /// </summary>
-        public void DieWithAnimation()
-        {
-            // Ensure the card is visible above other elements during animation
-            transform.SetAsLastSibling();
-
-            // Get or add a CanvasGroup component for fade animation
-            CanvasGroup canvasGroup = GetComponent<CanvasGroup>();
-            if (canvasGroup == null)
-            {
-                canvasGroup = gameObject.AddComponent<CanvasGroup>();
-            }
-
-            // First slightly scale up the card for dramatic effect
-            transform.DOScale(transform.localScale * 1.2f, 0.2f)
-                .SetEase(Ease.OutBack)
-                .OnComplete(() =>
-                {
-                    // Then use the utility class for the main death animation
-                    Sequence deathSequence = DOTweenAnimationUtility.AnimateCardDeath(
-                        transform,
-                        canvasGroup,
-                        floatDistance: 50f,
-                        duration: 0.8f,
-                        onComplete: () =>
-                        {
-                            Destroy(gameObject);
-                        }
-                    );
-
-                    // Play the sequence
-                    deathSequence.Play();
-                });
         }
     }
 }

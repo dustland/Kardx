@@ -230,6 +230,145 @@ namespace Kardx.Utils
             return sequence;
         }
 
+        /// <summary>
+        /// Animates a card attacking with a lunge forward, rotation, and optional flash effect
+        /// </summary>
+        /// <param name="cardTransform">The card's transform</param>
+        /// <param name="targetPosition">Target position to attack toward (optional)</param>
+        /// <param name="lungeDistance">How far to lunge forward if no target is specified</param>
+        /// <param name="duration">Total animation duration</param>
+        /// <param name="flashColor">Color to flash the card during attack (use Color.clear for no flash)</param>
+        /// <param name="onImpactCallback">Action to execute at the moment of impact</param>
+        /// <returns>The animation sequence</returns>
+        public static Sequence AnimateCardAttack(
+            Transform cardTransform,
+            Vector3? targetPosition = null,
+            float lungeDistance = 30f,
+            float duration = 0.5f,
+            Color? flashColor = null,
+            Action onImpactCallback = null)
+        {
+            if (cardTransform == null)
+                return null;
+
+            // Store original state
+            Vector3 originalPosition = cardTransform.position;
+            Quaternion originalRotation = cardTransform.rotation;
+            
+            // Calculate attack direction
+            Vector3 attackPosition;
+            
+            if (targetPosition.HasValue)
+            {
+                // If target specified, calculate direction toward target but not all the way
+                Vector3 direction = (targetPosition.Value - originalPosition).normalized;
+                attackPosition = originalPosition + (direction * lungeDistance);
+            }
+            else
+            {
+                // Default: lunge forward along local forward axis
+                attackPosition = originalPosition + (cardTransform.forward * lungeDistance);
+            }
+            
+            // Get sprite renderer for flash effect
+            SpriteRenderer spriteRenderer = cardTransform.GetComponentInChildren<SpriteRenderer>();
+            Image cardImage = cardTransform.GetComponentInChildren<Image>();
+            Color originalColor = Color.white;
+            
+            if (spriteRenderer != null)
+            {
+                originalColor = spriteRenderer.color;
+            }
+            else if (cardImage != null)
+            {
+                originalColor = cardImage.color;
+            }
+            
+            Sequence sequence = DOTween.Sequence();
+            
+            // Wind-up (slight pull-back and rotation)
+            sequence.Append(
+                cardTransform.DOMove(
+                    originalPosition - (attackPosition - originalPosition).normalized * 10f, 
+                    duration * 0.2f
+                ).SetEase(Ease.OutQuad)
+            );
+            
+            sequence.Join(
+                cardTransform.DORotate(
+                    new Vector3(0, 0, -5f), 
+                    duration * 0.2f
+                ).SetEase(Ease.OutQuad)
+            );
+            
+            // Attack lunge
+            sequence.Append(
+                cardTransform.DOMove(
+                    attackPosition, 
+                    duration * 0.3f
+                ).SetEase(Ease.InQuad)
+            );
+            
+            // Add rotation during attack
+            sequence.Join(
+                cardTransform.DORotate(
+                    new Vector3(0, 0, 10f), 
+                    duration * 0.3f
+                ).SetEase(Ease.InOutQuad)
+            );
+            
+            // Flash effect at impact moment
+            if (flashColor.HasValue && flashColor.Value != Color.clear)
+            {
+                if (spriteRenderer != null)
+                {
+                    sequence.InsertCallback(duration * 0.4f, () => 
+                    {
+                        spriteRenderer.color = flashColor.Value;
+                    });
+                    
+                    sequence.Insert(duration * 0.5f, 
+                        spriteRenderer.DOColor(originalColor, duration * 0.2f)
+                    );
+                }
+                else if (cardImage != null)
+                {
+                    sequence.InsertCallback(duration * 0.4f, () => 
+                    {
+                        cardImage.color = flashColor.Value;
+                    });
+                    
+                    sequence.Insert(duration * 0.5f, 
+                        cardImage.DOColor(originalColor, duration * 0.2f)
+                    );
+                }
+            }
+            
+            // Execute impact callback
+            if (onImpactCallback != null)
+            {
+                sequence.InsertCallback(duration * 0.5f, () => onImpactCallback());
+            }
+            
+            // Return to original position
+            sequence.Append(
+                cardTransform.DOMove(
+                    originalPosition, 
+                    duration * 0.3f
+                ).SetEase(Ease.OutQuad)
+            );
+            
+            // Return to original rotation
+            sequence.Join(
+                cardTransform.DORotate(
+                    originalRotation.eulerAngles, 
+                    duration * 0.3f
+                ).SetEase(Ease.OutQuad)
+            );
+            
+            return sequence;
+        }
+
         #endregion
 
         #region UI Text and Element Animations

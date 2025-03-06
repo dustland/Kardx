@@ -1,9 +1,11 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using Kardx.Core;
+using DG.Tweening;
 
 namespace Kardx.UI
 {
@@ -232,11 +234,14 @@ namespace Kardx.UI
             if (!enabled || cardView == null || !cardView.IsBeingDragged)
                 return;
 
+            // Set dragging state to false
             cardView.IsBeingDragged = false;
 
             // Check if we're over a valid target
             Card targetCard = FindTargetCardUnderPointer(eventData);
             bool isValidTarget = targetCard != null && IsValidAttackTarget(targetCard);
+            
+            // Invoke drag ended event
             OnDragEnded?.Invoke(isValidTarget);
 
             if (isValidTarget)
@@ -249,12 +254,60 @@ namespace Kardx.UI
                     Vector2 targetPosition = new Vector2(targetCardView.transform.position.x, targetCardView.transform.position.y);
                     attackArrow.UpdateEndPosition(targetPosition);
 
-                    // Initiate the attack
+                    // Play attack animation before initiating the attack in the model
+                    cardView.AttackWithAnimation(
+                        targetPosition: targetCardView.transform.position,
+                        lungeDistance: 30f,
+                        duration: 0.4f,
+                        onImpactCallback: () => {
+                            // This callback executes at the moment of impact
+                            
+                            // Simple scale pulse effect for the target card instead of shake
+                            Vector3 originalScale = targetCardView.transform.localScale;
+                            targetCardView.transform.localScale = originalScale * 1.2f; // Scale up briefly
+                            
+                            // Create a simple temporary scale animation
+                            // Schedule reset of scale without using a coroutine
+                            DOTween.Sequence()
+                                .AppendInterval(0.1f)
+                                .AppendCallback(() => {
+                                    if (targetCardView != null)
+                                        targetCardView.transform.localScale = originalScale;
+                                });
+                            
+                            // Simple color flash effect
+                            Image targetImage = targetCardView.GetComponent<Image>();
+                            if (targetImage != null)
+                            {
+                                Color originalColor = targetImage.color;
+                                targetImage.color = Color.red; // Flash red
+                                
+                                // Schedule reset of color without using a coroutine
+                                DOTween.Sequence()
+                                    .AppendInterval(0.1f)
+                                    .AppendCallback(() => {
+                                        if (targetImage != null)
+                                            targetImage.color = originalColor;
+                                    });
+                            }
+                        }
+                    ).OnComplete(() => {
+                        // This callback executes when the entire attack animation is complete
+                        // Now we can update the game model
+                        matchManager.InitiateAttack(cardView.Card, targetCard);
+                    });
+                }
+                else
+                {
+                    // Fallback if we couldn't find the CardView
+                    // Initiate the attack immediately
                     matchManager.InitiateAttack(cardView.Card, targetCard);
                 }
             }
+
             // Hide the attack arrow immediately
             attackArrow.CancelDrawing();
+            
             // Clear all highlights
             ClearAllHighlights();
         }
