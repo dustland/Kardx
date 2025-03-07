@@ -25,7 +25,7 @@ For developers who want to understand the project better:
 
 ### Prerequisites
 
-- Unity 6 (v6000.0.38f1) - [Download from Unity Hub](https://unity.com/download)
+- Unity 6 (v6000.0.41f1) - [Download from Unity Hub](https://unity.com/download)
 - Basic understanding of C# language and Unity concepts
 
 ### Required Unity Packages
