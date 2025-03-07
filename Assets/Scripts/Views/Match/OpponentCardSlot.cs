@@ -39,7 +39,7 @@ namespace Kardx.Views.Match
             if (highlightImage != null)
             {
                 highlightImage.enabled = false;
-                Debug.Log($"[OpponentCardSlot] Initialized slot {slotIndex} with highlight image: {highlightImage.name}");
+                // Debug.Log($"[OpponentCardSlot] Initialized slot {slotIndex} with highlight image: {highlightImage.name}");
             }
             else
             {
@@ -89,7 +89,7 @@ namespace Kardx.Views.Match
             // Assign it to the highlightImage field
             highlightImage = image;
 
-            Debug.Log($"[OpponentCardSlot] Created highlight image for slot {slotIndex}");
+            // Debug.Log($"[OpponentCardSlot] Created highlight image for slot {slotIndex}");
         }
 
         public void SetHighlight(Color color, bool active = true)

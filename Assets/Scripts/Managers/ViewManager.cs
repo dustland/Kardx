@@ -21,8 +21,9 @@ namespace Kardx.Managers
         [SerializeField] private CardView playerCardPrefab;
         [SerializeField] private CardView opponentCardPrefab;
 
-        private Kardx.Models.Match.MatchManager matchManager;
+        private MatchManager matchManager;
         private ViewRegistry viewRegistry = new ViewRegistry();
+        private CardDetailView cardDetailView;
 
         // Components that manage different areas of the UI
         private HandView playerHandView;
@@ -38,7 +39,7 @@ namespace Kardx.Managers
         /// <summary>
         /// Initialize with the match manager
         /// </summary>
-        public void Initialize(Kardx.Models.Match.MatchManager matchManager)
+        public void Initialize(MatchManager matchManager)
         {
             this.matchManager = matchManager;
 
@@ -49,9 +50,22 @@ namespace Kardx.Managers
             playerBattlefieldView = FindAnyObjectByType<PlayerBattlefieldView>();
             opponentBattlefieldView = FindAnyObjectByType<OpponentBattlefieldView>();
 
+            // Find the CardDetailView in the scene
+            cardDetailView = FindAnyObjectByType<CardDetailView>(FindObjectsInactive.Include);
+            if (cardDetailView == null)
+            {
+                Debug.LogWarning("[ViewManager] CardDetailView not found in scene");
+            }
+            else
+            {
+                Debug.Log("[ViewManager] Found CardDetailView in scene");
+            }
+
             // Subscribe to relevant events
             if (matchManager != null)
             {
+                matchManager.OnTurnStarted += HandleTurnStarted;
+                matchManager.OnTurnEnded += HandleTurnEnded;
                 matchManager.OnCardDeployed += HandleCardDeployed;
                 matchManager.OnCardDied += HandleCardDied;
                 matchManager.OnCardDrawn += HandleCardDrawn;
@@ -69,6 +83,8 @@ namespace Kardx.Managers
             // Unsubscribe from events
             if (matchManager != null)
             {
+                matchManager.OnTurnStarted -= HandleTurnStarted;
+                matchManager.OnTurnEnded -= HandleTurnEnded;
                 matchManager.OnCardDeployed -= HandleCardDeployed;
                 matchManager.OnCardDied -= HandleCardDied;
                 matchManager.OnCardDrawn -= HandleCardDrawn;
@@ -86,12 +102,34 @@ namespace Kardx.Managers
         public ViewRegistry Registry => viewRegistry;
 
         /// <summary>
+        /// Handle turn started event
+        /// </summary>
+        private void HandleTurnStarted(object sender, Player player)
+        {
+            // Update UI for the new turn
+            // ...
+        }
+
+        /// <summary>
+        /// Handle turn ended event
+        /// </summary>
+        private void HandleTurnEnded(object sender, Player player)
+        {
+            // Update UI for the end of the turn
+            // ...
+        }
+
+        /// <summary>
         /// Handle card drawn event
         /// </summary>
         private void HandleCardDrawn(Card card)
         {
             // Card moved from deck to hand
-            EnsureCardInCorrectArea(card, GameArea.PlayerHand);
+            // Determine the correct hand area based on the card's owner
+            GameArea targetArea = card.Owner == matchManager.Player ?
+                GameArea.PlayerHand : GameArea.OpponentHand;
+
+            EnsureCardInCorrectArea(card, targetArea);
         }
 
         /// <summary>
@@ -474,6 +512,9 @@ namespace Kardx.Managers
             // Instantiate the card view
             CardView view = Instantiate(prefab, parent);
             view.Initialize(card);
+
+            // Set the ViewManager reference
+            view.SetViewManager(this);
 
             // Register in the registry
             viewRegistry.RegisterCard(card, view);
@@ -903,6 +944,14 @@ namespace Kardx.Managers
             }
 
             return inconsistencies;
+        }
+
+        /// <summary>
+        /// Gets the CardDetailView for the current scene
+        /// </summary>
+        public CardDetailView GetCardDetailView()
+        {
+            return cardDetailView;
         }
     }
 

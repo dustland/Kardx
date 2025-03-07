@@ -12,6 +12,7 @@ using Kardx.Models.Cards;
 using Kardx.Utils;
 using Kardx.Models;
 using Kardx.Controllers.DragHandlers;
+using Kardx.Managers;
 
 namespace Kardx.Views.Cards
 {
@@ -103,16 +104,19 @@ namespace Kardx.Views.Cards
         // Event fired when this card view is destroyed
         public event Action OnDestroyed;
 
-        private static CardDetailView sharedDetailView;
-
-        public static void InitializeSharedDetailView(CardDetailView detailView)
-        {
-            sharedDetailView = detailView;
-            Debug.Log("[CardView] Initialized shared CardDetailView reference");
-        }
+        // Reference to the ViewManager
+        private ViewManager viewManager;
 
         public Card Card => card;
         public CardType CardType => cardType;
+
+        /// <summary>
+        /// Sets the ViewManager reference for this card view
+        /// </summary>
+        public void SetViewManager(ViewManager viewManager)
+        {
+            this.viewManager = viewManager;
+        }
 
         private void Awake()
         {
@@ -665,27 +669,38 @@ namespace Kardx.Views.Cards
                 return;
             }
 
-            // Shared detail view is used across all cards
-            if (sharedDetailView != null)
+            ShowDetailView();
+        }
+
+        /// <summary>
+        /// Shows the card detail view for this card
+        /// </summary>
+        public void ShowDetailView()
+        {
+            // Get the CardDetailView from the ViewManager
+            if (viewManager != null)
             {
-                Debug.Log("[CardView] Using shared card detail view");
-                if (card != null)
+                CardDetailView detailView = viewManager.GetCardDetailView();
+                if (detailView != null)
                 {
-                    Debug.Log($"[CardView] Showing card: {card.Title}");
-                    sharedDetailView.Show(card);
+                    if (card != null)
+                    {
+                        detailView.Show(card);
+                    }
+                    else if (cardType != null)
+                    {
+                        detailView.Show(cardType);
+                    }
                 }
-                else if (cardType != null)
+                else
                 {
-                    Debug.Log($"[CardView] Showing cardType: {cardType}");
-                    sharedDetailView.Show(cardType);
+                    Debug.LogWarning("[CardView] Cannot show detail view: CardDetailView not found in ViewManager");
                 }
             }
             else
             {
-                Debug.LogWarning("[CardView] No shared detail view found");
+                Debug.LogWarning("[CardView] Cannot show detail view: ViewManager reference not set");
             }
-
-            Debug.Log("[CardView] ShowDetail method completed");
         }
 
         private void ShowCardBack(bool show = true)

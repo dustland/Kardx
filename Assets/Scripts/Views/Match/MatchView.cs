@@ -21,7 +21,9 @@ namespace Kardx.Views.Match
     {
         // Match components
         [Header("Match Components")]
+        [SerializeField]
         private MatchManager matchManager;
+        [SerializeField]
         private ViewManager viewManager;
 
         // Public accessor for matchManager
@@ -57,39 +59,65 @@ namespace Kardx.Views.Match
         private TextMeshProUGUI messageText;
 
         /// <summary>
-        /// Initialize the match view with the match manager
+        /// Called when the GameObject is initialized
         /// </summary>
-        public void Initialize()
+        private void Awake()
         {
-            Debug.Log("[MatchView] Initializing match view");
+            Debug.Log("[MatchView] Awake called");
 
-            // Find the MatchManager if it's not already set
+            // Try to get the MatchManager component from the same GameObject
             if (matchManager == null)
             {
-                matchManager = FindAnyObjectByType<MatchManager>();
-                if (matchManager == null)
-                {
-                    Debug.LogError("[MatchView] Failed to find MatchManager");
-                    return;
-                }
+                Debug.LogError("[MatchView] MatchManager is null");
+                return;
             }
 
             // Create the ViewManager if needed
             if (viewManager == null)
             {
-                viewManager = gameObject.AddComponent<ViewManager>();
-                if (viewManager == null)
-                {
-                    Debug.LogError("[MatchView] Failed to create ViewManager");
-                    return;
-                }
-
-                // Initialize the ViewManager
-                viewManager.Initialize(matchManager);
-
-                // Tell the match manager about our ViewManager
-                matchManager.SetViewManager(viewManager);
+                Debug.LogError("[MatchView] ViewManager is null");
+                return;
             }
+            // Initialize the ViewManager
+            viewManager.Initialize(matchManager);
+
+            // Tell the match manager about our ViewManager
+            matchManager.SetViewManager(viewManager);
+        }
+
+        /// <summary>
+        /// Called when the GameObject is enabled and active
+        /// </summary>
+        private void Start()
+        {
+            Debug.Log("[MatchView] Start called");
+
+            // Start the match
+            if (matchManager != null)
+            {
+                // Initialize the match if needed
+                matchManager.Initialize();
+
+                Debug.Log("[MatchView] Match started");
+            }
+            else
+            {
+                Debug.LogError("[MatchView] Cannot start match: MatchManager is null");
+            }
+
+            // Initialize the match view
+            Initialize();
+
+            // Start the match
+            matchManager.StartMatch();
+        }
+
+        /// <summary>
+        /// Initialize the match view with the match manager
+        /// </summary>
+        public void Initialize()
+        {
+            Debug.Log("[MatchView] Initializing match view");
 
             // Initialize hand views
             if (playerHandView != null)
@@ -133,6 +161,8 @@ namespace Kardx.Views.Match
             if (matchManager == null) return;
 
             // Subscribe to game events (only the essential ones)
+            matchManager.OnTurnStarted += (sender, player) => UpdateUI();
+            matchManager.OnTurnEnded += (sender, player) => UpdateUI();
             matchManager.OnCardDrawn += (card) => UpdateUI();
             matchManager.OnCardDeployed += (card, position) => UpdateUI();
             matchManager.OnCardDied += (card) => UpdateUI();
@@ -189,6 +219,9 @@ namespace Kardx.Views.Match
             // Update battlefield highlights
             playerBattlefieldView?.UpdateHighlights();
             opponentBattlefieldView?.UpdateHighlights();
+
+            // Update end turn button
+            UpdateEndTurnButton();
 
             // Update layout groups to ensure proper positioning
             RefreshLayoutGroups();
@@ -251,7 +284,7 @@ namespace Kardx.Views.Match
         /// <summary>
         /// Validates that the game state is consistent
         /// </summary>
-        private void ValidateGameState()
+        public void ValidateGameState()
         {
             if (matchManager == null || viewManager == null) return;
 

@@ -47,11 +47,11 @@ namespace Kardx.Models.Match
         // Ability-related events
         public event Action<Card, Card, int, int> OnAttackCompleted;
 
-        // Event for signaling when AI needs to process its turn
-        public event Action<Board, StrategyPlanner> OnProcessAITurn;
-
         // Generic event to trigger UI updates when needed
         public event System.Action OnUIUpdateNeeded;
+
+        // Event for signaling when AI needs to process its turn
+        public event Action<Board, StrategyPlanner> OnProcessAITurn;
 
         // Reference to ViewManager instead of ViewRegistry directly
         private ViewManager viewManager;
@@ -94,19 +94,19 @@ namespace Kardx.Models.Match
         /// </summary>
         public void Initialize()
         {
-            var player1 = new Player(
-                "Player 1",
+            var player = new Player(
+                "Player",
                 LoadDeck(Faction.UnitedStates),
                 Faction.UnitedStates
             );
-            var player2 = new Player(
-                "Player 2",
+            var opponent = new Player(
+                "Opponent",
                 LoadDeck(Faction.SovietUnion),
                 Faction.SovietUnion
             );
 
             // Create a new board
-            board = new Board(player1, player2);
+            board = new Board(player, opponent);
 
             // Create the strategy planner for the opponent (player2)
             strategyPlanner = new StrategyPlanner(this, StrategySource.Dummy, logger);
@@ -169,9 +169,12 @@ namespace Kardx.Models.Match
             // If it's the opponent's turn, process it automatically
             if (!board.IsPlayerTurn())
             {
-                logger?.Log("Let the opponent run the first turn");
+                logger?.Log("[MatchManager] Let the opponent run the first turn");
 
-                // Trigger the event for the UI layer to handle AI processing
+                // Process AI turn directly
+                ProcessAITurn();
+
+                // Also trigger the event for backward compatibility
                 OnProcessAITurn?.Invoke(board, strategyPlanner);
             }
         }
@@ -194,29 +197,24 @@ namespace Kardx.Models.Match
             // Notify listeners that the turn is ending
             OnTurnEnded?.Invoke(this, currentPlayer);
 
-            // Start the next turn
-            // Switch to the next player
-            var nextPlayer = board.SwitchCurrentPlayer();
-            // Increment turn number only on player turn, so that two player will add the same credits
-            if (board.IsPlayerTurn())
-            {
-                board.IncrementTurnNumber();
-            }
+            // End the current turn in the board
+            board.EndTurn();
+
+            // Get the new current player after the board has switched
+            var nextPlayer = board.CurrentTurnPlayer;
+
             logger?.Log(
                 $"[MatchManager] Starting turn {board.TurnNumber} for player {nextPlayer.Id}"
             );
 
-            // Initialize the player for the new turn
-            // Add credits based on the turn number
-            int creditsToAdd = CREDITS_PER_TURN * board.TurnNumber;
-            nextPlayer.AddCredits(creditsToAdd);
-            logger?.Log($"[MatchManager] Added {creditsToAdd} credits to player {nextPlayer.Id}");
+            // Start the new turn in the board
+            board.StartTurn();
 
-            // Draw a card for the player
-            Card drawnCard = DrawCard();
+            // Draw a card for the current turn player
+            Card drawnCard = DrawCard(nextPlayer);
             if (drawnCard != null)
             {
-                logger?.Log($"[{CurrentPlayerId}] Card drawn: {drawnCard.Title}");
+                logger?.Log($"[{nextPlayer.Id}] Card drawn: {drawnCard.Title}");
                 OnCardDrawn?.Invoke(drawnCard);
                 TriggerUIUpdateNeeded();
             }
@@ -235,9 +233,13 @@ namespace Kardx.Models.Match
             {
                 logger?.Log("Processing opponent turn");
 
-                // Trigger the event for the UI layer to handle AI processing
+                // Process AI turn directly
+                ProcessAITurn();
+
+                // Also trigger the event for backward compatibility
                 OnProcessAITurn?.Invoke(board, strategyPlanner);
             }
+            TriggerUIUpdateNeeded();
         }
 
         private List<Card> LoadDeck(Faction ownerFaction)
@@ -272,10 +274,25 @@ namespace Kardx.Models.Match
             logger?.Log($"Match ended after {TurnNumber} turns");
         }
 
+        /// <summary>
+        /// Draws a card for the current turn player
+        /// </summary>
         public Card DrawCard()
         {
-            var player = board.CurrentTurnPlayer;
-            var drawnCard = player.DrawCard(!board.IsPlayerTurn());
+            return DrawCard(board.CurrentTurnPlayer);
+        }
+
+        /// <summary>
+        /// Draws a card for the specified player
+        /// </summary>
+        public Card DrawCard(Player player)
+        {
+            if (player == null) return null;
+
+            // Only opponent cards are face down
+            bool faceDown = player == board.Opponent;
+            var drawnCard = player.DrawCard(faceDown);
+
             if (drawnCard != null)
             {
                 logger?.Log($"[{player.Id}] Card drawn: {drawnCard.Title}");
@@ -740,6 +757,28 @@ namespace Kardx.Models.Match
         {
             Debug.Log("[MatchManager] UI update triggered");
             OnUIUpdateNeeded?.Invoke();
+        }
+
+        /// <summary>
+        /// Processes the AI turn by executing the next strategy
+        /// </summary>
+        private void ProcessAITurn()
+        {
+            if (board == null || strategyPlanner == null)
+                return;
+
+            logger?.Log("[MatchManager] Processing AI turn");
+
+            // Execute the AI's strategy
+            strategyPlanner.ExecuteNextStrategy(board);
+
+            logger?.Log("[MatchManager] AI strategy execution completed");
+
+            // Trigger UI update
+            TriggerUIUpdateNeeded();
+
+            // Wait a moment before ending the turn (but don't call NextTurn here to avoid infinite recursion)
+            System.Threading.Thread.Sleep(1000);
         }
     }
 }

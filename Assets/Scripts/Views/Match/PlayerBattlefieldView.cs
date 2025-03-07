@@ -33,11 +33,13 @@ namespace Kardx.Views.Match
         {
             this.matchManager = matchManager;
 
-            // Create slot list if needed
+            cardSlots = GetComponentsInChildren<PlayerCardSlot>().ToList();
+
             if (cardSlots == null || cardSlots.Count == 0)
             {
-                Debug.LogWarning("[PlayerBattlefieldView] No slots assigned in inspector, creating dynamically");
-                cardSlots = GetComponentsInChildren<PlayerCardSlot>(true).ToList();
+                string errorMsg = "[PlayerBattlefieldView] Failed to find any PlayerCardSlot components";
+                Debug.LogError(errorMsg);
+                throw new System.InvalidOperationException(errorMsg);
             }
 
             // Initialize all slots

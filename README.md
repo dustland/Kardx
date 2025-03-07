@@ -70,6 +70,21 @@ All code and assets are organized in the `Assets` folder:
 - **`Assets/Resources`** - Dynamically loaded art (card faces, etc.)
 - **`Assets/StreamingAssets`** - JSON data files (CardTypes, AbilityTypes)
 
+### Development Tools
+
+#### FindMissingScripts
+
+A utility editor tool to help locate GameObjects with missing script references in your scene.
+
+**Usage:**
+1. Go to the Unity menu and select `Tools > Find Missing Scripts`
+2. In the window that appears, you can:
+   - Click "Find Missing Scripts in Scene" to scan the entire scene
+   - Click "Find Missing Scripts in Selected GameObjects" to scan only selected objects
+3. Results will be logged to the Unity Console, showing which GameObjects have missing script references
+
+This tool is particularly helpful when you encounter the "The referenced script (Unknown) on this Behaviour is missing!" error, which doesn't provide location information.
+
 ## Development Tips
 
 - Read the design documents before making changes

@@ -312,7 +312,7 @@ GameObject:
   - component: {fileID: 1380644597}
   - component: {fileID: 1380644596}
   - component: {fileID: 1380644595}
-  - component: {fileID: 1380644594}
+  - component: {fileID: 1380644598}
   m_Layer: 5
   m_Name: CardButton
   m_TagString: Untagged
@@ -340,24 +340,6 @@ RectTransform:
   m_AnchoredPosition: {x: 85.696106, y: 8.276}
   m_SizeDelta: {x: 91.160706, y: 37.3642}
   m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &1380644594
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1380644592}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8011ae2e3557b45acbe44d2575f5838a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  homeScene: HomeScene
-  battleScene: Battle
-  deckBuilderScene: DeckBuilder
-  cardScene: CardScene
-  transitionDuration: 1
-  transitionEffect: {fileID: 0}
 --- !u!114 &1380644595
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -402,8 +384,8 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1380644594}
-        m_TargetAssemblyTypeName: Kardx.UI.Scenes.Common.SceneSwitcher, Assembly-CSharp
+      - m_Target: {fileID: 1380644598}
+        m_TargetAssemblyTypeName: Kardx.UI.SceneSwitcher, Assembly-CSharp
         m_MethodName: GoToCard
         m_Mode: 1
         m_Arguments:
@@ -452,6 +434,24 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1380644592}
   m_CullTransparentMesh: 1
+--- !u!114 &1380644598
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1380644592}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c137cc8af5b58436b932654cf8130718, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  homeScene: HomeScene
+  battleScene: BattleScene
+  deckBuilderScene: DeckBuilderScene
+  cardScene: CardScene
+  transitionDuration: 1
+  transitionEffect: {fileID: 0}
 --- !u!1 &1532397168
 GameObject:
   m_ObjectHideFlags: 0
@@ -537,7 +537,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 1532397174}
-        m_TargetAssemblyTypeName: Kardx.UI.Scenes.Common.SceneSwitcher, Assembly-CSharp
+        m_TargetAssemblyTypeName: Kardx.UI.SceneSwitcher, Assembly-CSharp
         m_MethodName: GoToBattle
         m_Mode: 1
         m_Arguments:
@@ -595,7 +595,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 1532397168}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8011ae2e3557b45acbe44d2575f5838a, type: 3}
+  m_Script: {fileID: 11500000, guid: c137cc8af5b58436b932654cf8130718, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   homeScene: HomeScene

@@ -1429,6 +1429,8 @@ GameObject:
   - component: {fileID: 531703577}
   - component: {fileID: 531703582}
   - component: {fileID: 531703581}
+  - component: {fileID: 531703583}
+  - component: {fileID: 531703584}
   m_Layer: 5
   m_Name: Canvas
   m_TagString: Untagged
@@ -1546,6 +1548,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 81789ee821cb5481fb460ef57e05ba7f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  matchManager: {fileID: 531703583}
   playerHandView: {fileID: 985749918}
   opponentHandView: {fileID: 1539676914}
   playerBattlefieldView: {fileID: 383897165}
@@ -1572,6 +1575,32 @@ MonoBehaviour:
   heartbeatScale: 1.15
   heartbeatPulses: 2
   heartbeatColor: {r: 0.8, g: 0.2, b: 0.2, a: 0.5}
+--- !u!114 &531703583
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 531703576}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 81b531635f6814fac8c4b1386532d96c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!114 &531703584
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 531703576}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 50b441292ac094a21b1802066c818e79, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  playerCardPrefab: {fileID: 585101378740856038, guid: 70d878790cddb4adfa555fe0cc32137d, type: 3}
+  opponentCardPrefab: {fileID: 585101378740856038, guid: 70d878790cddb4adfa555fe0cc32137d, type: 3}
 --- !u!1001 &557373776
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1981,9 +2010,9 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 531703576}
-        m_TargetAssemblyTypeName: Kardx.UI.Scenes.MatchView, Assembly-CSharp
-        m_MethodName: 
+      - m_Target: {fileID: 531703583}
+        m_TargetAssemblyTypeName: Kardx.Models.Match.MatchManager, Assembly-CSharp
+        m_MethodName: NextTurn
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -2746,7 +2775,7 @@ MonoBehaviour:
   cardSpacing: 10
   maxHandWidth: 500
   rotationAngle: {x: 0, y: 0, z: 5}
-  cardPrefab: {fileID: 0}
+  cardPrefab: {fileID: 2520979994167464494, guid: 70d878790cddb4adfa555fe0cc32137d, type: 3}
 --- !u!1 &1114451921
 GameObject:
   m_ObjectHideFlags: 0
@@ -3169,7 +3198,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1397227987}
-  - component: {fileID: 1397227986}
   m_Layer: 0
   m_Name: LogProcessor
   m_TagString: Untagged
@@ -3177,18 +3205,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1397227986
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1397227985}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 470f2763e42074b97a734d062a2d16d4, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!4 &1397227987
 Transform:
   m_ObjectHideFlags: 0
@@ -3595,7 +3611,7 @@ MonoBehaviour:
   cardSpacing: 10
   maxHandWidth: 500
   rotationAngle: {x: 0, y: 0, z: 5}
-  cardPrefab: {fileID: 0}
+  cardPrefab: {fileID: 2520979994167464494, guid: 70d878790cddb4adfa555fe0cc32137d, type: 3}
 --- !u!224 &1659547710 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 5735508668157805069, guid: ae03838d3f7f045848db334e89b85ee2, type: 3}
