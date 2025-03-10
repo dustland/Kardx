@@ -27,8 +27,10 @@ namespace Kardx.Controllers.DragHandlers
         private Vector3 originalPosition;
         private Transform originalParent;
         private CanvasGroup canvasGroup;
-        private HandView handView;
+        private PlayerHandView handView;
         private PlayerBattlefieldView battlefieldView;
+        private MatchManager matchManager;
+        private OrderDropHandler orderDropHandler;
 
         private void Awake()
         {
@@ -41,8 +43,21 @@ namespace Kardx.Controllers.DragHandlers
             }
 
             // Find the required views
-            handView = FindAnyObjectByType<HandView>();
+            handView = FindAnyObjectByType<PlayerHandView>();
             battlefieldView = FindAnyObjectByType<PlayerBattlefieldView>();
+            matchManager = FindAnyObjectByType<MatchManager>();
+            
+            // Find the OrderDropHandler in the scene
+            orderDropHandler = FindAnyObjectByType<OrderDropHandler>();
+            if (orderDropHandler != null)
+            {
+                // Initially disable the OrderDropHandler component
+                orderDropHandler.enabled = false;
+            }
+            else
+            {
+                Debug.LogWarning("[OrderDeployDragHandler] Could not find OrderDropHandler in scene");
+            }
         }
 
         /// <summary>
@@ -59,8 +74,9 @@ namespace Kardx.Controllers.DragHandlers
             }
 
             // Find the required views
-            handView = FindAnyObjectByType<HandView>();
+            handView = FindAnyObjectByType<PlayerHandView>();
             battlefieldView = FindAnyObjectByType<PlayerBattlefieldView>();
+            matchManager = FindAnyObjectByType<MatchManager>();
         }
 
         public void OnBeginDrag(PointerEventData eventData)
@@ -98,6 +114,13 @@ namespace Kardx.Controllers.DragHandlers
             {
                 battlefieldView.SetSlotsRaycastActive(false);
             }
+            
+            // Enable the OrderDropHandler component when we start dragging an order card
+            if (orderDropHandler != null)
+            {
+                orderDropHandler.enabled = true;
+                Debug.Log("[OrderDeployDragHandler] Enabled OrderDropHandler component");
+            }
         }
 
         public void OnDrag(PointerEventData eventData)
@@ -124,6 +147,13 @@ namespace Kardx.Controllers.DragHandlers
             {
                 battlefieldView.SetSlotsRaycastActive(true);
                 Debug.Log("[OrderDeployDragHandler] Re-enabled raycasting on battlefield slots");
+            }
+            
+            // Disable the OrderDropHandler component when we end dragging
+            if (orderDropHandler != null)
+            {
+                orderDropHandler.enabled = false;
+                Debug.Log("[OrderDeployDragHandler] Disabled OrderDropHandler component");
             }
 
             if (!cardView.IsBeingDragged)
@@ -171,6 +201,24 @@ namespace Kardx.Controllers.DragHandlers
             if (cardView == null || cardView.Card == null || !cardView.Card.IsOrderCard)
             {
                 Debug.LogWarning("[OrderDeployDragHandler] Cannot drag non-order card");
+                return false;
+            }
+
+            // Check if the card is on the battlefield
+            // This prevents the handler from taking over cards on the battlefield that are trying to attack
+            if (cardView.Card.Owner == null)
+            {
+                Debug.LogWarning("[OrderDeployDragHandler] Cannot drag card with no owner");
+                return false;
+            }
+
+            // Check if the card is on the battlefield by checking if it's in the player's battlefield
+            if (matchManager != null && 
+                matchManager.Player != null && 
+                matchManager.Player.Battlefield != null && 
+                matchManager.Player.Battlefield.Contains(cardView.Card))
+            {
+                Debug.LogWarning("[OrderDeployDragHandler] Cannot drag card that is already on the battlefield");
                 return false;
             }
 

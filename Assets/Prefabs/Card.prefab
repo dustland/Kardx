@@ -1081,6 +1081,7 @@ GameObject:
   - component: {fileID: 585101378740856038}
   - component: {fileID: 522997996520456043}
   - component: {fileID: 6133993442141772639}
+  - component: {fileID: 7183839654134486633}
   m_Layer: 5
   m_Name: Card
   m_TagString: Untagged
@@ -1226,6 +1227,19 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   dragOffset: 15
+--- !u!114 &7183839654134486633
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2520979994167464494}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5f97f54cbb1874654a394f6656b32bb2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  attackArrowPrefab: {fileID: 1074997326309281609, guid: 8093a8466c2af4e879823e494fd99e62, type: 3}
 --- !u!1 &2567085652576297218
 GameObject:
   m_ObjectHideFlags: 0

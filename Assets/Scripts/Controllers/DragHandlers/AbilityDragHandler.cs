@@ -356,6 +356,13 @@ namespace Kardx.Controllers.DragHandlers
 
             // Invoke the drag started event
             OnDragStarted?.Invoke();
+            
+            // Disable blocksRaycasts on this object so we can detect drops on targets
+            if (canvasGroup != null)
+            {
+                canvasGroup.blocksRaycasts = false;
+                Debug.Log("[AbilityDragHandler] Disabled blocksRaycasts to allow drops");
+            }
         }
 
         public void OnDrag(PointerEventData eventData)
@@ -421,8 +428,32 @@ namespace Kardx.Controllers.DragHandlers
             if (cardView == null)
                 return;
 
+            Debug.Log("[AbilityDragHandler] OnEndDrag called");
+            
+            // Check if we're over a valid target
+            OpponentCardSlot targetSlot = GetTargetUnderPointer(eventData);
+            if (targetSlot != null)
+            {
+                Debug.Log($"[AbilityDragHandler] Dropped on OpponentCardSlot: {targetSlot.SlotIndex}");
+                
+                // We don't need to handle the attack here
+                // Let the OpponentCardSlot.OnDrop handle it
+                // Just make sure we're not preventing the drop event
+            }
+            else
+            {
+                Debug.Log("[AbilityDragHandler] Not dropped on a valid target");
+            }
+
             // Reset dragging state
             cardView.IsBeingDragged = false;
+
+            // Re-enable blocksRaycasts
+            if (canvasGroup != null)
+            {
+                canvasGroup.blocksRaycasts = true;
+                Debug.Log("[AbilityDragHandler] Re-enabled blocksRaycasts");
+            }
 
             // Hide the attack arrow
             if (attackArrow != null)

@@ -46,7 +46,12 @@ namespace Kardx.Views.Match
             for (int i = 0; i < cardSlots.Count; i++)
             {
                 cardSlots[i].Initialize(i, this);
+                // Ensure highlights are disabled initially
+                cardSlots[i].SetHighlightState(PlayerCardSlot.HighlightType.None);
             }
+
+            // Set highlight flag to false initially
+            isHighlightingEmptySlots = false;
 
             // No event subscriptions needed - synchronization handles updates
         }
@@ -87,19 +92,14 @@ namespace Kardx.Views.Match
 
             if (card == null)
             {
-                if (isHighlightingEmptySlots)
-                {
-                    cardSlot.SetHighlight(validDropHighlightColor, true);
-                }
-                else
-                {
-                    cardSlot.ClearHighlight();
-                }
+                // Only clear highlights during normal updates
+                // Highlighting should only be set during drag operations
+                cardSlot.ClearHighlight();
             }
             else
             {
                 // Update the CardView if it exists
-                CardView cardView = cardSlot.transform.GetComponentInChildren<CardView>();
+                CardView cardView = cardSlot.GetComponentInChildren<CardView>();
                 if (cardView != null && cardView.Card == card)
                 {
                     cardView.UpdateUI();
@@ -141,6 +141,15 @@ namespace Kardx.Views.Match
             }
 
             // Continue with normal battlefield slot highlighting
+            HighlightEmptySlots();
+        }
+
+        /// <summary>
+        /// Highlight all empty slots to indicate valid drop targets.
+        /// This should only be called during drag operations.
+        /// </summary>
+        public void HighlightEmptySlots()
+        {
             if (matchManager == null)
             {
                 Debug.LogError("[PlayerBattlefieldView] Cannot highlight empty slots - matchManager is null");
@@ -148,14 +157,6 @@ namespace Kardx.Views.Match
             }
 
             Battlefield battlefield = matchManager.Player.Battlefield;
-            HighlightEmptySlots(battlefield);
-        }
-
-        /// <summary>
-        /// Highlight empty slots in the battlefield.
-        /// </summary>
-        public void HighlightEmptySlots(Battlefield battlefield)
-        {
             if (battlefield == null)
             {
                 Debug.LogError("[PlayerBattlefieldView] Cannot highlight empty slots - battlefield is null");
@@ -170,6 +171,7 @@ namespace Kardx.Views.Match
             {
                 if (battlefield.GetCardAt(i) == null)
                 {
+                    // This is explicitly during drag operations, so we set highlights
                     cardSlots[i].SetHighlightState(PlayerCardSlot.HighlightType.Available);
                     highlightedCount++;
                     Debug.Log($"[PlayerBattlefieldView] Highlighted slot {i}");
@@ -188,6 +190,21 @@ namespace Kardx.Views.Match
             {
                 slot.ClearHighlight();
             }
+        }
+
+        /// <summary>
+        /// Clear all highlights from the battlefield
+        /// </summary>
+        public void ClearHighlights()
+        {
+            isHighlightingEmptySlots = false;
+            
+            foreach (var slot in cardSlots)
+            {
+                slot.SetHighlightState(PlayerCardSlot.HighlightType.None);
+            }
+            
+            Debug.Log("[PlayerBattlefieldView] Cleared all highlights");
         }
 
         /// <summary>
@@ -234,7 +251,8 @@ namespace Kardx.Views.Match
             }
 
             PlayerCardSlot slot = cardSlots[slotIndex];
-            Transform slotTransform = slot.transform;
+            GameObject slotGameObject = slot.gameObject;
+            Transform slotTransform = slotGameObject.transform;
 
             // Check if there's already a view for this card
             CardView existingView = null;
@@ -342,7 +360,7 @@ namespace Kardx.Views.Match
                 detachedCardView.SwitchToAbilityDragHandler();
 
                 // Update player's hand to reflect the card being removed
-                var handView = FindAnyObjectByType<HandView>();
+                var handView = FindAnyObjectByType<PlayerHandView>();
                 if (handView != null)
                 {
                     handView.UpdateHand();
@@ -371,13 +389,16 @@ namespace Kardx.Views.Match
             foreach (var slot in cardSlots)
             {
                 // Find the CardView component in the children of the slot
-                CardView cardView = slot.GetComponentInChildren<CardView>();
-                if (cardView != null && cardView.Card == card)
+                CardView[] cardViews = slot.gameObject.GetComponentsInChildren<CardView>();
+                foreach (CardView cardView in cardViews)
                 {
-                    // Play death animation instead of immediately destroying
-                    cardView.DieWithAnimation();
-                    Debug.Log($"[PlayerBattlefieldView] Removed card UI for {card.Title} with animation");
-                    break;
+                    if (cardView != null && cardView.Card == card)
+                    {
+                        // Play death animation instead of immediately destroying
+                        cardView.DieWithAnimation();
+                        Debug.Log($"[PlayerBattlefieldView] Removed card UI for {card.Title} with animation");
+                        break;
+                    }
                 }
             }
         }
@@ -392,14 +413,14 @@ namespace Kardx.Views.Match
             foreach (var slot in cardSlots)
             {
                 // Get all graphics on the slot
-                Graphic[] graphics = slot.GetComponentsInChildren<Graphic>();
+                Graphic[] graphics = slot.gameObject.GetComponentsInChildren<Graphic>();
                 foreach (var graphic in graphics)
                 {
                     graphic.raycastTarget = active;
                 }
 
                 // Toggle collider if present
-                Collider2D collider = slot.GetComponent<Collider2D>();
+                Collider2D collider = slot.gameObject.GetComponent<Collider2D>();
                 if (collider != null)
                 {
                     collider.enabled = active;
@@ -407,10 +428,20 @@ namespace Kardx.Views.Match
             }
         }
 
+        /// <summary>
+        /// Enable or disable the highlight logic for empty slots.
+        /// This should only be used during drag operations to control highlighting behavior.
+        /// </summary>
         public void SetHighlightLogic(bool highlightEnabled)
         {
             isHighlightingEmptySlots = highlightEnabled;
-            UpdateHighlights();
+            
+            // If disabling highlights, clear them all
+            if (!highlightEnabled)
+            {
+                ClearHighlights();
+            }
+            // Otherwise, UpdateHighlights will be called by the drag handler when needed
         }
 
         /// <summary>
@@ -420,26 +451,11 @@ namespace Kardx.Views.Match
         {
             if (matchManager == null) return;
 
-            // Check if it's the player's turn
-            bool isPlayerTurn = matchManager.IsPlayerTurn();
-            bool hasCredits = matchManager.Player.Credits > 0;
-
-            // Only highlight empty slots during player's turn if they have credits
-            bool canDeploy = isPlayerTurn && hasCredits;
-
-            // Update each slot's highlight state
+            // During normal UI updates, we only clear highlights
+            // Highlights should only be set during drag operations
             foreach (var slot in cardSlots)
             {
-                // Only highlight empty slots
-                bool isEmpty = !slot.HasCard();
-                if (canDeploy && isEmpty)
-                {
-                    slot.SetHighlightState(PlayerCardSlot.HighlightType.Available);
-                }
-                else
-                {
-                    slot.SetHighlightState(PlayerCardSlot.HighlightType.None);
-                }
+                slot.SetHighlightState(PlayerCardSlot.HighlightType.None);
             }
         }
 

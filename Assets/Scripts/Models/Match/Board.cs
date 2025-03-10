@@ -72,6 +72,11 @@ namespace Kardx.Models.Match
             return currentTurnPlayer == player;
         }
 
+        public bool IsOpponentTurn()
+        {
+            return currentTurnPlayer == opponent;
+        }
+
         /// <summary>
         /// Ends the current turn.
         /// </summary>
@@ -95,8 +100,8 @@ namespace Kardx.Models.Match
             // Refresh the current player's resources
             currentTurnPlayer.AddCredits(Player.CREDITS_PER_TURN);
 
-            // Reset attack counts for all cards would be implemented here
-            // This functionality would need to be added to Battlefield class
+            // Reset attack status for all cards
+            currentTurnPlayer.ResetCardAttackStatus();
         }
 
         /// <summary>

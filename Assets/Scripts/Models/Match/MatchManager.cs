@@ -149,16 +149,16 @@ namespace Kardx.Models.Match
             StartTurn();
         }
 
+        /// <summary>
+        /// Starts a turn for the current player
+        /// </summary>
         private void StartTurn()
         {
-            // Notify listeners that a new turn is starting
-            OnTurnStarted?.Invoke(this, board.CurrentTurnPlayer);
+            // Start the new turn in the board
+            board.StartTurn();
 
-            // Reset card attack status
-            board.CurrentTurnPlayer.ResetCardAttackStatus();
-
-            // Draw a card as the frist step for each turn
-            Card drawnCard = DrawCard(); // Player cards are face up
+            // Draw a card for the current turn player
+            Card drawnCard = DrawCard(board.CurrentTurnPlayer);
             if (drawnCard != null)
             {
                 logger?.Log($"[{CurrentPlayerId}] Card drawn: {drawnCard.Title}");
@@ -166,28 +166,35 @@ namespace Kardx.Models.Match
                 TriggerUIUpdateNeeded();
             }
 
-            // If it's the opponent's turn, process it automatically
-            if (!board.IsPlayerTurn())
-            {
-                logger?.Log("[MatchManager] Let the opponent run the first turn");
+            // Notify listeners that a new turn is starting
+            OnTurnStarted?.Invoke(this, board.CurrentTurnPlayer);
 
-                // Process AI turn directly
-                ProcessAITurn();
+            // If it's the opponent's turn, let AI handle the deployment automatically
+            if (board.IsOpponentTurn())
+            {
+                logger?.Log("[MatchManager] Let the opponent run the turn");
+
+                // Execute AI strategy
+                strategyPlanner?.ExecuteNextStrategy(board);
 
                 // Also trigger the event for backward compatibility
                 OnProcessAITurn?.Invoke(board, strategyPlanner);
+
+                // Wait a short delay before ending the AI turn
+                // In a real implementation, you might want to use a coroutine or async method
+                logger?.Log("[MatchManager] AI turn complete, ending turn");
+                NextTurn();
             }
         }
 
         /// <summary>
-        /// Advances to the next turn in the game.
+        /// Ends the current turn
         /// </summary>
-        public void NextTurn()
+        private void EndTurn()
         {
             if (board == null)
-                throw new InvalidOperationException("Match not started");
+                return;
 
-            // End the current turn
             var currentPlayer = board.CurrentTurnPlayer;
             logger?.Log($"[MatchManager] Ending turn for player {currentPlayer.Id}");
 
@@ -200,6 +207,21 @@ namespace Kardx.Models.Match
             // End the current turn in the board
             board.EndTurn();
 
+            // Process start of turn effects for the next turn
+            board.ProcessStartOfTurnEffects();
+        }
+
+        /// <summary>
+        /// Advances to the next turn in the game.
+        /// </summary>
+        public void NextTurn()
+        {
+            if (board == null)
+                return;
+
+            // End the current turn
+            EndTurn();
+
             // Get the new current player after the board has switched
             var nextPlayer = board.CurrentTurnPlayer;
 
@@ -207,38 +229,9 @@ namespace Kardx.Models.Match
                 $"[MatchManager] Starting turn {board.TurnNumber} for player {nextPlayer.Id}"
             );
 
-            // Start the new turn in the board
-            board.StartTurn();
+            // Start the turn logic
+            StartTurn();
 
-            // Draw a card for the current turn player
-            Card drawnCard = DrawCard(nextPlayer);
-            if (drawnCard != null)
-            {
-                logger?.Log($"[{nextPlayer.Id}] Card drawn: {drawnCard.Title}");
-                OnCardDrawn?.Invoke(drawnCard);
-                TriggerUIUpdateNeeded();
-            }
-
-            // Process start of turn effects
-            board.ProcessStartOfTurnEffects();
-
-            // Notify listeners that a new turn is starting
-            OnTurnStarted?.Invoke(this, nextPlayer);
-
-            // Reset card attack status for both players
-            nextPlayer.ResetCardAttackStatus();
-
-            // If it's the opponent's turn, process it automatically
-            if (!board.IsPlayerTurn())
-            {
-                logger?.Log("Processing opponent turn");
-
-                // Process AI turn directly
-                ProcessAITurn();
-
-                // Also trigger the event for backward compatibility
-                OnProcessAITurn?.Invoke(board, strategyPlanner);
-            }
             TriggerUIUpdateNeeded();
         }
 
@@ -272,14 +265,6 @@ namespace Kardx.Models.Match
             IsMatchInProgress = false;
             OnMatchEnded?.Invoke($"Match ended after {TurnNumber} turns");
             logger?.Log($"Match ended after {TurnNumber} turns");
-        }
-
-        /// <summary>
-        /// Draws a card for the current turn player
-        /// </summary>
-        public Card DrawCard()
-        {
-            return DrawCard(board.CurrentTurnPlayer);
         }
 
         /// <summary>
@@ -757,28 +742,6 @@ namespace Kardx.Models.Match
         {
             Debug.Log("[MatchManager] UI update triggered");
             OnUIUpdateNeeded?.Invoke();
-        }
-
-        /// <summary>
-        /// Processes the AI turn by executing the next strategy
-        /// </summary>
-        private void ProcessAITurn()
-        {
-            if (board == null || strategyPlanner == null)
-                return;
-
-            logger?.Log("[MatchManager] Processing AI turn");
-
-            // Execute the AI's strategy
-            strategyPlanner.ExecuteNextStrategy(board);
-
-            logger?.Log("[MatchManager] AI strategy execution completed");
-
-            // Trigger UI update
-            TriggerUIUpdateNeeded();
-
-            // Wait a moment before ending the turn (but don't call NextTurn here to avoid infinite recursion)
-            System.Threading.Thread.Sleep(1000);
         }
     }
 }

@@ -32,9 +32,9 @@ namespace Kardx.Views.Match
         // Hand View references
         [Header("Hand View References")]
         [SerializeField]
-        private HandView playerHandView;
+        private PlayerHandView playerHandView;
         [SerializeField]
-        private HandView opponentHandView;
+        private OpponentHandView opponentHandView;
 
         // Battlefield View references
         [Header("Battlefield View References")]
@@ -187,9 +187,6 @@ namespace Kardx.Views.Match
 
             // Update the UI
             UpdateUI();
-
-            // Enable/disable the end turn button based on current turn
-            UpdateEndTurnButton();
         }
 
         /// <summary>
@@ -213,8 +210,8 @@ namespace Kardx.Views.Match
             // Update resource displays
             UpdateResourceDisplay();
 
-            // Synchronize all card views with model state
-            viewManager.SynchronizeAllCardViews();
+            // Update all card views with model state
+            viewManager.UpdateView();
 
             // Update battlefield highlights
             playerBattlefieldView?.UpdateHighlights();

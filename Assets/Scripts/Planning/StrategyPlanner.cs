@@ -254,7 +254,7 @@ namespace Kardx.Planning
                 case DecisionType.EndTurn:
                     // End turn is handled by the MatchManager after strategy execution
                     logger?.Log($"End turn action");
-                    matchManager.NextTurn();
+                    // Removed direct NextTurn call - MatchManager will handle this explicitly
                     break;
 
                 default:

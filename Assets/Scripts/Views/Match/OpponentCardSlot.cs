@@ -18,6 +18,12 @@ namespace Kardx.Views.Match
         [SerializeField]
         private Transform cardContainer;
 
+        [SerializeField]
+        private Color targetableHighlightColor = new Color(1.0f, 0.5f, 0.0f, 0.5f);
+
+        [SerializeField]
+        private Color selectedHighlightColor = new Color(1.0f, 1.0f, 0.0f, 0.5f);
+
         private int slotIndex;
         private OpponentBattlefieldView battlefieldView;
         private bool isHighlighted = false;
@@ -114,6 +120,7 @@ namespace Kardx.Views.Match
 
         public void OnDrop(PointerEventData eventData)
         {
+            Debug.Log($"[OpponentCardSlot] OnDrop - slotIndex: {slotIndex}");
             // Get the card view from the dragged object
             CardView sourceCardView = eventData.pointerDrag?.GetComponent<CardView>();
             if (sourceCardView == null || sourceCardView.Card == null)
@@ -137,6 +144,10 @@ namespace Kardx.Views.Match
                 bool attackSuccess = matchManager.InitiateAttack(attackingCard, targetCard);
 
                 // The UI will be updated through events from MatchManager
+            }
+            else
+            {
+                Debug.LogWarning($"[OpponentCardSlot] Invalid attack: {attackingCard?.Title} to {targetCard?.Title}");
             }
 
             // Return the attacking card to its original position (handled by UnitAttackDragHandler)
@@ -167,7 +178,7 @@ namespace Kardx.Views.Match
             if (shouldHighlight)
             {
                 // Use a standard highlight color for targetable cards
-                SetHighlight(new Color(1f, 0.5f, 0f, 0.5f), true); // Orange highlight
+                SetHighlight(targetableHighlightColor, true);
             }
             else
             {

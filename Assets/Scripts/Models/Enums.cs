@@ -40,11 +40,23 @@ namespace Kardx.Models
     public enum GameArea
     {
         None,
-        Hand,
-        Battlefield,
-        DiscardPile,
-        Deck,
-        Exile
+        PlayerHand,
+        OpponentHand,
+        PlayerBattlefield,
+        OpponentBattlefield,
+        PlayerDiscardPile,
+        OpponentDiscardPile,
+        PlayerDeck,
+        OpponentDeck,
+        PlayerExile,
+        OpponentExile,
+        
+        // Keep these for backward compatibility
+        Hand = PlayerHand,
+        Battlefield = PlayerBattlefield,
+        DiscardPile = PlayerDiscardPile,
+        Deck = PlayerDeck,
+        Exile = PlayerExile
     }
 
     public enum ModifierType

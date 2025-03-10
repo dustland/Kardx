@@ -79,7 +79,9 @@ namespace Kardx.Views.Match
             if (slotIndex < 0 || slotIndex >= slots.Count)
                 return;
 
-            var cardSlot = slots[slotIndex];
+            OpponentCardSlot slot = slots[slotIndex];
+            GameObject slotGameObject = slot.gameObject;
+            Transform slotTransform = slotGameObject.transform;
 
             // This method should only update visual properties of the slot
             // based on the card's presence or absence
@@ -90,15 +92,15 @@ namespace Kardx.Views.Match
             if (card == null)
             {
                 // No card in this slot, make sure it's not highlighted
-                cardSlot.ClearHighlight();
+                slot.ClearHighlight();
             }
             else
             {
                 // Card is present, update visual state as needed
                 // but don't create/destroy the card GameObject
 
-                // Update the CardView if it exists
-                CardView cardView = cardSlot.transform.GetComponentInChildren<CardView>();
+                // Update the card's UI
+                CardView cardView = slotGameObject.GetComponentInChildren<CardView>();
                 if (cardView != null && cardView.Card == card)
                 {
                     cardView.UpdateUI();
@@ -108,11 +110,11 @@ namespace Kardx.Views.Match
                 // For example, if this card is targetable by an ability
                 if (isHighlightingCards)
                 {
-                    cardSlot.SetHighlight(validTargetHighlightColor, true);
+                    slot.SetHighlight(validTargetHighlightColor, true);
                 }
                 else
                 {
-                    cardSlot.ClearHighlight();
+                    slot.ClearHighlight();
                 }
             }
         }
@@ -169,7 +171,7 @@ namespace Kardx.Views.Match
             foreach (var slot in slots)
             {
                 // Find the CardView component in the children of the slot
-                CardView cardView = slot.GetComponentInChildren<CardView>();
+                CardView cardView = slot.gameObject.GetComponentInChildren<CardView>();
                 if (cardView != null && cardView.Card == card)
                 {
                     // Play death animation
@@ -302,7 +304,8 @@ namespace Kardx.Views.Match
             }
 
             OpponentCardSlot slot = slots[slotIndex];
-            Transform slotTransform = slot.transform;
+            GameObject slotGameObject = slot.gameObject;
+            Transform slotTransform = slotGameObject.transform;
 
             // Check if there's already a view for this card
             CardView existingView = null;
@@ -314,7 +317,7 @@ namespace Kardx.Views.Match
             if (existingView != null)
             {
                 // Reparent the existing view to this slot
-                existingView.transform.SetParent(slotTransform);
+                existingView.transform.SetParent(slotTransform, false);
                 existingView.transform.localPosition = Vector3.zero;
                 existingView.transform.localRotation = Quaternion.identity;
                 existingView.transform.localScale = Vector3.one;
@@ -384,7 +387,7 @@ namespace Kardx.Views.Match
                 Debug.Log($"[OpponentBattlefieldView] Deploying card {card.Title} to slot {slotIndex}");
 
                 // Place the card in the slot
-                cardView.transform.SetParent(targetSlot.CardContainer, false);
+                cardView.transform.SetParent(targetSlot.transform, false);
                 cardView.transform.localPosition = Vector3.zero;
 
                 return true;
