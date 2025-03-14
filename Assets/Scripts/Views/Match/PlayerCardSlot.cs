@@ -25,68 +25,96 @@ namespace Kardx.Views.Match
         }
 
         [SerializeField]
-        private Image highlightImage;
+        private Color validDropHighlightColor = new Color(0.0f, 1.0f, 0.0f, 0.5f);
 
         [SerializeField]
-        private Transform cardContainer;
-
-        [SerializeField]
-        private Color availableHighlightColor = new Color(0.0f, 1.0f, 0.0f, 0.3f);
-
-        [SerializeField]
-        private Color dropTargetHighlightColor = new Color(0.0f, 1.0f, 0.0f, 0.6f);
+        private Color invalidDropHighlightColor = new Color(1.0f, 0.0f, 0.0f, 0.5f);
 
         [SerializeField]
         private Color selectedHighlightColor = new Color(1.0f, 1.0f, 0.0f, 0.5f);
 
-        [SerializeField]
-        private Color invalidHighlightColor = new Color(1.0f, 0.0f, 0.0f, 0.3f);
-
+        private Image highlightImage;
         private int slotIndex;
         private PlayerBattlefieldView battlefieldView;
-        private HighlightType currentHighlightType = HighlightType.None;
-        private HighlightType previousHighlightType = HighlightType.None;
+        private bool isHighlighted = false;
 
         public int SlotIndex => slotIndex;
-        public Transform CardContainer => cardContainer ?? transform;
+        
+        public Transform CardContainer => transform;
+
+        private void Awake()
+        {
+            // Ensure we have an Image component for raycasting
+            Image image = GetComponent<Image>();
+            if (image == null)
+            {
+                image = gameObject.AddComponent<Image>();
+                // Make it transparent but raycast target
+                image.color = new Color(0, 0, 0, 0.01f); // Very slight alpha to ensure raycasting works
+            }
+            else
+            {
+                // Make sure the image has some alpha for raycasting
+                Color color = image.color;
+                if (color.a <= 0)
+                {
+                    color.a = 0.01f; // Very slight alpha to ensure raycasting works
+                    image.color = color;
+                }
+            }
+            
+            // Ensure raycast target is enabled
+            image.raycastTarget = true;
+            
+            // Get the highlight image if it exists
+            highlightImage = transform.Find("Highlight")?.GetComponent<Image>();
+            if (highlightImage == null)
+            {
+                // Create a highlight image if it doesn't exist
+                GameObject highlightObj = new GameObject("Highlight");
+                highlightObj.transform.SetParent(transform);
+                highlightObj.transform.localPosition = Vector3.zero;
+                highlightObj.transform.localScale = Vector3.one;
+                
+                // Make the highlight fill the slot
+                RectTransform highlightRect = highlightObj.AddComponent<RectTransform>();
+                highlightRect.anchorMin = Vector2.zero;
+                highlightRect.anchorMax = Vector2.one;
+                highlightRect.offsetMin = Vector2.zero;
+                highlightRect.offsetMax = Vector2.zero;
+                
+                // Add the image component
+                highlightImage = highlightObj.AddComponent<Image>();
+                highlightImage.color = validDropHighlightColor;
+                highlightImage.enabled = false;
+                highlightImage.raycastTarget = false; // Don't block raycasts on the highlight
+            }
+            else
+            {
+                // Make sure the highlight doesn't block raycasts
+                highlightImage.raycastTarget = false;
+            }
+
+            // Make sure this GameObject has a RectTransform
+            if (GetComponent<RectTransform>() == null)
+            {
+                Debug.LogError("[PlayerCardSlot] Missing RectTransform component!");
+            }
+        }
 
         public void Initialize(int slotIndex, PlayerBattlefieldView battlefieldView)
         {
             this.slotIndex = slotIndex;
             this.battlefieldView = battlefieldView;
-
-            // Initialize highlight
-            if (highlightImage == null)
+            
+            // If the battlefield view wasn't set in Awake, set it now
+            if (this.battlefieldView == null)
             {
-                // Create highlight image if it doesn't exist
-                GameObject highlightObj = new GameObject("Highlight");
-                highlightObj.transform.SetParent(transform, false);
-                highlightObj.transform.SetAsFirstSibling(); // Put it at the back
-
-                // Make it fill the slot
-                RectTransform rectTransform = highlightObj.AddComponent<RectTransform>();
-                rectTransform.anchorMin = Vector2.zero;
-                rectTransform.anchorMax = Vector2.one;
-                rectTransform.offsetMin = Vector2.zero;
-                rectTransform.offsetMax = Vector2.zero;
-
-                // Add image component
-                highlightImage = highlightObj.AddComponent<Image>();
-                highlightImage.color = availableHighlightColor;
-                highlightImage.raycastTarget = false; // Don't block raycasts
+                this.battlefieldView = battlefieldView;
             }
 
-            // Ensure highlight is initially disabled
-            if (highlightImage != null)
-            {
-                highlightImage.gameObject.SetActive(false);
-            }
-
-            // Initialize card container if not set
-            if (cardContainer == null)
-            {
-                cardContainer = transform;
-            }
+            // Log that we're ready to receive drops
+            Debug.Log($"[PlayerCardSlot] Initialized slot {slotIndex} with raycastTarget={GetComponent<Image>()?.raycastTarget ?? false}");
         }
 
         /// <summary>
@@ -94,40 +122,34 @@ namespace Kardx.Views.Match
         /// </summary>
         public void SetHighlightState(HighlightType highlightType)
         {
-            if (currentHighlightType != highlightType)
+            if (highlightImage == null)
+                return;
+
+            switch (highlightType)
             {
-                previousHighlightType = currentHighlightType;
-                currentHighlightType = highlightType;
+                case HighlightType.None:
+                    highlightImage.enabled = false;
+                    break;
 
-                if (highlightImage == null)
-                    return;
+                case HighlightType.Available:
+                    highlightImage.enabled = true;
+                    highlightImage.color = validDropHighlightColor;
+                    break;
 
-                switch (highlightType)
-                {
-                    case HighlightType.None:
-                        highlightImage.gameObject.SetActive(false);
-                        break;
+                case HighlightType.DropTarget:
+                    highlightImage.enabled = true;
+                    highlightImage.color = validDropHighlightColor;
+                    break;
 
-                    case HighlightType.Available:
-                        highlightImage.gameObject.SetActive(true);
-                        highlightImage.color = availableHighlightColor;
-                        break;
+                case HighlightType.Selected:
+                    highlightImage.enabled = true;
+                    highlightImage.color = selectedHighlightColor;
+                    break;
 
-                    case HighlightType.DropTarget:
-                        highlightImage.gameObject.SetActive(true);
-                        highlightImage.color = dropTargetHighlightColor;
-                        break;
-
-                    case HighlightType.Selected:
-                        highlightImage.gameObject.SetActive(true);
-                        highlightImage.color = selectedHighlightColor;
-                        break;
-
-                    case HighlightType.Invalid:
-                        highlightImage.gameObject.SetActive(true);
-                        highlightImage.color = invalidHighlightColor;
-                        break;
-                }
+                case HighlightType.Invalid:
+                    highlightImage.enabled = true;
+                    highlightImage.color = invalidDropHighlightColor;
+                    break;
             }
         }
 
@@ -136,7 +158,19 @@ namespace Kardx.Views.Match
         /// </summary>
         public HighlightType GetHighlightState()
         {
-            return currentHighlightType;
+            if (highlightImage.enabled)
+            {
+                if (highlightImage.color == validDropHighlightColor)
+                    return HighlightType.Available;
+                else if (highlightImage.color == selectedHighlightColor)
+                    return HighlightType.Selected;
+                else if (highlightImage.color == invalidDropHighlightColor)
+                    return HighlightType.Invalid;
+                else
+                    return HighlightType.DropTarget;
+            }
+            else
+                return HighlightType.None;
         }
 
         /// <summary>
@@ -146,7 +180,7 @@ namespace Kardx.Views.Match
         {
             if (highlightImage != null)
             {
-                highlightImage.gameObject.SetActive(active);
+                highlightImage.enabled = active;
                 highlightImage.color = color;
             }
         }
@@ -165,7 +199,7 @@ namespace Kardx.Views.Match
         /// <param name="intensity">Intensity multiplier (1.0f is normal)</param>
         public void SetHighlightIntensity(float intensity)
         {
-            if (highlightImage != null && highlightImage.gameObject.activeSelf)
+            if (highlightImage != null && highlightImage.enabled)
             {
                 // Get current color and adjust alpha based on intensity
                 Color currentColor = highlightImage.color;
@@ -217,11 +251,11 @@ namespace Kardx.Views.Match
         public void OnPointerExit(PointerEventData eventData)
         {
             // Check the current highlight state to determine what to do
-            if (currentHighlightType == HighlightType.DropTarget)
+            if (GetHighlightState() == HighlightType.DropTarget)
             {
                 // If this was highlighted as DropTarget, restore the previous state
                 // (which might be Available or None)
-                SetHighlightState(previousHighlightType);
+                SetHighlightState(HighlightType.None);
             }
         }
 
@@ -229,7 +263,7 @@ namespace Kardx.Views.Match
         {
             if (!IsHighlighted())
             {
-                Debug.LogWarning($"[PlayerCardSlot] Card slot {slotIndex} is not a valid drop target. Current highlight: {currentHighlightType}");
+                Debug.LogWarning($"[PlayerCardSlot] Card slot {slotIndex} is not a valid drop target. Current highlight: {GetHighlightState()}");
                 return;
             }
 
@@ -281,55 +315,52 @@ namespace Kardx.Views.Match
             battlefieldView.ClearCardHighlights();
         }
 
-        // Adds a public getter to check if this slot has a card
-        public bool HasCard()
+        public void AddCard(CardView cardView)
         {
-            return CardContainer.GetComponentInChildren<CardView>() != null;
+            if (cardView == null)
+                return;
+
+            // Set the card's parent directly to this slot (not to a container)
+            cardView.transform.SetParent(transform);
+            cardView.transform.localPosition = Vector3.zero;
+            cardView.transform.localScale = Vector3.one;
         }
 
-        // Adds a public getter to get the current card view
         public CardView GetCardView()
         {
-            return CardContainer.GetComponentInChildren<CardView>();
+            // Look for a CardView directly in the children of this slot
+            // Skip the Highlight object
+            foreach (Transform child in transform)
+            {
+                if (child.name != "Highlight")
+                {
+                    CardView cardView = child.GetComponent<CardView>();
+                    if (cardView != null)
+                        return cardView;
+                }
+            }
+            return null;
+        }
+
+        public void RemoveCard()
+        {
+            CardView cardView = GetCardView();
+            if (cardView != null)
+            {
+                Destroy(cardView.gameObject);
+            }
+        }
+
+        public bool HasCard()
+        {
+            return GetCardView() != null;
         }
 
         private bool IsHighlighted()
         {
             // Accept both DropTarget and Available states as valid drop targets
-            return currentHighlightType == HighlightType.DropTarget ||
-                   currentHighlightType == HighlightType.Available;
+            return GetHighlightState() == HighlightType.DropTarget ||
+                   GetHighlightState() == HighlightType.Available;
         }
-
-        /// <summary>
-        /// Restore the previous highlight state
-        /// </summary>
-        public void RestorePreviousHighlight()
-        {
-            SetHighlightState(previousHighlightType);
-        }
-
-        /// <summary>
-        /// Updates the highlight state of this slot based on the provided condition
-        /// </summary>
-        /// <param name="canDeploy">Whether cards can be deployed to this slot</param>
-        public void UpdateHighlight(bool canDeploy)
-        {
-            // If the slot can accept deployments, highlight it as available
-            // unless it already has a different highlight state (like selected or drop target)
-            if (canDeploy && currentHighlightType == HighlightType.None)
-            {
-                SetHighlightState(HighlightType.Available);
-            }
-            // If the slot cannot accept deployments, clear the highlight
-            // unless it has a different highlight state
-            else if (!canDeploy && currentHighlightType == HighlightType.Available)
-            {
-                SetHighlightState(HighlightType.None);
-            }
-        }
-
-        /// <summary>
-        /// Checks if this slot has a card
-        /// </summary>
     }
 }

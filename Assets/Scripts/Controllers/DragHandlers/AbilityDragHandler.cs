@@ -15,12 +15,11 @@ namespace Kardx.Controllers.DragHandlers
     [RequireComponent(typeof(CardView))]
     public class AbilityDragHandler
         : MonoBehaviour,
-            IPointerDownHandler,
-            IPointerUpHandler,
-            IDragHandler,
             IBeginDragHandler,
+            IDragHandler,
             IEndDragHandler,
-            IPointerExitHandler
+            IPointerDownHandler,
+            IPointerUpHandler
     {
         [SerializeField]
         private GameObject attackArrowPrefab;
@@ -29,11 +28,9 @@ namespace Kardx.Controllers.DragHandlers
         private AttackArrow attackArrow;
         private Canvas canvas;
         private CanvasGroup canvasGroup;
-        private UnitDeployDragHandler deployDragHandler;
-        private MatchView matchView;
         private MatchManager matchManager;
-        private Vector2 pointerStartPosition;
-        private OpponentCardSlot currentTarget = null;
+        private UnitDeployDragHandler deployDragHandler;
+        private OpponentBattlefieldView opponentBattlefieldView;
 
         // Events for drag state
         public event Action OnDragStarted;
@@ -42,136 +39,64 @@ namespace Kardx.Controllers.DragHandlers
 
         private void Awake()
         {
+            // Cache component references
             cardView = GetComponent<CardView>();
+            canvasGroup = GetComponent<CanvasGroup>();
             deployDragHandler = GetComponent<UnitDeployDragHandler>();
 
-            // Find Canvas
+            // Find the canvas
             canvas = GetComponentInParent<Canvas>();
             if (canvas == null)
             {
                 canvas = FindAnyObjectByType<Canvas>();
-                Debug.LogWarning("[AbilityDragHandler] No canvas found in parents, using any canvas in scene");
+                if (canvas == null)
+                {
+                    Debug.LogError("[AbilityDragHandler] No canvas found in scene");
+                }
             }
 
-            // Find CanvasGroup
-            canvasGroup = GetComponent<CanvasGroup>();
-            if (canvasGroup == null)
-            {
-                canvasGroup = gameObject.AddComponent<CanvasGroup>();
-            }
-
-            // Find MatchView and MatchManager
-            matchView = FindAnyObjectByType<MatchView>();
-            if (matchView == null)
-            {
-                Debug.LogError("[AbilityDragHandler] No MatchView found in the scene.");
-                return;
-            }
-            matchManager = matchView.MatchManager;
-
+            // Find the opponent battlefield view in the scene
+            opponentBattlefieldView = FindAnyObjectByType<OpponentBattlefieldView>();
+            
+            // Get reference to match manager
+            matchManager = FindAnyObjectByType<MatchManager>();
             if (matchManager == null)
             {
-                Debug.LogError("[AbilityDragHandler] Cannot find MatchManager reference");
-                return;
+                Debug.LogError("[AbilityDragHandler] No MatchManager found in scene");
             }
-
-            InitializeAttackArrow();
-        }
-
-        private void InitializeAttackArrow()
-        {
-            // Find or create the attack arrow
-            if (attackArrow == null)
-            {
-                attackArrow = FindAnyObjectByType<AttackArrow>(FindObjectsInactive.Include);
-                if (attackArrow == null && attackArrowPrefab != null)
-                {
-                    GameObject arrowObj = Instantiate(attackArrowPrefab, canvas.transform);
-                    attackArrow = arrowObj.GetComponent<AttackArrow>();
-                    Debug.Log($"[AbilityDragHandler] Created attack arrow from prefab: {attackArrow != null}");
-                }
-                else if (attackArrow != null)
-                {
-                    Debug.Log("[AbilityDragHandler] Found existing attack arrow in scene");
-                }
-            }
-
-            if (attackArrow == null)
-            {
-                Debug.LogError("[AbilityDragHandler] Failed to initialize attack arrow");
-            }
-            else
-            {
-                attackArrow.Initialize(matchView);
-                // Ensure it's initially disabled
-                attackArrow.gameObject.SetActive(false);
-            }
-        }
-
-        // Additional initialization method
-        public void Initialize(MatchView matchView, MatchManager matchManager)
-        {
-            this.matchView = matchView;
-            this.matchManager = matchManager;
-
-            // Find Canvas if not already set
-            if (canvas == null)
-            {
-                canvas = GetComponentInParent<Canvas>();
-            }
-
-            // Verify we have arrow reference
-            if (attackArrow == null)
-            {
-                GameObject arrowObj = GameObject.Find("AttackArrow");
-                if (arrowObj != null)
-                {
-                    attackArrow = arrowObj.GetComponent<AttackArrow>();
-                }
-            }
-
-            // Set component state appropriately
+            
+            // Update component state based on card abilities
             UpdateComponentState();
         }
 
         private void OnEnable()
         {
-            // Subscribe to events
+            if (cardView == null)
+            {
+                cardView = GetComponent<CardView>();
+            }
+
+            if (canvasGroup == null)
+            {
+                canvasGroup = GetComponent<CanvasGroup>();
+            }
+            
+            // Update component state when enabled
+            UpdateComponentState();
         }
 
-        private void OnDisable()
+        public void Initialize(CardView cardView)
         {
-            // Unsubscribe from events
-            if (cardView != null && cardView.IsBeingDragged)
-            {
-                EndDragging();
-            }
+            this.cardView = cardView;
+            this.canvasGroup = cardView.GetComponent<CanvasGroup>();
+            opponentBattlefieldView = FindAnyObjectByType<OpponentBattlefieldView>();
+            matchManager = FindAnyObjectByType<MatchManager>();
+            deployDragHandler = GetComponent<UnitDeployDragHandler>();
+            
+            // Update component state after initialization
+            UpdateComponentState();
         }
-
-        // Helper method to cleanly end the dragging state
-        private void EndDragging()
-        {
-            cardView.IsBeingDragged = false;
-
-            if (attackArrow != null)
-            {
-                attackArrow.CancelDrawing();
-            }
-
-            // Clear any highlights
-            if (matchView != null)
-            {
-                // Clear highlights on both battlefield views
-                var playerBattlefieldView = FindAnyObjectByType<PlayerBattlefieldView>();
-                var opponentBattlefieldView = FindAnyObjectByType<OpponentBattlefieldView>();
-                
-                playerBattlefieldView?.ClearCardHighlights();
-                opponentBattlefieldView?.ClearCardHighlights();
-            }
-
-            OnDragEnded?.Invoke(false);
-        }
-
+        
         // Updates component state based on card abilities
         private void UpdateComponentState()
         {
@@ -191,8 +116,213 @@ namespace Kardx.Controllers.DragHandlers
                 deployDragHandler.enabled = !shouldBeEnabled;
             }
         }
+        
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            // Abort if the card cannot attack
+            if (!CanCardAttack())
+            {
+                return;
+            }
 
-        // Determines if the card can attack (is on battlefield, player's turn, etc.)
+            // Invoke the pointer down event
+            OnPointerDownEvent?.Invoke();
+        }
+
+        public void OnPointerUp(PointerEventData eventData)
+        {
+            // If this component is disabled or we're not dragging, don't handle the event
+            if (!enabled || cardView == null || !cardView.IsBeingDragged)
+                return;
+
+            // This is now handled in OnEndDrag
+            // Only do minimal cleanup here if needed
+            Debug.Log("[AbilityDragHandler] OnPointerUp called");
+        }
+
+        public void OnBeginDrag(PointerEventData eventData)
+        {
+            Debug.Log("[AbilityDragHandler] Begin Drag");
+            
+            // Ensure the card can be dragged
+            if (!CanCardAttack())
+            {
+                Debug.Log("[AbilityDragHandler] Card cannot attack, aborting drag");
+                return;
+            }
+
+            // Set the CardView.IsBeingDragged flag
+            cardView.IsBeingDragged = true;
+
+            // Disable raycasting on this card while dragging
+            // This is critical to allow the drop target to receive the drop event
+            canvasGroup.blocksRaycasts = false;
+
+            // Initialize the attack arrow if needed
+            if (attackArrow == null)
+            {
+                InitializeAttackArrow();
+            }
+
+            if (attackArrow != null)
+            {
+                // Start drawing the attack arrow
+                attackArrow.StartDrawing();
+                attackArrow.UpdateStartPosition(transform.position);
+                attackArrow.UpdateEndPosition(eventData.position);
+            }
+
+            // Highlight valid targets
+            if (opponentBattlefieldView != null && cardView.Card != null)
+            {
+                Debug.Log("[AbilityDragHandler] Highlighting valid targets via OpponentBattlefieldView");
+                opponentBattlefieldView.HighlightValidTargets(cardView.Card);
+            }
+            else
+            {
+                Debug.LogError("[AbilityDragHandler] OpponentBattlefieldView not available for highlighting");
+            }
+
+            // Invoke drag started event
+            OnDragStarted?.Invoke();
+        }
+
+        public void OnDrag(PointerEventData eventData)
+        {
+            if (!cardView.IsBeingDragged)
+                return;
+
+            // Update the attack arrow end position
+            if (attackArrow != null)
+            {
+                attackArrow.UpdateEndPosition(eventData.position);
+            }
+            
+            // Debug raycast under pointer to help diagnose drop issues
+            if (Input.GetKeyDown(KeyCode.D))
+            {
+                DebugRaycastUnderPointer(eventData.position);
+            }
+        }
+
+        private void DebugRaycastUnderPointer(Vector2 position)
+        {
+            // Cast rays to find all objects under the pointer
+            var tempEventData = new PointerEventData(EventSystem.current)
+            {
+                position = position
+            };
+
+            var results = new List<RaycastResult>();
+            EventSystem.current.RaycastAll(tempEventData, results);
+
+            Debug.Log($"[AbilityDragHandler] Objects under pointer: {results.Count}");
+            foreach (var result in results)
+            {
+                Debug.Log($"[AbilityDragHandler] - {result.gameObject.name} (Layer: {result.gameObject.layer}, SortingOrder: {result.sortingOrder})");
+                
+                // Check if it's an opponent card slot
+                OpponentCardSlot slot = result.gameObject.GetComponent<OpponentCardSlot>();
+                if (slot != null)
+                {
+                    Debug.Log($"[AbilityDragHandler] - Found OpponentCardSlot: {slot.SlotIndex}");
+                }
+            }
+        }
+
+        public void OnEndDrag(PointerEventData eventData)
+        {
+            Debug.Log($"[AbilityDragHandler] End Drag - pointerEnter: {eventData.pointerEnter?.name ?? "null"}");
+
+            if (!cardView.IsBeingDragged)
+                return;
+
+            // Reset the CardView.IsBeingDragged flag
+            cardView.IsBeingDragged = false;
+
+            // Re-enable raycast blocking
+            canvasGroup.blocksRaycasts = true;
+
+            // Debug raycast under pointer to help diagnose drop issues
+            DebugRaycastUnderPointer(eventData.position);
+
+            // The attack logic is handled by the drop target (OpponentCardSlot.OnDrop)
+            // This drag handler only needs to clean up if it wasn't dropped on a valid target
+
+            // Check if it was dropped on a valid target
+            bool droppedOnTarget = false;
+            
+            // Cast rays to find all objects under the pointer
+            var tempEventData = new PointerEventData(EventSystem.current)
+            {
+                position = eventData.position
+            };
+
+            var results = new List<RaycastResult>();
+            EventSystem.current.RaycastAll(tempEventData, results);
+            
+            // Check if any of the objects under the pointer is an OpponentCardSlot
+            foreach (var result in results)
+            {
+                OpponentCardSlot slot = result.gameObject.GetComponent<OpponentCardSlot>();
+                if (slot != null)
+                {
+                    droppedOnTarget = true;
+                    Debug.Log($"[AbilityDragHandler] Found drop target: {slot.name} (SlotIndex: {slot.SlotIndex})");
+                    
+                    // Manually call the OnDrop method on the slot
+                    // This is a workaround for when the drop event isn't being detected
+                    slot.OnDrop(eventData);
+                    break;
+                }
+            }
+
+            Debug.Log($"[AbilityDragHandler] Dropped on target: {droppedOnTarget}");
+
+            if (!droppedOnTarget)
+            {
+                // Hide the attack arrow
+                if (attackArrow != null)
+                {
+                    attackArrow.CancelDrawing();
+                }
+
+                // Clear any highlights
+                if (opponentBattlefieldView != null)
+                {
+                    opponentBattlefieldView.ClearCardHighlights();
+                }
+
+                // Invoke drag ended event
+                OnDragEnded?.Invoke(false);
+            }
+            else
+            {
+                // The drop handler will handle the attack logic and cleanup
+                Debug.Log("[AbilityDragHandler] Dropped on valid target, waiting for drop handler to process");
+                
+                // Note: We don't clean up here because the drop handler will call NotifyDropSuccess
+                // which will handle the cleanup
+            }
+        }
+
+        /// <summary>
+        /// Called by the drop target when a drop is successful
+        /// </summary>
+        public void NotifyDropSuccess()
+        {
+            Debug.Log("[AbilityDragHandler] Drop successful");
+            
+            // Hide the attack arrow
+            if (attackArrow != null)
+            {
+                attackArrow.CancelDrawing();
+            }
+            
+            // Invoke the event
+            OnDragEnded?.Invoke(true);
+        }
+
         private bool CanCardAttack()
         {
             if (cardView == null || cardView.Card == null || matchManager == null)
@@ -215,407 +345,21 @@ namespace Kardx.Controllers.DragHandlers
             return true;
         }
 
-        public void OnPointerDown(PointerEventData eventData)
+        private void InitializeAttackArrow()
         {
-            // Abort if the card cannot attack
-            if (!CanCardAttack())
+            if (attackArrowPrefab != null)
             {
-                return;
-            }
-
-            // Store the initial pointer position for arrow drawing
-            pointerStartPosition = eventData.position;
-            Debug.Log($"[AbilityDragHandler] Pointer down at: {pointerStartPosition}");
-
-            // Invoke the pointer down event
-            OnPointerDownEvent?.Invoke();
-        }
-
-        public void OnPointerUp(PointerEventData eventData)
-        {
-            // If this component is disabled or we're not dragging, don't handle the event
-            if (!enabled || cardView == null || !cardView.IsBeingDragged)
-                return;
-
-            // Set dragging state to false
-            cardView.IsBeingDragged = false;
-
-            // Check if we're over a valid target
-            Card targetCard = FindTargetCardUnderPointer(eventData);
-            bool isValidTarget = targetCard != null && IsValidAttackTarget(targetCard);
-
-            // Invoke drag ended event
-            OnDragEnded?.Invoke(isValidTarget);
-
-            if (isValidTarget)
-            {
-                // Get the CardView of the target
-                CardView targetCardView = FindCardViewForCard(targetCard);
-                if (targetCardView != null)
+                GameObject arrowObj = Instantiate(attackArrowPrefab, canvas.transform);
+                attackArrow = arrowObj.GetComponent<AttackArrow>();
+                if (attackArrow == null)
                 {
-                    // Complete the arrow drawing to the target
-                    Vector2 targetPosition = new Vector2(targetCardView.transform.position.x, targetCardView.transform.position.y);
-                    attackArrow.UpdateEndPosition(targetPosition);
-
-                    // Play attack animation before initiating the attack in the model
-                    cardView.AttackWithAnimation(
-                        targetPosition: targetCardView.transform.position,
-                        lungeDistance: 30f,
-                        duration: 0.4f,
-                        onImpactCallback: () =>
-                        {
-                            // This callback executes at the moment of impact
-
-                            // Simple scale pulse effect for the target card instead of shake
-                            Vector3 originalScale = targetCardView.transform.localScale;
-                            targetCardView.transform.localScale = originalScale * 1.2f; // Scale up briefly
-
-                            // Create a simple temporary scale animation
-                            // Schedule reset of scale without using a coroutine
-                            DOTween.Sequence()
-                                .AppendInterval(0.1f)
-                                .AppendCallback(() =>
-                                {
-                                    if (targetCardView != null)
-                                        targetCardView.transform.localScale = originalScale;
-                                });
-
-                            // Simple color flash effect
-                            Image targetImage = targetCardView.GetComponent<Image>();
-                            if (targetImage != null)
-                            {
-                                Color originalColor = targetImage.color;
-                                targetImage.color = Color.red; // Flash red
-
-                                // Schedule reset of color without using a coroutine
-                                DOTween.Sequence()
-                                    .AppendInterval(0.1f)
-                                    .AppendCallback(() =>
-                                    {
-                                        if (targetImage != null)
-                                            targetImage.color = originalColor;
-                                    });
-                            }
-                        }
-                    ).OnComplete(() =>
-                    {
-                        // This callback executes when the entire attack animation is complete
-                        // Now we can update the game model
-                        matchManager.InitiateAttack(cardView.Card, targetCard);
-                    });
+                    Debug.LogError("[AbilityDragHandler] Attack arrow prefab does not have an AttackArrow component");
                 }
-                else
-                {
-                    // Fallback if we couldn't find the CardView
-                    // Initiate the attack immediately
-                    matchManager.InitiateAttack(cardView.Card, targetCard);
-                }
-            }
-
-            // Hide the attack arrow immediately
-            attackArrow.CancelDrawing();
-
-            // Clear all highlights
-            ClearAllHighlights();
-        }
-
-        public void OnBeginDrag(PointerEventData eventData)
-        {
-            // Get the card view component
-            cardView = GetComponent<CardView>();
-            if (cardView == null || !CanCardAttack())
-            {
-                return;
-            }
-
-            // Initialize drag state
-            cardView.IsBeingDragged = true;
-
-            // Initialize the attack arrow if needed
-            if (attackArrow == null)
-            {
-                InitializeAttackArrow();
-            }
-
-            if (attackArrow != null)
-            {
-                // Use the stored pointer start position for the initial arrow position
-                attackArrow.StartDrawing();
-                attackArrow.UpdateStartPosition(pointerStartPosition);
-                attackArrow.UpdateEndPosition(pointerStartPosition);
-
-                Debug.Log($"[AbilityDragHandler] Started drawing arrow from pointer position: {pointerStartPosition}");
             }
             else
             {
-                Debug.LogError("[AbilityDragHandler] Failed to initialize attack arrow");
+                Debug.LogError("[AbilityDragHandler] No attack arrow prefab assigned");
             }
-
-            // Highlight valid targets
-            HighlightValidTargets(eventData);
-
-            // Invoke the drag started event
-            OnDragStarted?.Invoke();
-            
-            // Disable blocksRaycasts on this object so we can detect drops on targets
-            if (canvasGroup != null)
-            {
-                canvasGroup.blocksRaycasts = false;
-                Debug.Log("[AbilityDragHandler] Disabled blocksRaycasts to allow drops");
-            }
-        }
-
-        public void OnDrag(PointerEventData eventData)
-        {
-            if (cardView == null || !cardView.IsBeingDragged || !CanCardAttack())
-            {
-                return;
-            }
-
-            // Update the arrow end position
-            if (attackArrow != null)
-            {
-                attackArrow.UpdateEndPosition(eventData.position);
-            }
-
-            // Update target highlights based on current pointer position
-            OpponentCardSlot currentSlot = GetTargetUnderPointer(eventData);
-
-            // Only proceed if we're over a different slot than before
-            if (currentSlot != currentTarget)
-            {
-                // Clear previous target highlight
-                if (currentTarget != null)
-                {
-                    // Use the same color as in HighlightValidTargets
-                    Card previousTargetCard = matchManager?.Opponent?.Battlefield?.GetCardAt(currentTarget.SlotIndex);
-                    if (previousTargetCard != null)
-                    {
-                        Color availableColor = new Color(1f, 0.2f, 0f, 0.9f); // Bright orange-red with high alpha
-                        currentTarget.SetHighlight(availableColor, true);
-                    }
-                    else
-                    {
-                        // If the slot is empty, clear the highlight
-                        currentTarget.ClearHighlight();
-                    }
-                }
-
-                // Set new target highlight
-                currentTarget = currentSlot;
-                if (currentTarget != null && IsValidTarget(currentTarget))
-                {
-                    // Make the current hover target more prominent
-                    Color dropTargetColor = new Color(1f, 0.8f, 0f, 1.0f); // Bright golden color
-                    currentTarget.SetHighlight(dropTargetColor, true);
-                }
-            }
-        }
-
-        public void OnPointerExit(PointerEventData eventData)
-        {
-            if (cardView == null || !cardView.IsBeingDragged || !CanCardAttack())
-            {
-                return;
-            }
-
-            // Refresh the valid targets highlights
-            HighlightValidTargets(eventData);
-        }
-
-        public void OnEndDrag(PointerEventData eventData)
-        {
-            if (cardView == null)
-                return;
-
-            Debug.Log("[AbilityDragHandler] OnEndDrag called");
-            
-            // Check if we're over a valid target
-            OpponentCardSlot targetSlot = GetTargetUnderPointer(eventData);
-            if (targetSlot != null)
-            {
-                Debug.Log($"[AbilityDragHandler] Dropped on OpponentCardSlot: {targetSlot.SlotIndex}");
-                
-                // We don't need to handle the attack here
-                // Let the OpponentCardSlot.OnDrop handle it
-                // Just make sure we're not preventing the drop event
-            }
-            else
-            {
-                Debug.Log("[AbilityDragHandler] Not dropped on a valid target");
-            }
-
-            // Reset dragging state
-            cardView.IsBeingDragged = false;
-
-            // Re-enable blocksRaycasts
-            if (canvasGroup != null)
-            {
-                canvasGroup.blocksRaycasts = true;
-                Debug.Log("[AbilityDragHandler] Re-enabled blocksRaycasts");
-            }
-
-            // Hide the attack arrow
-            if (attackArrow != null)
-            {
-                attackArrow.CancelDrawing();
-            }
-
-            // Clear all highlights
-            ClearAllHighlights();
-        }
-
-        void IPointerUpHandler.OnPointerUp(PointerEventData eventData)
-        {
-            OnPointerUp(eventData);
-        }
-
-        private void HighlightValidTargets(PointerEventData eventData)
-        {
-            if (matchManager == null || cardView.Card == null)
-                return;
-
-            // Get opponent battlefield
-            OpponentBattlefieldView opponentView = FindAnyObjectByType<OpponentBattlefieldView>();
-            if (opponentView != null)
-            {
-                // Highlight valid targets in opponent battlefield
-                opponentView.HighlightValidTargets(cardView.Card);
-            }
-            else if (matchView != null)
-            {
-                // Fallback to clearing highlights if opponent view not available
-                var playerBattlefieldView = FindAnyObjectByType<PlayerBattlefieldView>();
-                var opponentBattlefieldView = FindAnyObjectByType<OpponentBattlefieldView>();
-                
-                playerBattlefieldView?.ClearCardHighlights();
-                opponentBattlefieldView?.ClearCardHighlights();
-            }
-        }
-
-        private void ClearAllHighlights()
-        {
-            // Clear the current target highlight
-            if (currentTarget != null)
-            {
-                currentTarget.ClearHighlight();
-                currentTarget = null;
-            }
-
-            // Then clear all highlights on battlefield views
-            var playerBattlefieldView = FindAnyObjectByType<PlayerBattlefieldView>();
-            var opponentBattlefieldView = FindAnyObjectByType<OpponentBattlefieldView>();
-            
-            playerBattlefieldView?.ClearCardHighlights();
-            opponentBattlefieldView?.ClearCardHighlights();
-        }
-
-        private Card FindTargetCardUnderPointer(PointerEventData eventData)
-        {
-            // Raycast to find objects under the pointer
-            List<RaycastResult> results = new List<RaycastResult>();
-            EventSystem.current.RaycastAll(eventData, results);
-
-            foreach (var result in results)
-            {
-                // Skip this card itself
-                if (result.gameObject == gameObject)
-                    continue;
-
-                // Look for a CardView component
-                CardView targetCardView = result.gameObject.GetComponent<CardView>();
-                if (targetCardView != null && targetCardView.Card != null)
-                {
-                    return targetCardView.Card;
-                }
-            }
-
-            return null;
-        }
-
-        private CardView FindCardViewForCard(Card card)
-        {
-            if (card == null)
-                return null;
-
-            // Find all CardViews in the scene
-            CardView[] cardViews = FindObjectsByType<CardView>(FindObjectsSortMode.None);
-            foreach (var cv in cardViews)
-            {
-                if (cv.Card == card)
-                    return cv;
-            }
-
-            return null;
-        }
-
-        private bool IsValidAttackTarget(Card targetCard)
-        {
-            if (cardView.Card == null || targetCard == null || matchManager == null)
-                return false;
-
-            // Find the OpponentBattlefieldView to use its CanTargetCard method
-            OpponentBattlefieldView opponentView = FindAnyObjectByType<OpponentBattlefieldView>();
-            if (opponentView != null)
-            {
-                return opponentView.CanTargetCard(cardView.Card, targetCard);
-            }
-
-            // Fallback implementation if OpponentBattlefieldView isn't available
-            // Check if the target card is on the opponent's battlefield
-            return matchManager.Opponent.Battlefield.Contains(targetCard) &&
-                   !targetCard.HasAttackedThisTurn && // Using HasAttackedThisTurn as a simple check
-                   matchManager.IsPlayerTurn();
-        }
-
-        private OpponentCardSlot GetTargetUnderPointer(PointerEventData eventData)
-        {
-            List<RaycastResult> results = new List<RaycastResult>();
-            EventSystem.current.RaycastAll(eventData, results);
-
-            foreach (var result in results)
-            {
-                // Only look for OpponentCardSlot components (not PlayerCardSlot)
-                OpponentCardSlot slot = result.gameObject.GetComponent<OpponentCardSlot>();
-                if (slot != null)
-                {
-                    // Only return the slot if it contains a card
-                    Card targetCard = matchManager?.Opponent?.Battlefield?.GetCardAt(slot.SlotIndex);
-                    if (targetCard != null)
-                    {
-                        return slot;
-                    }
-                }
-            }
-
-            return null;
-        }
-
-        private bool IsValidTarget(OpponentCardSlot target)
-        {
-            if (target == null || cardView == null || matchManager == null)
-            {
-                return false;
-            }
-
-            // Get the card data
-            Card attackerCard = cardView.Card;
-
-            // Get the target card using the battlefield
-            var targetPlayer = matchManager.Opponent;
-            var defenderCard = targetPlayer?.Battlefield.GetCardAt(target.SlotIndex);
-
-            // Check if the target has a card
-            if (defenderCard == null)
-            {
-                return false;
-            }
-
-            // Check if the attacker can attack this target (implement your game rules here)
-            // For example, check if the target is in range, if the attacker has enough action points, etc.
-
-            // Simple implementation: all opponent cards are valid targets
-            return true;
         }
     }
 }
