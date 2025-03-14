@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 7655823885991450689}
   - component: {fileID: 6690292769447173798}
   - component: {fileID: 2592391984934500456}
-  - component: {fileID: 7879127813663132771}
+  - component: {fileID: 7128792895319645847}
   m_Layer: 5
   m_Name: HomeButton
   m_TagString: Untagged
@@ -122,8 +122,8 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 7879127813663132771}
-        m_TargetAssemblyTypeName: Kardx.UI.Scenes.Common.SceneSwitcher, Assembly-CSharp
+      - m_Target: {fileID: 7128792895319645847}
+        m_TargetAssemblyTypeName: Kardx.UI.SceneSwitcher, Assembly-CSharp
         m_MethodName: GoHome
         m_Mode: 1
         m_Arguments:
@@ -134,7 +134,7 @@ MonoBehaviour:
           m_StringArgument: 
           m_BoolArgument: 0
         m_CallState: 2
---- !u!114 &7879127813663132771
+--- !u!114 &7128792895319645847
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -143,7 +143,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 2672812120553531788}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8011ae2e3557b45acbe44d2575f5838a, type: 3}
+  m_Script: {fileID: 11500000, guid: c137cc8af5b58436b932654cf8130718, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   homeScene: HomeScene

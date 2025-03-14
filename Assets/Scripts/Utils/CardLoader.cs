@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Kardx.Core;
+using Kardx.Models;
+using Kardx.Models.Abilities;
+using Kardx.Models.Cards;
 using Newtonsoft.Json;
 using UnityEngine;
 

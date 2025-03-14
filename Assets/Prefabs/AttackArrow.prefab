@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 3054135852335377915}
   - component: {fileID: 1856149020729117509}
   - component: {fileID: 1127963183904711536}
-  - component: {fileID: 4633703885579554035}
+  - component: {fileID: 806329366878543026}
   m_Layer: 5
   m_Name: AttackArrow
   m_TagString: Untagged
@@ -76,7 +76,7 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
---- !u!114 &4633703885579554035
+--- !u!114 &806329366878543026
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -85,11 +85,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 1074997326309281609}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6d8e29412cb0b49cca79e30de9ac28ca, type: 3}
+  m_Script: {fileID: 11500000, guid: 9414bfec6171d42db91f651c9dc85e91, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   arrowBody: {fileID: 0}
   arrowHead: {fileID: 0}
+  arrowBodySprite: {fileID: 0}
+  arrowHeadSprite: {fileID: 0}
   arrowColor: {r: 1, g: 0, b: 0, a: 0.8}
   arrowWidth: 10
   arrowHeadSize: 20
