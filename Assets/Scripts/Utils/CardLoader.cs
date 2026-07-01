@@ -38,7 +38,10 @@ namespace Kardx.Utils
             public Dictionary<string, int> Attributes { get; set; }
 
             [JsonProperty("abilities")]
-            public List<string> AbilityIds { get; set; } // Store ability IDs instead of full objects
+            public List<string> AbilityIds { get; set; }
+
+            [JsonProperty("keywords")]
+            public List<UnitKeyword> Keywords { get; set; }
         }
 
         public static List<CardType> LoadCardTypes()
@@ -110,6 +113,11 @@ namespace Kardx.Utils
                                 );
                             }
                         }
+                    }
+
+                    if (cardData.Keywords != null && cardData.Keywords.Count > 0)
+                    {
+                        cardType.SetKeywords(cardData.Keywords);
                     }
 
                     cardTypes.Add(cardType);

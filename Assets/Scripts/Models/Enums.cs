@@ -135,4 +135,13 @@ namespace Kardx.Models
         Diagonal, // Diagonal line
         Area, // Area effect (typically 3x3)
     }
+
+    [System.Flags]
+    public enum UnitKeyword
+    {
+        None = 0,
+        Blitz = 1,        // Can attack the turn it is deployed
+        Guard = 2,        // Must be attacked before other units/HQ when on frontline
+        Smokescreen = 4,  // Cannot be targeted until it has attacked
+    }
 }

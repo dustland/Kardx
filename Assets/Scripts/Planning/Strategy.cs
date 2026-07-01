@@ -117,7 +117,7 @@ namespace Kardx.Planning
         /// <param name="reason">The reason for moving this card.</param>
         public void AddMoveCardAction(
             string sourceCardId,
-            string targetPosition,
+            int targetSlot,
             string reason = null
         )
         {
@@ -126,10 +126,25 @@ namespace Kardx.Planning
                 {
                     Type = DecisionType.MoveCard,
                     SourceCardId = sourceCardId,
-                    TargetCardId = targetPosition, // Repurposing TargetCardId for position
+                    TargetSlot = targetSlot,
                     Reasoning = reason,
                 }
             );
+        }
+
+        /// <summary>
+        /// Adds a move card decision to the strategy (legacy overload).
+        /// </summary>
+        public void AddMoveCardAction(
+            string sourceCardId,
+            string targetPosition,
+            string reason = null
+        )
+        {
+            if (int.TryParse(targetPosition, out int slot))
+            {
+                AddMoveCardAction(sourceCardId, slot, reason);
+            }
         }
 
         /// <summary>

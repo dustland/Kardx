@@ -3,7 +3,6 @@ using UnityEngine;
 using Kardx.Models.Cards;
 using Kardx.Views.Cards;
 using Kardx.Models.Match;
-using Kardx.Controllers.DragHandlers;
 
 namespace Kardx.Views.Hand
 {
@@ -60,23 +59,6 @@ namespace Kardx.Views.Hand
 
             if (cardView != null)
             {
-                // Add proper drag handlers based on card type
-                if (card.IsUnitCard)
-                {
-                    if (cardView.GetComponent<UnitDeployDragHandler>() == null)
-                    {
-                        cardView.gameObject.AddComponent<UnitDeployDragHandler>();
-                    }
-                }
-                else if (card.IsOrderCard)
-                {
-                    if (cardView.GetComponent<OrderDeployDragHandler>() == null)
-                    {
-                        cardView.gameObject.AddComponent<OrderDeployDragHandler>();
-                    }
-                }
-
-                // Update the card's interactivity based on its state and location
                 cardView.UpdateInteractivity();
 
                 Debug.Log($"[PlayerHandView] Added card {card.Title} to player hand");

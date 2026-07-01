@@ -20,6 +20,8 @@ namespace Kardx.Models.Cards
         private string currentAbilityId; // Current applied ability, should be one of the abilities in the card type
         private Kardx.Models.Match.Player owner; // Reference to the Player who owns this card
         private bool hasAttackedThisTurn; // Whether this card has attacked this turn
+        private bool deployedThisTurn; // Whether deployed during the current turn
+        private ZoneType currentZone = ZoneType.Limbo;
 
         // Events
         public event Action<Card> OnDeath;
@@ -33,10 +35,17 @@ namespace Kardx.Models.Cards
         public IReadOnlyList<Kardx.Models.Match.Modifier> Modifiers => modifiers;
         public IReadOnlyDictionary<string, int> DynamicAttributes => dynamicAttributes;
         public Kardx.Models.Match.Player Owner => owner;
+        public ZoneType CurrentZone => currentZone;
         public bool HasAttackedThisTurn
         {
             get => hasAttackedThisTurn;
             set => hasAttackedThisTurn = value;
+        }
+
+        public bool DeployedThisTurn
+        {
+            get => deployedThisTurn;
+            set => deployedThisTurn = value;
         }
 
         // Computed properties
@@ -103,6 +112,24 @@ namespace Kardx.Models.Cards
         public void SetOwner(Kardx.Models.Match.Player player)
         {
             this.owner = player;
+        }
+
+        public void SetZone(ZoneType zone)
+        {
+            currentZone = zone;
+        }
+
+        public bool IsHeadquarters => CardType.Category == CardCategory.Headquarters;
+
+        public bool HasKeyword(UnitKeyword keyword)
+        {
+            return CardType.HasKeyword(keyword);
+        }
+
+        public void MarkDeployed()
+        {
+            deployedThisTurn = true;
+            hasAttackedThisTurn = false;
         }
 
         // Modifier management
@@ -263,6 +290,7 @@ namespace Kardx.Models.Cards
 
             // Reset attack status for the new turn
             hasAttackedThisTurn = false;
+            deployedThisTurn = false;
         }
 
         // Event handlers

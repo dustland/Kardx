@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using Kardx.Models;
 using Kardx.Models.Abilities;
 using Newtonsoft.Json;
 
@@ -58,6 +60,9 @@ namespace Kardx.Models.Cards
         [JsonProperty("abilities")]
         private List<AbilityType> abilities = new();
 
+        [JsonProperty("keywords")]
+        private List<UnitKeyword> keywords = new();
+
         // Public properties with validation
         public string Id => id;
         public string Title => title;
@@ -86,6 +91,7 @@ namespace Kardx.Models.Cards
         public string ImageUrl => imageUrl;
         public IReadOnlyDictionary<string, int> Attributes => attributes;
         public IReadOnlyList<AbilityType> Abilities => abilities;
+        public IReadOnlyList<UnitKeyword> Keywords => keywords;
 
         // Clone this card type
         public CardType Clone()
@@ -144,7 +150,9 @@ namespace Kardx.Models.Cards
             this.subtype = subtype;
             this.deploymentCost = Math.Max(0, deploymentCost);
             this.operationCost = Math.Max(0, operationCost);
-            this.baseDefense = Math.Max(1, baseDefense);
+            this.baseDefense = category == CardCategory.Order
+                ? Math.Max(0, baseDefense)
+                : Math.Max(1, baseDefense);
             this.baseAttack = Math.Max(0, baseAttack);
             this.baseCounterAttack = Math.Max(0, baseCounterAttack);
             this.rarity = rarity;
@@ -165,6 +173,16 @@ namespace Kardx.Models.Cards
         public void AddAbility(AbilityType ability)
         {
             abilities.Add(ability);
+        }
+
+        public bool HasKeyword(UnitKeyword keyword)
+        {
+            return keywords.Contains(keyword);
+        }
+
+        public void SetKeywords(IEnumerable<UnitKeyword> keywordList)
+        {
+            keywords = keywordList?.ToList() ?? new List<UnitKeyword>();
         }
 
         public void RemoveAbility(AbilityType ability)

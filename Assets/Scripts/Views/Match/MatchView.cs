@@ -11,6 +11,7 @@ using Kardx.Managers;
 using Kardx.Views.Cards;
 using Kardx.Views.Hand;
 using Kardx.Models.Match;
+using Kardx.Controllers.DragHandlers;
 
 namespace Kardx.Views.Match
 {
@@ -57,6 +58,12 @@ namespace Kardx.Views.Match
         private TextMeshProUGUI opponentResourceText;
         [SerializeField]
         private TextMeshProUGUI messageText;
+
+        [SerializeField]
+        private Button resolveOrderButton;
+
+        private HeadquarterView playerHqView;
+        private HeadquarterView opponentHqView;
 
         /// <summary>
         /// Called when the GameObject is initialized
@@ -143,8 +150,9 @@ namespace Kardx.Views.Match
 
             // Set up event listeners
             SetupEventListeners();
+            SetupHeadquarterViews();
+            EnsureDragZones();
 
-            // Update the UI with current state
             UpdateUI();
 
             // Enable end turn button if it's the player's turn
@@ -167,12 +175,131 @@ namespace Kardx.Views.Match
             matchManager.OnCardDeployed += (card, position) => UpdateUI();
             matchManager.OnCardDied += (card) => UpdateUI();
             matchManager.OnUIUpdateNeeded += UpdateUI;
+            matchManager.OnEnemyOrderPending += HandleEnemyOrderPending;
+            matchManager.OnPendingOrderResolved += HandlePendingOrderResolved;
+            matchManager.OnOrderCountered += (_) => HandlePendingOrderResolved();
+            matchManager.OnAttackCompleted += (_, _, _, _) => UpdateHeadquarterDisplays();
+            matchManager.OnMatchWon += (_, reason) => ShowMessage($"Victory! {reason}");
 
-            // Add click handler for end turn button
             if (endTurnButton != null)
             {
                 endTurnButton.onClick.AddListener(OnEndTurnClicked);
             }
+
+            if (resolveOrderButton != null)
+            {
+                resolveOrderButton.onClick.AddListener(OnResolveOrderClicked);
+                resolveOrderButton.gameObject.SetActive(false);
+            }
+        }
+
+        private void SetupHeadquarterViews()
+        {
+            if (matchManager == null) return;
+
+            var opponentGo = GameObject.Find("OpponentHeadquarter");
+            if (opponentGo != null)
+            {
+                opponentHqView = opponentGo.GetComponent<HeadquarterView>();
+                if (opponentHqView == null)
+                    opponentHqView = opponentGo.AddComponent<HeadquarterView>();
+                opponentHqView.Initialize(matchManager, opponentHq: true);
+            }
+
+            var playerGo = GameObject.Find("PlayerHeadquarter");
+            if (playerGo != null)
+            {
+                playerHqView = playerGo.GetComponent<HeadquarterView>();
+                if (playerHqView == null)
+                    playerHqView = playerGo.AddComponent<HeadquarterView>();
+                playerHqView.Initialize(matchManager, opponentHq: false);
+            }
+        }
+
+        private void EnsureDragZones()
+        {
+            var zoneRoot = GameObject.Find("OrderDropArea");
+            if (zoneRoot == null)
+            {
+                foreach (var behaviour in FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None))
+                {
+                    if (behaviour.GetType().Name == "OrderDropHandler")
+                    {
+                        zoneRoot = behaviour.gameObject;
+                        break;
+                    }
+                }
+            }
+
+            if (zoneRoot == null)
+            {
+                zoneRoot = new GameObject("OrderDropArea");
+                zoneRoot.transform.SetParent(transform, false);
+                var rect = zoneRoot.AddComponent<RectTransform>();
+                rect.anchorMin = Vector2.zero;
+                rect.anchorMax = Vector2.one;
+                rect.offsetMin = Vector2.zero;
+                rect.offsetMax = Vector2.zero;
+            }
+
+            RemoveLegacyDragHandlers(zoneRoot);
+            EnsureDragZone(zoneRoot, CardDragTargetKind.OrderZone);
+            EnsureDragZone(zoneRoot, CardDragTargetKind.CountermeasureZone);
+        }
+
+        private static void RemoveLegacyDragHandlers(GameObject zoneRoot)
+        {
+            foreach (var behaviour in zoneRoot.GetComponents<MonoBehaviour>())
+            {
+                var name = behaviour.GetType().Name;
+                if (name == "OrderDropHandler" || name == "CountermeasureDropHandler")
+                    Destroy(behaviour);
+            }
+        }
+
+        private static void EnsureDragZone(GameObject host, CardDragTargetKind kind)
+        {
+            foreach (var zone in host.GetComponents<CardDragZone>())
+            {
+                if (zone.ZoneKind == kind)
+                    return;
+            }
+
+            var dragZone = host.AddComponent<CardDragZone>();
+            dragZone.Configure(kind);
+        }
+
+        private void HandleEnemyOrderPending(Card order)
+        {
+            ShowMessage($"Enemy played {order.Title}! Drag a countermeasure to cancel, or click End Turn to resolve.");
+            if (resolveOrderButton != null)
+                resolveOrderButton.gameObject.SetActive(true);
+            UpdateUI();
+        }
+
+        private void HandlePendingOrderResolved()
+        {
+            if (resolveOrderButton != null)
+                resolveOrderButton.gameObject.SetActive(false);
+            ShowMessage("");
+            UpdateUI();
+        }
+
+        private void OnResolveOrderClicked()
+        {
+            matchManager?.ResolvePendingEnemyOrder();
+        }
+
+        private void ShowMessage(string text)
+        {
+            if (messageText != null)
+                messageText.text = text;
+        }
+
+        private void UpdateHeadquarterDisplays()
+        {
+            playerHqView?.UpdateDisplay();
+            opponentHqView?.UpdateDisplay();
         }
 
         /// <summary>
@@ -182,10 +309,13 @@ namespace Kardx.Views.Match
         {
             if (matchManager == null) return;
 
-            // Advance to the next turn
-            matchManager.NextTurn();
+            if (matchManager.HasPendingEnemyOrder)
+            {
+                matchManager.ResolvePendingEnemyOrder();
+                return;
+            }
 
-            // Update the UI
+            matchManager.NextTurn();
             UpdateUI();
         }
 
@@ -219,8 +349,8 @@ namespace Kardx.Views.Match
 
             // Update end turn button
             UpdateEndTurnButton();
+            UpdateHeadquarterDisplays();
 
-            // Update layout groups to ensure proper positioning
             RefreshLayoutGroups();
         }
 
@@ -235,7 +365,7 @@ namespace Kardx.Views.Match
             if (playerResourceText != null)
             {
                 int playerResources = matchManager.Player.Credits;
-                int playerMaxResources = 9; // Player.MAX_CREDITS constant value
+                int playerMaxResources = GameConstants.MaxCredits;
                 playerResourceText.text = $"Resources: {playerResources}/{playerMaxResources}";
             }
 
@@ -243,7 +373,7 @@ namespace Kardx.Views.Match
             if (opponentResourceText != null)
             {
                 int opponentResources = matchManager.Opponent.Credits;
-                int opponentMaxResources = 9; // Player.MAX_CREDITS constant value
+                int opponentMaxResources = GameConstants.MaxCredits;
                 opponentResourceText.text = $"Resources: {opponentResources}/{opponentMaxResources}";
             }
         }

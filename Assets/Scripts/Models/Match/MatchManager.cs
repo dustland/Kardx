@@ -6,6 +6,8 @@ using Kardx.UI;
 using UnityEngine;
 using Kardx.Managers;
 using Kardx.Planning;
+using Kardx.Acting;
+using Kardx.Models;
 using Kardx.Models.Cards;
 using Kardx.Views.Cards;
 
@@ -19,7 +21,10 @@ namespace Kardx.Models.Match
         private Kardx.Utils.ILogger logger;
         private Board board;
         private StrategyPlanner strategyPlanner;
-        private const int CREDITS_PER_TURN = 1;
+        private AbilitySystem abilitySystem;
+        private List<CardType> cardTypeCatalog;
+        private Card pendingEnemyOrder;
+        private bool awaitingOrderResolution;
 
         // Public properties
         public bool IsMatchInProgress { get; private set; }
@@ -43,6 +48,11 @@ namespace Kardx.Models.Match
         public event EventHandler<Player> OnTurnEnded;
         public event Action<string> OnMatchStarted;
         public event Action<string> OnMatchEnded;
+        public event Action<string, string> OnMatchWon;
+
+        public event Action<Card> OnEnemyOrderPending;
+        public event Action<Card> OnOrderCountered;
+        public event Action OnPendingOrderResolved;
 
         // Ability-related events
         public event Action<Card, Card, int, int> OnAttackCompleted;
@@ -61,6 +71,10 @@ namespace Kardx.Models.Match
 
         public ViewManager ViewManager => viewManager;
         public ViewRegistry ViewRegistry => viewRegistry;
+        public AbilitySystem AbilitySystem => abilitySystem;
+        public bool HasPendingEnemyOrder => pendingEnemyOrder != null;
+        public Card PendingEnemyOrder => pendingEnemyOrder;
+        public bool AwaitingOrderResolution => awaitingOrderResolution;
 
         /// <summary>
         /// Creates a new instance of the MatchManager class.
@@ -94,6 +108,8 @@ namespace Kardx.Models.Match
         /// </summary>
         public void Initialize()
         {
+            cardTypeCatalog = CardLoader.LoadCardTypes();
+
             var player = new Player(
                 "Player",
                 LoadDeck(Faction.UnitedStates),
@@ -105,10 +121,13 @@ namespace Kardx.Models.Match
                 Faction.SovietUnion
             );
 
-            // Create a new board
             board = new Board(player, opponent);
 
-            // Create the strategy planner for the opponent (player2)
+            abilitySystem = new AbilitySystem(this);
+
+            SetupHeadquarters(player, Faction.UnitedStates);
+            SetupHeadquarters(opponent, Faction.SovietUnion);
+
             strategyPlanner = new StrategyPlanner(this, StrategySource.Dummy, logger);
 
             // Subscribe to strategy planner events
@@ -133,20 +152,39 @@ namespace Kardx.Models.Match
         /// </summary>
         public void StartMatch()
         {
-            // Ensure the game is initialized
             if (board == null)
             {
                 Initialize();
             }
 
-            // Reset match state
             IsMatchInProgress = true;
 
-            // Notify listeners that the match has started
+            DealOpeningHands();
+
             OnMatchStarted?.Invoke("Match started");
 
-            // Start first turn
             StartTurn();
+        }
+
+        private void DealOpeningHands()
+        {
+            for (int i = 0; i < GameConstants.StartingHandSize; i++)
+            {
+                var playerCard = DrawCard(board.Player);
+                if (playerCard != null)
+                    OnCardDrawn?.Invoke(playerCard);
+
+                var opponentCard = DrawCard(board.Opponent);
+                if (opponentCard != null)
+                    OnCardDrawn?.Invoke(opponentCard);
+            }
+        }
+
+        private void SetupHeadquarters(Player player, Faction faction)
+        {
+            var hqCard = DeckBuilder.CreateHeadquarters(faction, cardTypeCatalog);
+            player.SetHeadquarters(hqCard);
+            abilitySystem.RegisterCardAbilities(hqCard);
         }
 
         /// <summary>
@@ -154,10 +192,10 @@ namespace Kardx.Models.Match
         /// </summary>
         private void StartTurn()
         {
-            // Start the new turn in the board
             board.StartTurn();
 
-            // Draw a card for the current turn player
+            abilitySystem.ProcessTurnStart(board.CurrentTurnPlayer);
+
             Card drawnCard = DrawCard(board.CurrentTurnPlayer);
             if (drawnCard != null)
             {
@@ -166,10 +204,14 @@ namespace Kardx.Models.Match
                 TriggerUIUpdateNeeded();
             }
 
-            // Notify listeners that a new turn is starting
             OnTurnStarted?.Invoke(this, board.CurrentTurnPlayer);
 
-            // If it's the opponent's turn, let AI handle the deployment automatically
+            if (board.TurnNumber >= GameConstants.MaxTurns)
+            {
+                EndMatch("Maximum turns reached");
+                return;
+            }
+
             if (board.IsOpponentTurn())
             {
                 logger?.Log("[MatchManager] Let the opponent run the turn");
@@ -177,13 +219,17 @@ namespace Kardx.Models.Match
                 // Execute AI strategy
                 strategyPlanner?.ExecuteNextStrategy(board);
 
-                // Also trigger the event for backward compatibility
                 OnProcessAITurn?.Invoke(board, strategyPlanner);
 
-                // Wait a short delay before ending the AI turn
-                // In a real implementation, you might want to use a coroutine or async method
-                logger?.Log("[MatchManager] AI turn complete, ending turn");
-                NextTurn();
+                if (!awaitingOrderResolution)
+                {
+                    logger?.Log("[MatchManager] AI turn complete, ending turn");
+                    NextTurn();
+                }
+                else
+                {
+                    logger?.Log("[MatchManager] AI turn paused - awaiting order resolution");
+                }
             }
         }
 
@@ -198,7 +244,8 @@ namespace Kardx.Models.Match
             var currentPlayer = board.CurrentTurnPlayer;
             logger?.Log($"[MatchManager] Ending turn for player {currentPlayer.Id}");
 
-            // Process end of turn effects
+            abilitySystem.ProcessTurnEnd(currentPlayer);
+
             board.ProcessEndOfTurnEffects();
 
             // Notify listeners that the turn is ending
@@ -237,34 +284,32 @@ namespace Kardx.Models.Match
 
         private List<Card> LoadDeck(Faction ownerFaction)
         {
-            var cardTypes = CardLoader.LoadCardTypes();
-            var deck = new List<Card>();
+            if (cardTypeCatalog == null)
+                cardTypeCatalog = CardLoader.LoadCardTypes();
 
-            // Shuffle the card types before adding them to the deck
-            var shuffledCardTypes = cardTypes.OrderBy(x => Guid.NewGuid()).ToList();
-
-            var orderCardTypes = shuffledCardTypes.FindLast(x => x.Category == CardCategory.Order);
-
-            foreach (var cardType in shuffledCardTypes)
-            {
-                // TODO: Add deck building rules here (e.g., card limits, faction restrictions)
-                deck.Add(new Card(cardType, ownerFaction));
-            }
-
-            // TEST: Let's always make sure the order card is in the deck at position 2
-            deck.Insert(0, new Card(orderCardTypes, ownerFaction));
-
-            return deck;
+            return DeckBuilder.BuildDeck(ownerFaction, cardTypeCatalog);
         }
 
-        public void EndMatch()
+        public void EndMatch(string reason = null)
         {
             if (!IsMatchInProgress)
                 return;
 
             IsMatchInProgress = false;
-            OnMatchEnded?.Invoke($"Match ended after {TurnNumber} turns");
-            logger?.Log($"Match ended after {TurnNumber} turns");
+            string message = reason ?? $"Match ended after {TurnNumber} turns";
+            OnMatchEnded?.Invoke(message);
+            logger?.Log(message);
+        }
+
+        public void DeclareWinner(string winnerId, string reason)
+        {
+            if (!IsMatchInProgress)
+                return;
+
+            IsMatchInProgress = false;
+            OnMatchWon?.Invoke(winnerId, reason);
+            OnMatchEnded?.Invoke($"{winnerId} wins: {reason}");
+            logger?.Log($"{winnerId} wins: {reason}");
         }
 
         /// <summary>
@@ -402,6 +447,8 @@ namespace Kardx.Models.Match
             bool success = currentPlayer.DeployUnitCard(card, position);
             if (success)
             {
+                abilitySystem.RegisterCardAbilities(card);
+                abilitySystem.ProcessCardDeployed(card);
                 OnCardDeployed?.Invoke(card, position);
                 TriggerUIUpdateNeeded();
             }
@@ -437,13 +484,117 @@ namespace Kardx.Models.Match
             bool success = currentPlayer.DeployOrderCard(card);
             if (success)
             {
-                OnCardDeployed?.Invoke(card, -1);
+                if (currentPlayer == Opponent)
+                {
+                    pendingEnemyOrder = card;
+                    awaitingOrderResolution = true;
+                    OnEnemyOrderPending?.Invoke(card);
+                    OnCardDeployed?.Invoke(card, -1);
+                    OnCardDiscarded?.Invoke(card);
+                }
+                else
+                {
+                    abilitySystem.ProcessCardDeployed(card);
+                    OnCardDeployed?.Invoke(card, -1);
+                    OnCardDiscarded?.Invoke(card);
+                }
                 TriggerUIUpdateNeeded();
             }
             return success;
         }
 
-        // For backward compatibility
+        public bool ResolvePendingEnemyOrder()
+        {
+            if (pendingEnemyOrder == null)
+                return false;
+
+            var order = pendingEnemyOrder;
+            pendingEnemyOrder = null;
+            awaitingOrderResolution = false;
+
+            abilitySystem.ProcessCardDeployed(order);
+            OnPendingOrderResolved?.Invoke();
+            TriggerUIUpdateNeeded();
+
+            if (board.IsOpponentTurn() && IsMatchInProgress)
+            {
+                NextTurn();
+            }
+
+            return true;
+        }
+
+        public bool CanPlayCountermeasure(Card card)
+        {
+            if (!IsMatchInProgress || card == null || pendingEnemyOrder == null)
+                return false;
+
+            if (!Player.Hand.Contains(card))
+                return false;
+
+            if (card.CardType.Category != CardCategory.Countermeasure)
+                return false;
+
+            return Player.Credits >= card.DeploymentCost;
+        }
+
+        public bool PlayCountermeasure(Card card)
+        {
+            if (!CanPlayCountermeasure(card))
+                return false;
+
+            if (!Player.PlayCountermeasureCard(card))
+                return false;
+
+            pendingEnemyOrder = null;
+            awaitingOrderResolution = false;
+
+            OnOrderCountered?.Invoke(card);
+            OnCardDiscarded?.Invoke(card);
+            OnPendingOrderResolved?.Invoke();
+            TriggerUIUpdateNeeded();
+
+            if (board.IsOpponentTurn() && IsMatchInProgress)
+            {
+                NextTurn();
+            }
+
+            return true;
+        }
+
+        public bool CanMoveUnit(Card card, int toSlotIndex)
+        {
+            if (!IsMatchInProgress || card == null)
+                return false;
+
+            if (!IsPlayerTurn())
+                return false;
+
+            if (card.Owner != Player)
+                return false;
+
+            if (!Player.Battlefield.Contains(card))
+                return false;
+
+            if (toSlotIndex < 0 || toSlotIndex >= Battlefield.SLOT_COUNT)
+                return false;
+
+            return Player.Battlefield.IsSlotEmpty(toSlotIndex);
+        }
+
+        public bool MoveUnit(Card card, int toSlotIndex)
+        {
+            if (!CanMoveUnit(card, toSlotIndex))
+                return false;
+
+            bool success = Player.MoveUnitOnBattlefield(card, toSlotIndex);
+            if (success)
+            {
+                TriggerUIUpdateNeeded();
+            }
+            return success;
+        }
+
         public bool DeployCard(Card card, int position)
         {
             if (card == null)
@@ -531,7 +682,7 @@ namespace Kardx.Models.Match
             logger?.Log($"Initiating attack from {attackerCard.Title} to {defenderCard.Title}");
 
             // Basic null checks
-            if (attackerCard == null || defenderCard == null || board == null)
+            if (!IsMatchInProgress || attackerCard == null || defenderCard == null || board == null)
             {
                 logger?.Log("Attack failed: Null card or board reference");
                 return false;
@@ -547,22 +698,23 @@ namespace Kardx.Models.Match
             // Mark the attacker as having attacked this turn
             attackerCard.HasAttackedThisTurn = true;
 
-            // Calculate damage
+            abilitySystem.ProcessAttack(attackerCard, defenderCard);
+
             int attackDamage = attackerCard.Attack;
             int counterAttackDamage = defenderCard.CounterAttack;
 
-            // Apply damage to defender
             defenderCard.TakeDamage(attackDamage);
+            abilitySystem.ProcessCardDamaged(defenderCard, attackDamage, attackerCard);
 
-            // Apply counter-attack damage to attacker if defender is still alive
             if (defenderCard.CurrentDefense > 0)
             {
                 attackerCard.TakeDamage(counterAttackDamage);
+                abilitySystem.ProcessCardDamaged(attackerCard, counterAttackDamage, defenderCard);
+                abilitySystem.ProcessDefend(defenderCard, attackerCard);
             }
 
             attackerCard.Owner.SpendCredits(attackerCard.OperationCost);
 
-            // Check if any cards died as a result of the attack
             CheckCardDeath(attackerCard);
             CheckCardDeath(defenderCard);
 
@@ -579,23 +731,93 @@ namespace Kardx.Models.Match
             return true;
         }
 
-        /// <summary>
-        /// Checks if a card has died and handles its death
-        /// </summary>
-        /// <param name="card">The card to check</param>
+        public bool InitiateAttackOnHQ(Card attackerCard, Player defendingPlayer)
+        {
+            if (attackerCard == null || defendingPlayer == null || board == null)
+                return false;
+
+            var hq = defendingPlayer.Headquarter;
+            if (hq == null || !hq.IsAlive)
+                return false;
+
+            if (!CanAttackHQ(attackerCard, defendingPlayer))
+                return false;
+
+            attackerCard.HasAttackedThisTurn = true;
+            abilitySystem.ProcessAttack(attackerCard, hq);
+
+            int attackDamage = attackerCard.Attack;
+            hq.TakeDamage(attackDamage);
+            abilitySystem.ProcessCardDamaged(hq, attackDamage, attackerCard);
+
+            attackerCard.Owner.SpendCredits(attackerCard.OperationCost);
+
+            CheckHQDeath(defendingPlayer);
+
+            OnAttackCompleted?.Invoke(attackerCard, hq, attackDamage, hq.CurrentDefense);
+            TriggerUIUpdateNeeded();
+            return true;
+        }
+
+        public bool CanAttack(Card attackerCard, Card defenderCard)
+        {
+            if (!IsMatchInProgress || attackerCard == null || defenderCard == null)
+                return false;
+
+            if (attackerCard.OperationCost > attackerCard.Owner.Credits)
+                return false;
+
+            var defendingPlayer = defenderCard.Owner;
+            return CombatRules.IsValidAttackTarget(attackerCard, defenderCard, defendingPlayer);
+        }
+
+        public bool CanAttackHQ(Card attackerCard, Player defendingPlayer)
+        {
+            if (!IsMatchInProgress || attackerCard == null || defendingPlayer == null)
+                return false;
+
+            if (attackerCard.OperationCost > attackerCard.Owner.Credits)
+                return false;
+
+            return CombatRules.CanAttackHQ(attackerCard, defendingPlayer);
+        }
+
+        private void CheckHQDeath(Player defendingPlayer)
+        {
+            var hq = defendingPlayer.Headquarter;
+            if (hq == null || hq.IsAlive)
+                return;
+
+            var winner = defendingPlayer == board.Player ? board.Opponent : board.Player;
+            DeclareWinner(winner.Id, $"Destroyed {defendingPlayer.Id}'s Headquarters");
+        }
         private void CheckCardDeath(Card card)
         {
-            if (card.CurrentDefense <= 0)
+            HandleCardDeath(card);
+        }
+
+        public void HandleCardDeath(Card card)
+        {
+            if (card == null || card.CurrentDefense > 0)
+                return;
+
+            if (card.IsHeadquarters)
             {
-                // Remove the card from the battlefield
-                card.Owner.RemoveFromBattlefield(card);
-
-                logger?.Log($"Card {card.Title} has died and been moved to the discard pile");
-
-                // Fire event to notify UI
-                OnCardDied?.Invoke(card);
-                TriggerUIUpdateNeeded();
+                CheckHQDeath(card.Owner);
+                return;
             }
+
+            if (card.Owner == null || !card.Owner.Battlefield.Contains(card))
+                return;
+
+            abilitySystem.ProcessCardDestroyed(card);
+            card.Owner.RemoveFromBattlefield(card);
+
+            logger?.Log($"Card {card.Title} has died and been moved to the discard pile");
+
+            OnCardDied?.Invoke(card);
+            GameStateValidator.LogValidationResults(board);
+            TriggerUIUpdateNeeded();
         }
 
         /// <summary>
@@ -618,37 +840,19 @@ namespace Kardx.Models.Match
         /// <returns>True if the attack is valid, false otherwise</returns>
         public bool CanAttack(Card attackerCard, Card defenderCard)
         {
-            if (attackerCard == null || defenderCard == null)
+            if (!IsMatchInProgress || attackerCard == null || defenderCard == null)
                 return false;
 
-            // Check if the attacker has already attacked this turn
-            if (attackerCard.HasAttackedThisTurn)
-            {
-                logger?.Log("[MatchManager] Attack failed: Attacker has already attacked this turn");
-                return false;
-            }
-
-            // Check if the cards belong to different players
-            if (attackerCard.Owner == defenderCard.Owner)
-            {
-                logger?.Log("[MatchManager] Attack failed: Cards belong to the same player");
-                return false;
-            }
-
-            // Check if both cards are on the battlefield
-            bool attackerOnBattlefield = attackerCard.Owner.Battlefield.Contains(attackerCard);
-            bool defenderOnBattlefield = defenderCard.Owner.Battlefield.Contains(defenderCard);
-
-            if (!attackerOnBattlefield || !defenderOnBattlefield)
-            {
-                logger?.Log("[MatchManager] Attack failed: One or more cards are not on the battlefield");
-                return false;
-            }
-
-            // Add any other attack validation rules here
             if (attackerCard.OperationCost > attackerCard.Owner.Credits)
             {
                 logger?.Log("[MatchManager] Attack failed: Attacker does not have enough credits");
+                return false;
+            }
+
+            var defendingPlayer = defenderCard.Owner;
+            if (!CombatRules.IsValidAttackTarget(attackerCard, defenderCard, defendingPlayer))
+            {
+                logger?.Log($"[MatchManager] Invalid attack from {attackerCard.Title} to {defenderCard.Title}");
                 return false;
             }
 
@@ -717,6 +921,7 @@ namespace Kardx.Models.Match
 
             // Always trigger UI update after game state changes
             TriggerUIUpdateNeeded();
+            GameStateValidator.LogValidationResults(board);
         }
 
         /// <summary>

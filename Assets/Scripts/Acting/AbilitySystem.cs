@@ -103,6 +103,21 @@ namespace Kardx.Acting
         }
 
         /// <summary>
+        /// Register all abilities from a card into the active ability pool.
+        /// </summary>
+        public void RegisterCardAbilities(Card card)
+        {
+            if (card == null)
+                return;
+
+            foreach (var abilityType in card.CardType.Abilities)
+            {
+                var ability = new Ability(abilityType, card);
+                RegisterAbility(ability);
+            }
+        }
+
+        /// <summary>
         /// Process card deployment trigger
         /// </summary>
         public void ProcessCardDeployed(Card card)
@@ -110,8 +125,35 @@ namespace Kardx.Acting
             if (card == null)
                 return;
 
-            // Trigger abilities that activate on deployment
             TriggerAbilities(TriggerType.OnDeploy, card);
+        }
+
+        /// <summary>
+        /// Process attack trigger for attacker abilities.
+        /// </summary>
+        public void ProcessAttack(Card attacker, Card defender)
+        {
+            if (attacker == null)
+                return;
+
+            TriggerAbilities(TriggerType.OnAttack, attacker, new Dictionary<string, object>
+            {
+                { "target", defender }
+            });
+        }
+
+        /// <summary>
+        /// Process defend trigger when a unit is attacked.
+        /// </summary>
+        public void ProcessDefend(Card defender, Card attacker)
+        {
+            if (defender == null)
+                return;
+
+            TriggerAbilities(TriggerType.OnDefend, defender, new Dictionary<string, object>
+            {
+                { "attacker", attacker }
+            });
         }
 
         /// <summary>
@@ -222,11 +264,45 @@ namespace Kardx.Acting
                     return ApplyBuffEffect(ability, targets);
                 case EffectCategory.Debuff:
                     return ApplyDebuffEffect(ability, targets);
-                // Implement other effect types as needed
+                case EffectCategory.Draw:
+                    return ApplyDrawEffect(ability);
+                case EffectCategory.Destroy:
+                    return ApplyDestroyEffect(ability, targets);
                 default:
                     Debug.LogWarning($"Effect type {abilityType.Effect} not implemented");
                     return false;
             }
+        }
+
+        private bool ApplyDrawEffect(Ability ability)
+        {
+            var owner = ability.OwnerCard?.Owner;
+            if (owner == null)
+                return false;
+
+            int drawCount = ability.AbilityType.EffectValue;
+            for (int i = 0; i < drawCount; i++)
+            {
+                owner.DrawCard(faceDown: owner.IsOpponent);
+            }
+
+            return true;
+        }
+
+        private bool ApplyDestroyEffect(Ability ability, List<Card> targets)
+        {
+            if (targets == null)
+                return false;
+
+            foreach (var target in targets)
+            {
+                if (target.Owner != null && target.Owner.Battlefield.Contains(target))
+                {
+                    target.Owner.RemoveFromBattlefield(target);
+                }
+            }
+
+            return true;
         }
 
         /// <summary>
@@ -238,9 +314,24 @@ namespace Kardx.Acting
 
             foreach (var target in targets)
             {
-                // Apply damage to the target
                 target.TakeDamage(damageValue);
+                ProcessCardDamaged(target, damageValue, ability.OwnerCard);
                 Debug.Log($"Applying {damageValue} damage to {target.Title}");
+
+                if (!target.IsAlive)
+                {
+                    if (target.IsHeadquarters)
+                    {
+                        matchManager.DeclareWinner(
+                            ability.OwnerCard.Owner.Id,
+                            "Destroyed enemy Headquarters"
+                        );
+                    }
+                    else
+                    {
+                        matchManager.HandleCardDeath(target);
+                    }
+                }
             }
 
             return true;
@@ -419,20 +510,39 @@ namespace Kardx.Acting
                 return new List<Card>();
             }
 
-            var opponentPlayer = matchManager.Opponent;
+            var opponentPlayer = sourcePlayer == matchManager.Player
+                ? matchManager.Opponent
+                : matchManager.Player;
 
             switch (abilityType.Targeting)
             {
                 case TargetingType.Self:
                     return new List<Card> { source };
 
+                case TargetingType.SingleAlly:
+                    return sourcePlayer.GetCardsInPlay()
+                        .Where(c => c != source && !c.IsHeadquarters)
+                        .Take(1)
+                        .ToList();
+
+                case TargetingType.SingleEnemy:
+                    return opponentPlayer.GetCardsInPlay()
+                        .Where(c => !c.IsHeadquarters)
+                        .Take(1)
+                        .ToList();
+
                 case TargetingType.AllAllies:
                     return sourcePlayer.GetCardsInPlay().Where(c => c != source).ToList();
 
                 case TargetingType.AllEnemies:
-                    return opponentPlayer.GetCardsInPlay();
+                    return opponentPlayer.GetCardsInPlay()
+                        .Where(c => !c.IsHeadquarters)
+                        .ToList();
 
-                // Other targeting types would require more context or user input
+                case TargetingType.HQ:
+                    var hq = opponentPlayer.Headquarter;
+                    return hq != null && hq.IsAlive ? new List<Card> { hq } : new List<Card>();
+
                 default:
                     return new List<Card>();
             }

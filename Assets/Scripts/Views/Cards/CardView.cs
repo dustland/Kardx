@@ -94,10 +94,7 @@ namespace Kardx.Views.Cards
         [SerializeField]
         private GameObject highlightEffect;
 
-        // Reference to the drag handlers on the canvas
-        private AbilityDragHandler abilityDragHandler;
-        private UnitDeployDragHandler unitDeployDragHandler;
-        private OrderDeployDragHandler orderDeployDragHandler;
+        private CardDragController dragController;
         private CanvasGroup canvasGroup;
         private bool isHighlighted = false;
 
@@ -144,22 +141,17 @@ namespace Kardx.Views.Cards
                 canvasGroup = gameObject.AddComponent<CanvasGroup>();
             }
 
-            // Get ability drag handler
-            abilityDragHandler = GetComponent<AbilityDragHandler>();
+            dragController = GetComponent<CardDragController>();
+            if (dragController == null)
+                dragController = gameObject.AddComponent<CardDragController>();
 
-            // Set up event handlers for ability dragging
-            if (abilityDragHandler != null)
+            dragController.OnDragStarted += () => isBeingDragged = true;
+            dragController.OnDragEnded += (success) =>
             {
-                abilityDragHandler.OnDragStarted += () => isBeingDragged = true;
-                abilityDragHandler.OnDragEnded += (success) =>
-                {
-                    isBeingDragged = false;
-                    if (success)
-                    {
-                        CancelInvoke(nameof(ShowDetail));
-                    }
-                };
-            }
+                isBeingDragged = false;
+                if (success)
+                    CancelInvoke(nameof(ShowDetail));
+            };
 
             // Ensure card back overlay is initially inactive
             if (cardBackOverlay != null)
@@ -410,77 +402,13 @@ namespace Kardx.Views.Cards
         /// </summary>
         public void UpdateInteractivity()
         {
-            // Determine if the card can be dragged based on its state and location
-            bool isOnBattlefield = IsOnBattlefield();
-            bool isInHand = IsInHand();
-            bool isPlayerCard = card != null && card.Owner != null && !card.Owner.IsOpponent;
+            if (dragController == null)
+                dragController = GetComponent<CardDragController>();
 
-            // Determine if the card should be draggable
-            // Only player cards that are in hand or on battlefield can be dragged
-            bool shouldBeDraggable = isPlayerCard && (isOnBattlefield || isInHand);
-
-            // Ensure all drag handlers are available
-            if (abilityDragHandler == null)
-                abilityDragHandler = GetComponent<AbilityDragHandler>();
-
-            if (unitDeployDragHandler == null)
-                unitDeployDragHandler = GetComponent<UnitDeployDragHandler>();
-
-            if (orderDeployDragHandler == null)
-                orderDeployDragHandler = GetComponent<OrderDeployDragHandler>();
-
-            // Disable all drag handlers first
-            if (abilityDragHandler != null) abilityDragHandler.enabled = false;
-            if (unitDeployDragHandler != null) unitDeployDragHandler.enabled = false;
-            if (orderDeployDragHandler != null) orderDeployDragHandler.enabled = false;
-
-            // If the card should be draggable, enable the appropriate drag handler
-            if (shouldBeDraggable)
-            {
-                if (isOnBattlefield)
-                {
-                    // Cards on battlefield use AbilityDragHandler
-                    if (abilityDragHandler != null)
-                    {
-                        abilityDragHandler.enabled = true;
-                        Debug.Log($"[CardView] Card {card?.Title} is on battlefield, enabling AbilityDragHandler");
-                    }
-                    else
-                    {
-                        Debug.LogWarning($"[CardView] Card {card?.Title} is on battlefield but has no AbilityDragHandler");
-                    }
-                }
-                else if (isInHand)
-                {
-                    // Cards in hand use UnitDeployDragHandler or OrderDeployDragHandler based on card type
-                    if (card != null && card.IsUnitCard && unitDeployDragHandler != null)
-                    {
-                        unitDeployDragHandler.enabled = true;
-                        Debug.Log($"[CardView] Card {card.Title} is in hand, enabling UnitDeployDragHandler");
-                    }
-                    else if (card != null && !card.IsUnitCard && orderDeployDragHandler != null)
-                    {
-                        orderDeployDragHandler.enabled = true;
-                        Debug.Log($"[CardView] Card {card.Title} is in hand, enabling OrderDeployDragHandler");
-                    }
-                }
-            }
-            else if (!isPlayerCard)
-            {
-                // Opponent cards are never draggable
-                Debug.Log($"[CardView] Card {card?.Title} belongs to opponent, disabling drag handlers");
-            }
-            else if (!isOnBattlefield && !isInHand)
-            {
-                // Cards not in hand or battlefield are not draggable
-                Debug.Log($"[CardView] Card {card?.Title} is not in hand or battlefield, disabling drag handlers");
-            }
-
-            // Update the raycast target property based on whether the card should be draggable
-            if (backgroundImage != null)
-            {
-                backgroundImage.raycastTarget = shouldBeDraggable;
-            }
+            if (dragController != null)
+                dragController.RefreshCapability();
+            else if (backgroundImage != null)
+                backgroundImage.raycastTarget = false;
         }
 
         /// <summary>
@@ -803,10 +731,10 @@ namespace Kardx.Views.Cards
             // Inform listeners this view is being destroyed
             OnDestroyed?.Invoke();
 
-            if (abilityDragHandler != null)
+            if (dragController != null)
             {
-                abilityDragHandler.OnDragStarted -= () => isBeingDragged = true;
-                abilityDragHandler.OnDragEnded -= (success) => isBeingDragged = false;
+                dragController.OnDragStarted -= () => isBeingDragged = true;
+                dragController.OnDragEnded -= (success) => isBeingDragged = false;
             }
         }
 
@@ -847,86 +775,8 @@ namespace Kardx.Views.Cards
             // Set the card model
             cardView.Initialize(card);
 
-            // Determine if this is a player card
-            bool isPlayerCard = card.Owner != null && !card.Owner.IsOpponent;
-
-            // Add appropriate drag handlers based on card location and owner
-            if (isPlayerCard)
-            {
-                if (IsInHand(card))
-                {
-                    // For cards in hand, add appropriate deploy drag handler based on card type
-                    if (card.IsUnitCard)
-                    {
-                        // Add UnitDeployDragHandler for unit cards
-                        var unitDragHandler = cardGO.GetComponent<UnitDeployDragHandler>();
-                        if (unitDragHandler == null)
-                        {
-                            unitDragHandler = cardGO.AddComponent<UnitDeployDragHandler>();
-                        }
-
-                        // Disable OrderDeployDragHandler if it exists
-                        var orderDragHandler = cardGO.GetComponent<OrderDeployDragHandler>();
-                        if (orderDragHandler != null)
-                        {
-                            orderDragHandler.enabled = false;
-                        }
-
-                        // Disable AbilityDragHandler if it exists
-                        var abilityDragHandler = cardGO.GetComponent<AbilityDragHandler>();
-                        if (abilityDragHandler != null)
-                        {
-                            abilityDragHandler.enabled = false;
-                        }
-                    }
-                    else
-                    {
-                        // Add OrderDeployDragHandler for order cards
-                        var orderDragHandler = cardGO.GetComponent<OrderDeployDragHandler>();
-                        if (orderDragHandler == null)
-                        {
-                            orderDragHandler = cardGO.AddComponent<OrderDeployDragHandler>();
-                        }
-
-                        // Disable UnitDeployDragHandler if it exists
-                        var unitDragHandler = cardGO.GetComponent<UnitDeployDragHandler>();
-                        if (unitDragHandler != null)
-                        {
-                            unitDragHandler.enabled = false;
-                        }
-
-                        // Disable AbilityDragHandler if it exists
-                        var abilityDragHandler = cardGO.GetComponent<AbilityDragHandler>();
-                        if (abilityDragHandler != null)
-                        {
-                            abilityDragHandler.enabled = false;
-                        }
-                    }
-                }
-                else if (IsOnBattlefield(card))
-                {
-                    // For cards on battlefield, add AbilityDragHandler if it doesn't exist
-                    var abilityDragHandler = cardGO.GetComponent<AbilityDragHandler>();
-                    if (abilityDragHandler == null)
-                    {
-                        abilityDragHandler = cardGO.AddComponent<AbilityDragHandler>();
-                    }
-
-                    // Disable UnitDeployDragHandler if it exists
-                    var unitDragHandler = cardGO.GetComponent<UnitDeployDragHandler>();
-                    if (unitDragHandler != null)
-                    {
-                        unitDragHandler.enabled = false;
-                    }
-
-                    // Disable OrderDeployDragHandler if it exists
-                    var orderDragHandler = cardGO.GetComponent<OrderDeployDragHandler>();
-                    if (orderDragHandler != null)
-                    {
-                        orderDragHandler.enabled = false;
-                    }
-                }
-            }
+            if (card.Owner != null && !card.Owner.IsOpponent && cardGO.GetComponent<CardDragController>() == null)
+                cardGO.AddComponent<CardDragController>();
 
             // Update the card UI
             cardView.UpdateUI();
@@ -951,72 +801,5 @@ namespace Kardx.Views.Cards
             return card != null && card.Owner != null && card.Owner.Battlefield.Contains(card);
         }
 
-        /// <summary>
-        /// Switches to the ability drag handler for cards on the battlefield
-        /// </summary>
-        public void SwitchToAbilityDragHandler()
-        {
-            if (abilityDragHandler == null)
-                abilityDragHandler = GetComponent<AbilityDragHandler>();
-
-            // Disable all drag handlers first
-            DisableAllDragHandlers();
-
-            // Enable the ability drag handler
-            if (abilityDragHandler != null)
-            {
-                abilityDragHandler.enabled = true;
-                Debug.Log($"[CardView] Switched {card?.Title} to AbilityDragHandler");
-            }
-            else
-            {
-                Debug.LogWarning($"[CardView] Failed to switch {card?.Title} to AbilityDragHandler - component not found");
-            }
-        }
-
-        /// <summary>
-        /// Switches to the deployment drag handler based on card type
-        /// </summary>
-        public void SwitchToDeploymentDragHandler()
-        {
-            // Disable all drag handlers first
-            DisableAllDragHandlers();
-
-            if (card == null) return;
-
-            // Enable the appropriate deployment drag handler based on card type
-            if (card.IsUnitCard)
-            {
-                if (unitDeployDragHandler == null)
-                    unitDeployDragHandler = GetComponent<UnitDeployDragHandler>();
-
-                if (unitDeployDragHandler != null)
-                {
-                    unitDeployDragHandler.enabled = true;
-                    Debug.Log($"[CardView] Switched {card.Title} to UnitDeployDragHandler");
-                }
-            }
-            else
-            {
-                if (orderDeployDragHandler == null)
-                    orderDeployDragHandler = GetComponent<OrderDeployDragHandler>();
-
-                if (orderDeployDragHandler != null)
-                {
-                    orderDeployDragHandler.enabled = true;
-                    Debug.Log($"[CardView] Switched {card.Title} to OrderDeployDragHandler");
-                }
-            }
-        }
-
-        /// <summary>
-        /// Disables all drag handlers on this card
-        /// </summary>
-        private void DisableAllDragHandlers()
-        {
-            if (abilityDragHandler != null) abilityDragHandler.enabled = false;
-            if (unitDeployDragHandler != null) unitDeployDragHandler.enabled = false;
-            if (orderDeployDragHandler != null) orderDeployDragHandler.enabled = false;
-        }
     }
 }

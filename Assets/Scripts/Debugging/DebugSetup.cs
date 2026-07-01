@@ -111,10 +111,10 @@ namespace Kardx
 
         private void SetupDragHandlerDebugging()
         {
-            AbilityDragHandler[] handlers = FindObjectsByType<AbilityDragHandler>(FindObjectsSortMode.None);
-            Debug.Log($"[DebugSetup] Found {handlers.Length} AbilityDragHandlers");
+            CardDragController[] handlers = FindObjectsByType<CardDragController>(FindObjectsSortMode.None);
+            Debug.Log($"[DebugSetup] Found {handlers.Length} CardDragControllers");
 
-            foreach (AbilityDragHandler handler in handlers)
+            foreach (CardDragController handler in handlers)
             {
                 // Add EventDebugger if it doesn't already have one
                 if (handler.GetComponent<EventDebugger>() == null)

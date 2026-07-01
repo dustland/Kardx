@@ -3,6 +3,7 @@ using System.Linq;
 using UnityEngine;
 using Kardx.Models;
 using Kardx.Models.Cards;
+using Kardx.Utils;
 using Kardx.Models.Match;
 using Kardx.Views.Cards;
 using Kardx.Managers;
@@ -150,6 +151,11 @@ namespace Kardx.Views.Match
             {
                 slot.ClearHighlight();
             }
+
+            foreach (var hq in FindObjectsByType<HeadquarterView>(FindObjectsSortMode.None))
+            {
+                hq.SetHighlight(false);
+            }
         }
 
         public OpponentCardSlot GetSlot(int index)
@@ -249,42 +255,43 @@ namespace Kardx.Views.Match
             if (matchManager == null || sourceCard == null)
                 return;
 
-            // First clear any existing highlights
             ClearCardHighlights();
 
-            // Only highlight if it's the player's turn and the source card is on the player's battlefield
             if (!matchManager.IsPlayerTurn() || !matchManager.Player.Battlefield.Contains(sourceCard))
                 return;
 
-            // Don't highlight if the card has already attacked
-            if (sourceCard.HasAttackedThisTurn)
+            if (!CombatRules.CanUnitAttack(sourceCard))
                 return;
 
-            // Don't highlight if player doesn't have enough credits for the operation cost
             if (sourceCard.OperationCost > matchManager.Player.Credits)
                 return;
 
             isHighlightingCards = true;
+            Color highlightColor = new Color(1f, 0.2f, 0f, 0.9f);
 
-            // Use a brighter, more noticeable color for valid targets
-            Color highlightColor = new Color(1f, 0.2f, 0f, 0.9f); // Bright orange-red with high alpha
+            var validTargets = CombatRules.GetValidAttackTargets(sourceCard, matchManager.Opponent);
+            var validTargetSet = new HashSet<Card>(validTargets);
 
-            Debug.Log($"[OpponentBattlefieldView] Highlighting valid targets for {sourceCard.Title}");
-
-            // Highlight all cards on the opponent's battlefield that can be targeted
             for (int i = 0; i < slots.Count; i++)
             {
-                Card opponentCard = matchManager.Opponent.Battlefield.GetCardAt(i);
-                if (opponentCard != null)
+                var opponentCard = matchManager.Opponent.Battlefield.GetCardAt(i);
+                if (opponentCard != null && validTargetSet.Contains(opponentCard))
                 {
-                    // Check if this opponent card can be attacked
                     slots[i].SetHighlight(highlightColor, true);
-                    Debug.Log($"[OpponentBattlefieldView] Highlighted target: {opponentCard.Title}");
                 }
                 else
                 {
-                    // Make sure empty slots are NOT highlighted
                     slots[i].ClearHighlight();
+                }
+            }
+
+            var hqView = FindAnyObjectByType<HeadquarterView>();
+            foreach (var hq in FindObjectsByType<HeadquarterView>(FindObjectsSortMode.None))
+            {
+                if (hq.IsOpponentHq && matchManager.Opponent.Headquarter != null
+                    && validTargetSet.Contains(matchManager.Opponent.Headquarter))
+                {
+                    hq.SetHighlight(true);
                 }
             }
         }

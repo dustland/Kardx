@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Kardx.Models;
 using Kardx.Models.Match;
 
 namespace Kardx.Models.Cards
@@ -11,6 +12,8 @@ namespace Kardx.Models.Cards
     {
         public const int SLOT_COUNT = 5;
         private BattlefieldSlot[] slots;
+
+        protected override ZoneType Zone => ZoneType.Battlefield;
 
         public Battlefield(Player owner) : base(owner)
         {
@@ -59,13 +62,14 @@ namespace Kardx.Models.Cards
             // Set the card in the slot
             if (slots[slotIndex].SetCard(card))
             {
-                // Add to our internal list
                 if (!cards.Contains(card))
                 {
                     cards.Add(card);
                 }
 
                 card.SetOwner(owner);
+                card.SetZone(ZoneType.Battlefield);
+                OnCardAdded?.Invoke(card, this);
 
                 return true;
             }
@@ -84,6 +88,11 @@ namespace Kardx.Models.Cards
                 {
                     slots[i].RemoveCard();
                     bool removed = cards.Remove(card);
+                    if (removed)
+                    {
+                        card.SetZone(ZoneType.Limbo);
+                        OnCardRemoved?.Invoke(card, this);
+                    }
                     return removed;
                 }
             }
@@ -142,6 +151,28 @@ namespace Kardx.Models.Cards
             }
 
             return -1;
+        }
+
+        public bool MoveCard(Card card, int toSlotIndex)
+        {
+            if (card == null || toSlotIndex < 0 || toSlotIndex >= SLOT_COUNT)
+                return false;
+
+            if (!IsSlotEmpty(toSlotIndex))
+                return false;
+
+            int fromSlot = GetSlotIndex(card);
+            if (fromSlot < 0)
+                return false;
+
+            slots[fromSlot].RemoveCard();
+            if (!slots[toSlotIndex].SetCard(card))
+            {
+                slots[fromSlot].SetCard(card);
+                return false;
+            }
+
+            return true;
         }
     }
 

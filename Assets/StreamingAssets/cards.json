@@ -21,7 +21,8 @@
       "550e8400-e29b-41d4-a716-446655440000",
       "550e8400-e29b-41d4-a716-446655440001",
       "550e8400-e29b-41d4-a716-446655440008"
-    ]
+    ],
+    "keywords": [2]
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440001",
@@ -69,7 +70,8 @@
       "550e8400-e29b-41d4-a716-446655440000",
       "550e8400-e29b-41d4-a716-446655440005",
       "550e8400-e29b-41d4-a716-446655440008"
-    ]
+    ],
+    "keywords": [1]
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440003",
@@ -117,7 +119,8 @@
       "550e8400-e29b-41d4-a716-446655440004",
       "550e8400-e29b-41d4-a716-446655440000",
       "550e8400-e29b-41d4-a716-446655440003"
-    ]
+    ],
+    "keywords": [4]
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440005",
@@ -237,7 +240,25 @@
       "550e8400-e29b-41d4-a716-446655440000",
       "550e8400-e29b-41d4-a716-446655440005",
       "550e8400-e29b-41d4-a716-446655440008"
-    ]
+    ],
+    "keywords": [1]
+  },
+  {
+    "id": "cm-intercept-001",
+    "title": "Signal Intercept",
+    "description": "Counter an enemy Order before it takes effect.",
+    "category": "Countermeasure",
+    "subtype": "Tactical",
+    "deploymentCost": 2,
+    "operationCost": 0,
+    "baseDefense": 0,
+    "baseAttack": 0,
+    "baseCounterAttack": 0,
+    "rarity": "Limited",
+    "setId": "base_set",
+    "imageUrl": "SovietBasicB1.png",
+    "attributes": {},
+    "abilities": []
   },
   {
     "id": "550e8400-e29b-41d4-a716-446655440010",
@@ -257,8 +278,41 @@
       "area_damage": 2
     },
     "abilities": [
-      "550e8400-e29b-41d4-a716-446655440000",
-      "550e8400-e29b-41d4-a716-446655440006"
+      "550e8400-e29b-41d4-a716-44665544000a"
     ]
+  },
+  {
+    "id": "hq-us-001",
+    "title": "US Command Post",
+    "description": "American headquarters. Destroy the enemy HQ to win.",
+    "category": "Headquarters",
+    "subtype": "HQ",
+    "deploymentCost": 0,
+    "operationCost": 0,
+    "baseDefense": 20,
+    "baseAttack": 0,
+    "baseCounterAttack": 0,
+    "rarity": "Standard",
+    "setId": "base_set",
+    "imageUrl": "BasicGermanB1.png",
+    "attributes": {},
+    "abilities": []
+  },
+  {
+    "id": "hq-soviet-001",
+    "title": "Soviet Command Post",
+    "description": "Soviet headquarters. Destroy the enemy HQ to win.",
+    "category": "Headquarters",
+    "subtype": "HQ",
+    "deploymentCost": 0,
+    "operationCost": 0,
+    "baseDefense": 20,
+    "baseAttack": 0,
+    "baseCounterAttack": 0,
+    "rarity": "Standard",
+    "setId": "base_set",
+    "imageUrl": "SovietBasicB1.png",
+    "attributes": {},
+    "abilities": []
   }
 ]

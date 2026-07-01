@@ -97,10 +97,7 @@ namespace Kardx.Models.Match
         /// </summary>
         public void StartTurn()
         {
-            // Refresh the current player's resources
-            currentTurnPlayer.AddCredits(Player.CREDITS_PER_TURN);
-
-            // Reset attack status for all cards
+            currentTurnPlayer.RefreshCreditsForTurn();
             currentTurnPlayer.ResetCardAttackStatus();
         }
 

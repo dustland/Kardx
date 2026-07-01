@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Kardx.Models;
 using Kardx.Models.Match;
 
 namespace Kardx.Models.Cards
@@ -10,6 +11,8 @@ namespace Kardx.Models.Cards
     public class Deck : CardCollection
     {
         public Deck(Player owner) : base(owner) { }
+
+        protected override ZoneType Zone => ZoneType.Deck;
         
         public Card DrawCard()
         {

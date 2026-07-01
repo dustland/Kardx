@@ -192,6 +192,31 @@ namespace Kardx.Views.Match
             }
         }
 
+        public void HighlightMoveTargets(Card movingCard)
+        {
+            if (matchManager == null || movingCard == null)
+                return;
+
+            if (!HasAnyMoveTarget(movingCard))
+                return;
+
+            for (int i = 0; i < cardSlots.Count; i++)
+            {
+                if (matchManager.CanMoveUnit(movingCard, i))
+                    cardSlots[i].SetHighlightState(PlayerCardSlot.HighlightType.Available);
+            }
+        }
+
+        private bool HasAnyMoveTarget(Card movingCard)
+        {
+            for (int i = 0; i < Battlefield.SLOT_COUNT; i++)
+            {
+                if (matchManager.CanMoveUnit(movingCard, i))
+                    return true;
+            }
+            return false;
+        }
+
         /// <summary>
         /// Clear all highlights from the battlefield
         /// </summary>
@@ -356,8 +381,7 @@ namespace Kardx.Views.Match
                 detachedCardView.transform.SetParent(targetSlot.CardContainer, false);
                 detachedCardView.transform.localPosition = Vector3.zero;
 
-                // Explicitly switch from deployment drag handlers to ability drag handlers
-                detachedCardView.SwitchToAbilityDragHandler();
+                detachedCardView.UpdateInteractivity();
 
                 // Update player's hand to reflect the card being removed
                 var handView = FindAnyObjectByType<PlayerHandView>();

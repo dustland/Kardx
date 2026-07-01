@@ -10,7 +10,7 @@ namespace Kardx.Views.Match
     /// <summary>
     /// UI component representing a slot in the player's battlefield.
     /// </summary>
-    public class PlayerCardSlot : MonoBehaviour, IDropHandler, IPointerEnterHandler, IPointerExitHandler
+    public class PlayerCardSlot : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     {
         /// <summary>
         /// Types of highlights that can be applied to a card slot
@@ -250,69 +250,8 @@ namespace Kardx.Views.Match
 
         public void OnPointerExit(PointerEventData eventData)
         {
-            // Check the current highlight state to determine what to do
             if (GetHighlightState() == HighlightType.DropTarget)
-            {
-                // If this was highlighted as DropTarget, restore the previous state
-                // (which might be Available or None)
                 SetHighlightState(HighlightType.None);
-            }
-        }
-
-        public void OnDrop(PointerEventData eventData)
-        {
-            if (!IsHighlighted())
-            {
-                Debug.LogWarning($"[PlayerCardSlot] Card slot {slotIndex} is not a valid drop target. Current highlight: {GetHighlightState()}");
-                return;
-            }
-
-            // Get the card view from the dragged object
-            var cardView = eventData.pointerDrag.GetComponent<CardView>();
-            if (cardView == null || cardView.Card == null)
-            {
-                Debug.LogError("[PlayerCardSlot] Dropped item is not a valid card");
-                return;
-            }
-
-            // Early exit if this is an Order card - we want these to be handled by the OrderDropHandler on the canvas
-            if (cardView.Card.IsOrderCard)
-            {
-                Debug.Log($"[PlayerCardSlot] Ignoring Order card {cardView.Card.Title} - this should be handled by OrderDropHandler");
-                return;
-            }
-
-            // Re-enable raycast blocking on the dragged card
-            var canvasGroup = cardView.GetComponent<CanvasGroup>();
-            if (canvasGroup != null)
-            {
-                canvasGroup.blocksRaycasts = true;
-            }
-
-            Debug.Log($"[PlayerCardSlot] Unit Card {cardView.Card.Title} dropped on slot {slotIndex}");
-
-            // Get access to the match manager directly from battlefield view
-            var matchManager = battlefieldView.GetMatchManager();
-            if (matchManager != null)
-            {
-                Card card = cardView.Card;
-
-                // Only deploy unit cards - order cards should be handled by OrderDropHandler
-                if (card.IsUnitCard)
-                {
-                    // For unit cards, deploy to the specific slot
-                    Debug.Log($"[PlayerCardSlot] Deploying unit card to slot {slotIndex}");
-                    bool success = matchManager.DeployCard(card, slotIndex);
-                    Debug.Log($"[PlayerCardSlot] Deployment {(success ? "succeeded" : "failed")}");
-                }
-            }
-            else
-            {
-                Debug.LogError("[PlayerCardSlot] Cannot deploy card - MatchManager is null");
-            }
-
-            // Clear all highlights - we access this through the battlefield view now 
-            battlefieldView.ClearCardHighlights();
         }
 
         public void AddCard(CardView cardView)
@@ -354,13 +293,6 @@ namespace Kardx.Views.Match
         public bool HasCard()
         {
             return GetCardView() != null;
-        }
-
-        private bool IsHighlighted()
-        {
-            // Accept both DropTarget and Available states as valid drop targets
-            return GetHighlightState() == HighlightType.DropTarget ||
-                   GetHighlightState() == HighlightType.Available;
         }
     }
 }

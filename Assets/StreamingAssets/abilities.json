@@ -208,5 +208,26 @@
     "effectAttribute": "attack",
     "specialEffectId": "",
     "customParameters": {}
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-44665544000a",
+    "name": "Area Bombardment",
+    "description": "Deal 2 damage to all enemy units on the battlefield.",
+    "iconPath": "Icons/area_bombardment.png",
+    "trigger": 1,
+    "cooldownTurns": 0,
+    "usesPerTurn": 1,
+    "usesPerMatch": 0,
+    "requiresFaceUp": false,
+    "operationCost": 0,
+    "targeting": 4,
+    "range": 0,
+    "canTargetFaceDown": true,
+    "effect": 0,
+    "effectValue": 2,
+    "effectDuration": 0,
+    "effectAttribute": "health",
+    "specialEffectId": "",
+    "customParameters": {}
   }
 ]

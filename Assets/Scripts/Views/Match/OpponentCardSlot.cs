@@ -5,9 +5,7 @@ using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using DG.Tweening;
 using Kardx.Models.Cards;
-using Kardx.Models.Match;
 using Kardx.Views.Cards;
-using Kardx.Controllers.DragHandlers;
 
 namespace Kardx.Views.Match
 {
@@ -15,7 +13,7 @@ namespace Kardx.Views.Match
     /// UI component representing a slot in the opponent's battlefield.
     /// Handles targeting for player abilities and attacks.
     /// </summary>
-    public class OpponentCardSlot : MonoBehaviour, IDropHandler
+    public class OpponentCardSlot : MonoBehaviour
     {
         private Image highlightImage;
 
@@ -192,90 +190,6 @@ namespace Kardx.Views.Match
             }
         }
 
-        public void OnDrop(PointerEventData eventData)
-        {
-            Debug.Log($"[OpponentCardSlot] OnDrop called on slot {slotIndex}");
-
-            // Check if this slot is a valid target
-            if (!IsTargetable())
-            {
-                Debug.LogWarning($"[OpponentCardSlot] Slot {slotIndex} is not targetable");
-                return;
-            }
-
-            // Try to get the CardView from the dragged object
-            GameObject draggedObject = eventData.pointerDrag;
-            if (draggedObject == null)
-            {
-                Debug.LogWarning("[OpponentCardSlot] OnDrop - No dragged object");
-                return;
-            }
-
-            CardView cardView = draggedObject.GetComponent<CardView>();
-            if (cardView == null)
-            {
-                Debug.LogWarning("[OpponentCardSlot] OnDrop - No valid CardView found in the dragged object");
-                return;
-            }
-
-            // Try to get the AbilityDragHandler from the dragged object
-            AbilityDragHandler abilityDragHandler = draggedObject.GetComponent<AbilityDragHandler>();
-            if (abilityDragHandler == null)
-            {
-                Debug.LogWarning("[OpponentCardSlot] OnDrop - No AbilityDragHandler found in the dragged object");
-                return;
-            }
-
-            Debug.Log($"[OpponentCardSlot] Processing attack from {cardView.Card.Title} to slot {slotIndex}");
-
-            // Get the target card
-            CardView targetCardView = GetCardView();
-            if (targetCardView == null)
-            {
-                Debug.LogWarning("[OpponentCardSlot] OnDrop - No target card found in this slot");
-                return;
-            }
-
-            // Attempt to perform the attack
-            bool attackSuccessful = false;
-            try
-            {
-                // Get the match manager
-                MatchManager matchManager = UnityEngine.Object.FindAnyObjectByType<MatchManager>();
-                if (matchManager == null)
-                {
-                    Debug.LogError("[OpponentCardSlot] OnDrop - MatchManager not found");
-                    return;
-                }
-
-                // Perform the attack
-                attackSuccessful = matchManager.InitiateAttack(cardView.Card, targetCardView.Card);
-                Debug.Log($"[OpponentCardSlot] Attack result: {(attackSuccessful ? "Success" : "Failed")}");
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogError($"[OpponentCardSlot] Error during attack: {ex.Message}");
-                return;
-            }
-
-            // Notify the ability drag handler that the drop was successful
-            if (attackSuccessful)
-            {
-                Debug.Log("[OpponentCardSlot] Notifying AbilityDragHandler of successful drop");
-                abilityDragHandler.NotifyDropSuccess();
-            }
-            else
-            {
-                Debug.LogWarning("[OpponentCardSlot] Attack was not successful");
-            }
-
-            // Clear highlights
-            if (battlefieldView != null)
-            {
-                battlefieldView.ClearCardHighlights();
-            }
-        }
-
         // Adds a public getter to check if this slot has a card
         public bool HasCard()
         {
@@ -334,12 +248,6 @@ namespace Kardx.Views.Match
             {
                 ClearHighlight();
             }
-        }
-
-        private bool IsTargetable()
-        {
-            // TO DO: implement logic to determine if this slot is targetable
-            return true;
         }
     }
 }

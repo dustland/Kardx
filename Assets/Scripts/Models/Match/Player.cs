@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Kardx.Models;
 using Kardx.Models.Cards;
 using Kardx.Utils;
 
@@ -11,32 +12,22 @@ namespace Kardx.Models.Match
     /// </summary>
     public class Player
     {
-        // Constants
-        public const int BATTLEFIELD_SLOT_COUNT = 5;
-        private const int MAX_HAND_SIZE = 10;
-        private const int MAX_CREDITS = 9;
+        public const int BATTLEFIELD_SLOT_COUNT = GameConstants.BattlefieldSlotCount;
         public const int CREDITS_PER_TURN = 1;
 
-        // Core state
         private string playerId;
         private ILogger logger;
         private int credits;
+        private int turnsPlayed;
         private Faction faction;
 
-        // Card collections
         private Hand hand;
         private Battlefield battlefield;
         private Deck deck;
+        private DiscardPile discardPile;
         private Card headquartersCard;
-        private Board board; // Reference to the game board
+        private Board board;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="Player"/> class.
-        /// </summary>
-        /// <param name="playerId">The player's ID.</param>
-        /// <param name="initialDeck">The player's initial deck of cards.</param>
-        /// <param name="faction">The player's faction.</param>
-        /// <param name="logger">The logger to use for logging messages.</param>
         public Player(
             string playerId,
             List<Card> initialDeck,
@@ -58,79 +49,42 @@ namespace Kardx.Models.Match
         {
             this.playerId = playerId;
             this.logger = logger;
-            this.credits = MAX_CREDITS;
+            this.credits = 0;
+            this.turnsPlayed = 0;
             this.faction = faction;
             this.board = board;
 
-            // Initialize collections
             hand = new Hand(this);
             battlefield = new Battlefield(this);
             deck = new Deck(this);
+            discardPile = new DiscardPile(this);
 
-            // Initialize deck with initial cards
             foreach (var card in initialDeck)
             {
-                card.SetOwner(this); // Set the owner of the card
+                card.SetOwner(this);
                 deck.AddCard(card);
             }
 
-            // Shuffle the deck
-            // deck.Shuffle();
+            deck.Shuffle();
         }
 
-        // Public properties
-        /// <summary>
-        /// Gets the player's ID.
-        /// </summary>
         public string Id => playerId;
-
-        /// <summary>
-        /// Gets the player's faction.
-        /// </summary>
         public Faction Faction => faction;
-
-        /// <summary>
-        /// Gets the player's hand of cards.
-        /// </summary>
         public Hand Hand => hand;
-
-        /// <summary>
-        /// Gets the player's battlefield.
-        /// </summary>
         public Battlefield Battlefield => battlefield;
-
-        /// <summary>
-        /// Gets the player's deck of cards.
-        /// </summary>
         public Deck Deck => deck;
-
-        /// <summary>
-        /// Gets the player's headquarter card.
-        /// </summary>
+        public DiscardPile DiscardPile => discardPile;
         public Card Headquarter => headquartersCard;
-
-        /// <summary>
-        /// Gets the player's current credits.
-        /// </summary>
         public int Credits => credits;
+        public int TurnsPlayed => turnsPlayed;
+        public bool IsOpponent => board != null && board.IsOpponent(this);
 
-        /// <summary>
-        /// Gets a value indicating whether the player is an opponent.
-        /// </summary>
-        public bool IsOpponent => board.IsOpponent(this);
-
-        // Hand management
-        /// <summary>
-        /// Draws a card from the deck and adds it to the player's hand.
-        /// </summary>
-        /// <param name="faceDown">Whether the card should be drawn face-down.</param>
-        /// <returns>The drawn card, or null if no cards could be drawn.</returns>
         public Card DrawCard(bool faceDown = false)
         {
             if (hand.IsFull)
             {
                 logger?.Log(
-                    $"[{playerId}] Cannot draw card - hand is full ({MAX_HAND_SIZE} cards)"
+                    $"[{playerId}] Cannot draw card - hand is full ({GameConstants.MaxHandSize} cards)"
                 );
                 return null;
             }
@@ -147,32 +101,20 @@ namespace Kardx.Models.Match
             return card;
         }
 
-        /// <summary>
-        /// Discards a card from the player's hand.
-        /// </summary>
-        /// <param name="card">The card to discard.</param>
-        /// <returns>True if the card was discarded, false otherwise.</returns>
-        public bool DiscardCard(Card card)
+        public bool DiscardFromHand(Card card)
         {
-            if (card == null)
-                return false;
-
-            if (!hand.Contains(card))
+            if (card == null || !hand.Contains(card))
             {
                 logger?.Log($"[{playerId}] Cannot discard card - card not in hand");
                 return false;
             }
 
             hand.RemoveCard(card);
+            discardPile.AddCard(card);
+            card.SetFaceDown(false);
             return true;
         }
 
-        /// <summary>
-        /// Deploys a unit card to the battlefield.
-        /// </summary>
-        /// <param name="card">The card to deploy.</param>
-        /// <param name="slotIndex">The slot index to deploy the card to.</param>
-        /// <returns>True if the card was deployed, false otherwise.</returns>
         public bool DeployUnitCard(Card card, int slotIndex)
         {
             if (card == null)
@@ -202,21 +144,13 @@ namespace Kardx.Models.Match
                 return false;
             }
 
-            // Remove from hand
             hand.RemoveCard(card);
-
-            // Pay the cost
             SpendCredits(card.CardType.Cost);
-
-            // Deploy to battlefield
+            card.SetFaceDown(false);
+            card.MarkDeployed();
             return battlefield.DeployCard(card, slotIndex);
         }
 
-        /// <summary>
-        /// Deploys an order card.
-        /// </summary>
-        /// <param name="card">The card to deploy.</param>
-        /// <returns>True if the card was deployed, false otherwise.</returns>
         public bool DeployOrderCard(Card card)
         {
             if (card == null)
@@ -240,58 +174,40 @@ namespace Kardx.Models.Match
                 return false;
             }
 
-            // Remove from hand
             hand.RemoveCard(card);
-
-            // Pay the cost
             SpendCredits(card.CardType.Cost);
-
-            // Order cards go directly to the discard pile after being played
+            card.SetFaceDown(false);
+            discardPile.AddCard(card);
             return true;
         }
 
-        /// <summary>
-        /// Deploys a card (for backward compatibility).
-        /// </summary>
-        /// <param name="card">The card to deploy.</param>
-        /// <param name="position">The position to deploy to (ignored for order cards).</param>
-        /// <returns>True if the card was deployed, false otherwise.</returns>
-        // public bool DeployCard(Card card, int position)
-        // {
-        //     if (card == null)
-        //         return false;
-
-        //     return card.CardType.Category == CardCategory.Unit ? DeployUnitCard(card, position)
-        //         : card.CardType.Category == CardCategory.Order ? DeployOrderCard(card)
-        //         : false;
-        // }
-
-        /// <summary>
-        /// Destroys a card on the battlefield.
-        /// </summary>
-        /// <param name="card">The card to destroy.</param>
-        /// <returns>True if the card was destroyed, false otherwise.</returns>
-        public bool DestroyCard(Card card)
+        public bool MoveToDiscard(Card card)
         {
             if (card == null)
                 return false;
 
-            if (!battlefield.Contains(card))
+            if (battlefield.Contains(card))
             {
-                logger?.Log($"[{playerId}] Cannot destroy card - card not on battlefield");
+                battlefield.RemoveCard(card);
+            }
+            else if (hand.Contains(card))
+            {
+                hand.RemoveCard(card);
+            }
+            else
+            {
                 return false;
             }
 
-            battlefield.RemoveCard(card);
-            // Card is destroyed - we're not keeping track of destroyed cards for now
+            discardPile.AddCard(card);
             return true;
         }
 
-        /// <summary>
-        /// Removes a card from the battlefield.
-        /// </summary>
-        /// <param name="card">The card to remove.</param>
-        /// <returns>True if the card was removed, false otherwise.</returns>
+        public bool DestroyCard(Card card)
+        {
+            return MoveToDiscard(card);
+        }
+
         public bool RemoveFromBattlefield(Card card)
         {
             if (card == null)
@@ -303,20 +219,12 @@ namespace Kardx.Models.Match
                 return false;
             }
 
-            // Remove from battlefield
             battlefield.RemoveCard(card);
-
-            // Card is removed - we're not tracking removed cards for now
-            logger?.Log($"[{playerId}] Card {card.Title} removed from battlefield");
-
+            discardPile.AddCard(card);
+            logger?.Log($"[{playerId}] Card {card.Title} removed from battlefield to discard pile");
             return true;
         }
 
-        /// <summary>
-        /// Spends credits.
-        /// </summary>
-        /// <param name="amount">The amount of credits to spend.</param>
-        /// <returns>True if the credits were spent, false otherwise.</returns>
         public bool SpendCredits(int amount)
         {
             if (amount <= 0)
@@ -332,53 +240,38 @@ namespace Kardx.Models.Match
             return true;
         }
 
-        /// <summary>
-        /// Adds credits.
-        /// </summary>
-        /// <param name="amount">The amount of credits to add.</param>
-        public void AddCredits(int amount)
+        public void RefreshCreditsForTurn()
         {
-            if (amount <= 0)
-                return;
-
-            credits += amount;
-            if (credits > MAX_CREDITS)
-            {
-                credits = MAX_CREDITS;
-            }
+            turnsPlayed++;
+            credits = Math.Min(turnsPlayed, GameConstants.MaxCredits);
+            logger?.Log($"[{playerId}] Credits refreshed to {credits} (turn {turnsPlayed})");
         }
 
-        /// <summary>
-        /// Sets the board reference.
-        /// </summary>
-        /// <param name="board">The board reference.</param>
         public void SetBoard(Board board)
         {
             this.board = board;
         }
 
-        /// <summary>
-        /// Gets a collection of all cards the player currently has in play
-        /// (both on the battlefield and in the order area)
-        /// </summary>
-        /// <returns>List of all cards currently in play for this player</returns>
         public List<Card> GetCardsInPlay()
         {
-            List<Card> cardsInPlay = new List<Card>();
-
-            // Add cards from battlefield
-            cardsInPlay.AddRange(battlefield.Cards);
-
-            // Add cards from any other play areas (like order area)
-            // For now, just return battlefield cards since we don't have a separate order area collection
-
+            var cardsInPlay = new List<Card>(battlefield.Cards);
+            if (headquartersCard != null && headquartersCard.IsAlive)
+            {
+                cardsInPlay.Add(headquartersCard);
+            }
             return cardsInPlay;
         }
 
-        /// <summary>
-        /// Sets the headquarters card.
-        /// </summary>
-        /// <param name="card">The headquarters card.</param>
+        public bool HasFrontlineUnits()
+        {
+            for (int i = 0; i < GameConstants.FrontlineSlotCount; i++)
+            {
+                if (!battlefield.IsSlotEmpty(i))
+                    return true;
+            }
+            return false;
+        }
+
         public void SetHeadquarters(Card card)
         {
             if (card == null || card.CardType.Category != CardCategory.Headquarters)
@@ -386,25 +279,59 @@ namespace Kardx.Models.Match
 
             headquartersCard = card;
             card.SetOwner(this);
+            card.SetZone(ZoneType.Battlefield);
+            card.SetFaceDown(false);
         }
 
-        /// <summary>
-        /// Resets the attack status for all cards on the battlefield.
-        /// </summary>
         public void ResetCardAttackStatus()
         {
             foreach (var card in battlefield.Cards)
             {
-                // Reset the card's attack status for the new turn
-                if (card is Card unitCard)
-                {
-                    // Reset hasAttackedThisTurn flag (this property might be internal to the Card class)
-                    // Call a method on the card to reset its attack status
-                    unitCard.ProcessStartOfTurnEffects(); // This should reset hasAttackedThisTurn
-                }
+                card.ProcessStartOfTurnEffects();
             }
 
             logger?.Log($"[{playerId}] Reset attack status for all cards on the battlefield");
+        }
+
+        public int GetTotalCardCount()
+        {
+            return deck.Count + hand.Count + battlefield.Count + discardPile.Count
+                + (headquartersCard != null ? 1 : 0);
+        }
+
+        public bool MoveUnitOnBattlefield(Card card, int toSlotIndex)
+        {
+            if (card == null || card.CardType.Category != CardCategory.Unit)
+                return false;
+
+            if (!battlefield.Contains(card))
+                return false;
+
+            if (!battlefield.IsSlotEmpty(toSlotIndex))
+                return false;
+
+            return battlefield.MoveCard(card, toSlotIndex);
+        }
+
+        public bool PlayCountermeasureCard(Card card)
+        {
+            if (card == null)
+                return false;
+
+            if (!hand.Contains(card))
+                return false;
+
+            if (card.CardType.Category != CardCategory.Countermeasure)
+                return false;
+
+            if (credits < card.CardType.Cost)
+                return false;
+
+            hand.RemoveCard(card);
+            SpendCredits(card.CardType.Cost);
+            card.SetFaceDown(false);
+            discardPile.AddCard(card);
+            return true;
         }
     }
 }

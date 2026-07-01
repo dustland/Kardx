@@ -156,7 +156,36 @@ namespace Kardx.Planning
                 }
             }
 
+            TryAddAttackDecisions(strategy, board, currentPlayer);
+
             return strategy;
+        }
+
+        private void TryAddAttackDecisions(Strategy strategy, Board board, Player currentPlayer)
+        {
+            var targetPlayer = board.Player;
+
+            foreach (var attacker in currentPlayer.Battlefield.Cards)
+            {
+                if (!Kardx.Utils.CombatRules.CanUnitAttack(attacker))
+                    continue;
+                if (attacker.OperationCost > currentPlayer.Credits)
+                    continue;
+
+                var targets = Kardx.Utils.CombatRules.GetValidAttackTargets(attacker, targetPlayer);
+                if (targets.Count == 0)
+                    continue;
+
+                var target = targets[random.Next(targets.Count)];
+                strategy.Decisions.Add(new Decision
+                {
+                    Type = DecisionType.AttackWithCard,
+                    SourceCardId = attacker.InstanceId,
+                    TargetCardId = target.InstanceId,
+                    Reasoning = $"Attack {target.Title} with {attacker.Title}"
+                });
+                break;
+            }
         }
 
         /// <summary>

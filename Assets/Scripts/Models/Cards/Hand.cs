@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Kardx.Models;
 using Kardx.Models.Match;
 
 namespace Kardx.Models.Cards
@@ -9,13 +10,13 @@ namespace Kardx.Models.Cards
     /// </summary>
     public class Hand : CardCollection
     {
-        private const int MAX_HAND_SIZE = 5;
-
         public Hand(Player owner) : base(owner) { }
+
+        protected override ZoneType Zone => ZoneType.Hand;
         
         public override void AddCard(Card card)
         {
-            if (cards.Count >= MAX_HAND_SIZE)
+            if (cards.Count >= GameConstants.MaxHandSize)
             {
                 throw new InvalidOperationException("Hand is full");
             }
@@ -23,7 +24,7 @@ namespace Kardx.Models.Cards
             base.AddCard(card);
         }
         
-        public bool IsFull => cards.Count >= MAX_HAND_SIZE;
+        public bool IsFull => cards.Count >= GameConstants.MaxHandSize;
         
         /// <summary>
         /// Gets all cards in the player's hand.

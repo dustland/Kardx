@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using Kardx.Models;
 using Kardx.Models.Match;
 
 namespace Kardx.Models.Cards
@@ -16,6 +17,8 @@ namespace Kardx.Models.Cards
         // Events
         public event Action<Card, CardCollection> OnCardAdded;
         public event Action<Card, CardCollection> OnCardRemoved;
+
+        protected abstract ZoneType Zone { get; }
         
         public CardCollection(Player owner)
         {
@@ -32,6 +35,7 @@ namespace Kardx.Models.Cards
             
             cards.Add(card);
             card.SetOwner(owner);
+            card.SetZone(Zone);
             OnCardAdded?.Invoke(card, this);
         }
         
@@ -42,6 +46,7 @@ namespace Kardx.Models.Cards
             bool removed = cards.Remove(card);
             if (removed)
             {
+                card.SetZone(ZoneType.Limbo);
                 OnCardRemoved?.Invoke(card, this);
             }
             return removed;

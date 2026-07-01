@@ -242,12 +242,38 @@ namespace Kardx.Planning
                     break;
 
                 case DecisionType.AttackWithCard:
-                    // This would require combat logic which should be implemented in the game rules
-                    logger?.Log($"Attack action not implemented yet");
+                {
+                    var attacker = FindCardById(currentPlayer.Battlefield.Cards, action.SourceCardId);
+                    Card defender = null;
+                    if (!string.IsNullOrEmpty(action.TargetCardId))
+                    {
+                        defender = FindCardById(board.Player.Battlefield.Cards, action.TargetCardId)
+                            ?? FindCardById(board.Opponent.Battlefield.Cards, action.TargetCardId);
+                        if (defender == null && board.Player.Headquarter?.InstanceId == action.TargetCardId)
+                            defender = board.Player.Headquarter;
+                        if (defender == null && board.Opponent.Headquarter?.InstanceId == action.TargetCardId)
+                            defender = board.Opponent.Headquarter;
+                    }
+
+                    if (attacker != null && defender != null)
+                    {
+                        if (defender.IsHeadquarters)
+                            matchManager.InitiateAttackOnHQ(attacker, defender.Owner);
+                        else
+                            matchManager.InitiateAttack(attacker, defender);
+                    }
                     break;
+                }
+
+                case DecisionType.MoveCard:
+                {
+                    var card = FindCardById(currentPlayer.Battlefield.Cards, action.SourceCardId);
+                    if (card != null && action.TargetSlot >= 0)
+                        matchManager.MoveUnit(card, action.TargetSlot);
+                    break;
+                }
 
                 case DecisionType.UseCardAbility:
-                    // This would require ability logic which should be implemented in the game rules
                     logger?.Log($"Card ability action not implemented yet");
                     break;
 
