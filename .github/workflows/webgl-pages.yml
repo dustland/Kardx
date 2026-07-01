@@ -1,0 +1,95 @@
+name: Build WebGL and Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: webgl-pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Unity WebGL
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Cache Unity Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-WebGL-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-WebGL-
+
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Build WebGL
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: 6000.0.41f1
+          targetPlatform: WebGL
+          buildsPath: build
+
+      - name: Assemble publish folder
+        run: |
+          set -euo pipefail
+          if [ ! -d build/WebGL/Build ]; then
+            echo "Expected build/WebGL/Build but it was not found:"
+            find build -maxdepth 4 -type f | head -50
+            exit 1
+          fi
+          rm -rf Web/Build
+          mkdir -p Web/Build Web/StreamingAssets
+          cp -r build/WebGL/Build/* Web/Build/
+          cp -r Assets/StreamingAssets/* Web/StreamingAssets/
+          if [ -d build/WebGL/StreamingAssets ]; then
+            cp -r build/WebGL/StreamingAssets/* Web/StreamingAssets/
+          fi
+          touch Web/.nojekyll
+          echo "Publish folder contents:"
+          find Web -maxdepth 2 -type f | sort
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: Web
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

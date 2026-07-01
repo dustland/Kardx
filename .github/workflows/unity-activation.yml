@@ -1,0 +1,20 @@
+# One-time helper: request a Unity license activation file for GitHub Secrets setup.
+# Run manually from Actions tab. Download the artifact and upload at https://license.unity3d.com/manual
+name: Request Unity Activation File
+
+on:
+  workflow_dispatch:
+
+jobs:
+  activation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: game-ci/unity-request-activation-file@v2
+        id: activation
+        with:
+          unityVersion: 6000.0.41f1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Unity_v6000.0.41f1_ActivationFile
+          path: ${{ steps.activation.outputs.activationFile }}
