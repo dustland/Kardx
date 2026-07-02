@@ -1,3 +1,5 @@
+# Secrets required (Personal license): UNITY_LICENSE, UNITY_EMAIL, UNITY_PASSWORD
+# Setup: https://game.ci/docs/github/activation
 name: Build WebGL and Deploy to GitHub Pages
 
 on:
