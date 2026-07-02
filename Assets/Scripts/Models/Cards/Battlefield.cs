@@ -102,7 +102,7 @@ namespace Kardx.Models.Cards
             var card = slots[slotIndex].RemoveCard();
             if (card != null)
             {
-                cards.Remove(card);
+                base.RemoveCard(card);
             }
 
             return card;
@@ -122,27 +122,6 @@ namespace Kardx.Models.Cards
             }
 
             return -1; // Card not found
-        }
-
-        /// <summary>
-        /// Gets the position (slot index) of a card in the battlefield.
-        /// </summary>
-        /// <param name="card">The card to find</param>
-        /// <returns>The slot index where the card is located, or -1 if not found</returns>
-        public int GetCardPosition(Card card)
-        {
-            if (card == null) return -1;
-
-            // Find the slot containing this card
-            for (int i = 0; i < SLOT_COUNT; i++)
-            {
-                if (slots[i].Card == card)
-                {
-                    return i;
-                }
-            }
-
-            return -1;
         }
 
         public bool MoveCard(Card card, int toSlotIndex)

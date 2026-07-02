@@ -285,7 +285,6 @@ namespace Kardx.Views.Match
                 }
             }
 
-            var hqView = FindAnyObjectByType<HeadquarterView>();
             foreach (var hq in FindObjectsByType<HeadquarterView>(FindObjectsSortMode.None))
             {
                 if (hq.IsOpponentHq && matchManager.Opponent.Headquarter != null

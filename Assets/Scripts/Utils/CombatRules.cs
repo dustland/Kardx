@@ -30,6 +30,9 @@ namespace Kardx.Utils
             if (attacker == null || defender == null || defendingPlayer == null)
                 return false;
 
+            if (!CanUnitAttack(attacker))
+                return false;
+
             if (attacker.Owner == defendingPlayer)
                 return false;
 
