@@ -62,14 +62,11 @@ namespace Kardx.Models.Cards
             // Set the card in the slot
             if (slots[slotIndex].SetCard(card))
             {
+                // CardCollection.AddCard handles: ownership/zone + event signaling.
+                // (Avoid invoking OnCardAdded directly here; events can only be raised
+                // within CardCollection.)
                 if (!cards.Contains(card))
-                {
-                    cards.Add(card);
-                }
-
-                card.SetOwner(owner);
-                card.SetZone(ZoneType.Battlefield);
-                OnCardAdded?.Invoke(card, this);
+                    AddCard(card);
 
                 return true;
             }
@@ -87,13 +84,8 @@ namespace Kardx.Models.Cards
                 if (slots[i].Card == card)
                 {
                     slots[i].RemoveCard();
-                    bool removed = cards.Remove(card);
-                    if (removed)
-                    {
-                        card.SetZone(ZoneType.Limbo);
-                        OnCardRemoved?.Invoke(card, this);
-                    }
-                    return removed;
+                    // CardCollection.RemoveCard handles: removal + zone update + event signaling.
+                    return base.RemoveCard(card);
                 }
             }
 

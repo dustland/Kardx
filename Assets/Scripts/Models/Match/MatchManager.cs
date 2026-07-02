@@ -833,33 +833,6 @@ namespace Kardx.Models.Match
         }
 
         /// <summary>
-        /// Checks if a card can attack another card
-        /// </summary>
-        /// <param name="attackerCard">The attacking card</param>
-        /// <param name="defenderCard">The defending card</param>
-        /// <returns>True if the attack is valid, false otherwise</returns>
-        public bool CanAttack(Card attackerCard, Card defenderCard)
-        {
-            if (!IsMatchInProgress || attackerCard == null || defenderCard == null)
-                return false;
-
-            if (attackerCard.OperationCost > attackerCard.Owner.Credits)
-            {
-                logger?.Log("[MatchManager] Attack failed: Attacker does not have enough credits");
-                return false;
-            }
-
-            var defendingPlayer = defenderCard.Owner;
-            if (!CombatRules.IsValidAttackTarget(attackerCard, defenderCard, defendingPlayer))
-            {
-                logger?.Log($"[MatchManager] Invalid attack from {attackerCard.Title} to {defenderCard.Title}");
-                return false;
-            }
-
-            return true;
-        }
-
-        /// <summary>
         /// Called when a card is drawn by any player
         /// </summary>
         private void TriggerCardDrawn(Card card)
