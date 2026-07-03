@@ -59,37 +59,58 @@ public class Card
 
 ### 玩家状态
 
-玩家模型管理所有玩家特定的资源和卡牌集合。将这些集合公开为只读，确保状态修改仅通过验证的方法进行。关键属性包括：
+玩家模型管理所有玩家特定的资源和卡牌集合。每个区域都是 `CardCollection` 子类，负责执行区域规则并发出成员变更事件。关键属性包括：
 
-- **战场容量**：固定大小为 5 个槽位
+- **战场容量**：5 个固定槽位（`Battlefield.SLOT_COUNT`）
+- **前线**：槽位 0–2；后排槽位 3–4
 - **手牌限制**：最多 10 张牌
-- **信用额度**：每位玩家 9 个信用
+- **信用额度**：每位玩家 12 个信用（`GameConstants.MaxCredits`）
 - **阵营对齐**
 - **总部卡牌**
 
 ```csharp
 public class Player
 {
-    public const int BATTLEFIELD_SLOT_COUNT = 5;
-    private const int MAX_HAND_SIZE = 10;
-    private const int MAX_CREDITS = 9;
-
-    private string playerId;
-    private int credits;
-    private Faction faction;
-
-    private readonly List<Card> hand = new();
-    private readonly Card[] battlefield = new Card[BATTLEFIELD_SLOT_COUNT];
-    private readonly Stack<Card> deck = new();
-    private readonly Queue<Card> discardPile = new();
+    private Hand hand;
+    private Battlefield battlefield;
+    private Deck deck;
+    private DiscardPile discardPile;
     private Card headquartersCard;
 
-    public IReadOnlyList<Card> Hand => hand;
-    public IReadOnlyList<Card> Battlefield => Array.AsReadOnly(battlefield);
-    public IReadOnlyList<Card> Deck => deck.ToList();
-    public IReadOnlyList<Card> DiscardPile => discardPile.ToList();
+    public Hand Hand => hand;
+    public Battlefield Battlefield => battlefield;
+    public Deck Deck => deck;
+    public DiscardPile DiscardPile => discardPile;
+    public Card Headquarter => headquartersCard;
+
+    public bool DeployUnitCard(Card card, int slotIndex);
+    public bool DeployOrderCard(Card card);
+    public bool MoveUnitOnBattlefield(Card card, int toSlotIndex);
+    public bool PlayCountermeasureCard(Card card);
+    public bool HasFrontlineUnits();
 }
 ```
+
+### CardCollection 与区域
+
+所有持有卡牌的区域都继承 `CardCollection`：
+
+```csharp
+public abstract class CardCollection
+{
+    public event Action<Card, CardCollection> OnCardAdded;
+    public event Action<Card, CardCollection> OnCardRemoved;
+
+    public virtual void AddCard(Card card);      // 设置 owner + zone，触发 OnCardAdded
+    public virtual bool RemoveCard(Card card);   // 清除 zone，触发 OnCardRemoved
+    public virtual bool Contains(Card card);
+    public IReadOnlyList<Card> Cards { get; }
+}
+```
+
+`Battlefield` 在基类之上添加槽位语义。槽位放置方法（`DeployCard`、`RemoveCard`、`RemoveCardAt`、`MoveCard`）必须将成员变更委托给 `AddCard` / `RemoveCard`，以保持区域状态和事件一致。
+
+使用 `GetSlotIndex(card)` 查找卡牌在战场上的位置。
 
 ## 数据类型
 
@@ -179,14 +200,15 @@ public enum TriggerType
 ├── Players[2]                    // 恰好 2 名玩家
 │   ├── Deck                     // 可供抽取的卡牌
 │   ├── Hand                     // 手中持有的卡牌（最多 10 张）
-│   ├── Battlefield[5]           // 固定部署槽位
+│   ├── Battlefield[5]           // 固定部署槽位（CardCollection + 槽位）
 │   │   └── Card                 // 部署的卡牌
 │   │       ├── CardType         // 静态数据定义
 │   │       ├── RuntimeState     // 动态值（例如，防御，攻击）
 │   │       │   └── Modifiers    // 临时效果
 │   │       └── InstanceData     // 唯一属性（ID，所有权，面朝下）
-│   └── DiscardPile             // 被丢弃或移出游戏的卡牌
-└── ActiveEffects               // 影响游戏规则的全局效果
+│   ├── DiscardPile             // 被丢弃或移出游戏的卡牌
+│   └── Headquarter             // 独立于 5 个槽位跟踪的总部卡牌
+└── 回合 / 阶段状态
 ```
 
 此结构保证：
@@ -214,15 +236,24 @@ public enum TriggerType
 public class Player
 {
     public Card DrawCard(bool faceDown = false);
-    public bool DeployCard(Card card, int position);
-    public bool DiscardFromHand(Card card);
+    public bool DeployUnitCard(Card card, int slotIndex);
+    public bool DeployOrderCard(Card card);
+    public bool MoveUnitOnBattlefield(Card card, int toSlotIndex);
+    public bool PlayCountermeasureCard(Card card);
     public bool RemoveFromBattlefield(Card card);
 }
 
 public class MatchManager
 {
-    public bool CanDeployCard(Card card);
+    public bool CanDeployUnitCard(Card card);
+    public bool CanDeployOrderCard(Card card);
     public bool DeployCard(Card card, int position);
+    public bool CanMoveUnit(Card card, int toSlotIndex);
+    public bool MoveUnit(Card card, int toSlotIndex);
+    public bool CanAttack(Card attacker, Card defender);
+    public bool CanAttackHQ(Card attacker, Player defendingPlayer);
+    public bool InitiateAttack(Card attacker, Card defender);
+    public bool InitiateAttackOnHQ(Card attacker, Player defendingPlayer);
 }
 ```
 
@@ -252,39 +283,28 @@ public enum TurnPhase
 
 资源管理遵循严格的层次模型。各个玩家管理他们的信用和卡牌槽位，而 `MatchManager` 设置全局约束，例如回合限制和起始条件。
 
-**游戏常量：**
+**游戏常量（`GameConstants`）：**
 
 - 战场槽位：每位玩家 5 个
+- 前线槽位：3 个（索引 0–2）
 - 最大手牌数量：10 张牌
-- 信用额度：每位玩家 9 个
+- 信用额度：每位玩家 12 个
 - 起始手牌：4 张牌
 - 最大回合数：50
+- 标准卡组大小：30 张
+- 总部基础防御：20
 
 ```csharp
-public class Player
+public static class GameConstants
 {
-    public const int BATTLEFIELD_SLOT_COUNT = 5;
-    private const int MAX_HAND_SIZE = 10;
-    private const int MAX_CREDITS = 9;
-
-    private int credits;
-    private readonly List<Card> hand = new();
-    private readonly Card[] battlefield = new Card[BATTLEFIELD_SLOT_COUNT];
-    private readonly Stack<Card> deck = new();
-    private readonly Queue<Card> discardPile = new();
-
-    public bool SpendCredits(int amount);
-    public void AddCredits(int amount);
-    public void StartTurn(int turnNumber);
-}
-
-public class MatchManager
-{
-    private readonly int startingHandSize = 4;
-    private readonly int maxTurns = 50;
-
-    public void StartMatch(string player1Id, string player2Id,
-                         Faction player1Faction, Faction player2Faction);
+    public const int BattlefieldSlotCount = 5;
+    public const int FrontlineSlotCount = 3;
+    public const int MaxHandSize = 10;
+    public const int MaxCredits = 12;
+    public const int StartingHandSize = 4;
+    public const int MaxTurns = 50;
+    public const int DeckSize = 30;
+    public const int HqBaseDefense = 20;
 }
 ```
 
@@ -425,6 +445,19 @@ public class MatchManager
    - 游戏设计师可以更新 JSON 以调整统计和能力，从而在不修改引擎代码的情况下快速迭代游戏机制。
 
 这种方法将游戏逻辑与数据定义分离，促进灵活和可维护的战斗系统设计。
+
+## 战斗系统
+
+战斗规则集中在 `CombatRules`（`Assets/Scripts/Utils/CombatRules.cs`）中：
+
+| 方法 | 用途 |
+| --- | --- |
+| `CanUnitAttack` | 单位本回合是否可以攻击（Blitz、召唤疲劳、已攻击） |
+| `IsValidAttackTarget` | 防御者是否为合法目标（Guard、Smokescreen、所有权、前线） |
+| `CanAttackHQ` | 前线清空时是否可以攻击总部 |
+| `GetValidAttackTargets` | 所有合法目标，供 UI 高亮和 AI 使用 |
+
+`MatchManager` 在 `CombatRules` 之上通过 `CanAttack` 和 `CanAttackHQ` 添加信用检查（`OperationCost`）。所有攻击应通过 `InitiateAttack` / `InitiateAttackOnHQ` 进行，以确保伤害、反击、能力钩子和死亡处理保持一致。
 
 ## UI 组件
 

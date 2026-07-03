@@ -91,6 +91,11 @@ The Kardx architecture is designed to create a maintainable, testable, and scala
    - Acts as a container for both players
    - Provides controlled access to game state elements
 
+4. **CardCollection**: Base class for all card zones (`Hand`, `Deck`, `Battlefield`, `DiscardPile`)
+   - Owns zone membership, owner assignment, and `ZoneType` updates
+   - Raises `OnCardAdded` and `OnCardRemoved` when cards enter or leave a zone
+   - Subclasses like `Battlefield` manage slot layout but must route membership changes through `AddCard` / `RemoveCard`
+
 ### Game Logic Layer
 
 1. **MatchManager**: Orchestrates the overall game flow
@@ -98,8 +103,16 @@ The Kardx architecture is designed to create a maintainable, testable, and scala
    - Manages turn transitions and game state progression
    - Exposes events for major game state changes
    - Coordinates between player actions and UI updates
+   - Validates deploy, move, attack, and countermeasure actions before mutating state
 
-2. **StrategyPlanner**: Handles AI and planning systems
+2. **CombatRules**: Central combat targeting and eligibility rules
+
+   - `CanUnitAttack` enforces Blitz, summoning sickness, and once-per-turn attack limits
+   - `IsValidAttackTarget` validates unit targets including Guard, Smokescreen, and frontline rules
+   - `CanAttackHQ` validates headquarters attacks when the frontline is clear
+   - `GetValidAttackTargets` aggregates legal targets for UI highlighting and AI planning
+
+3. **StrategyPlanner**: Handles AI and planning systems
 
    - Executes strategies via coroutines to integrate with Unity's frame system
    - Plans and executes sequences of decisions
@@ -109,6 +122,13 @@ The Kardx architecture is designed to create a maintainable, testable, and scala
    - Uses consistent string-based IDs for card references
    - Follows a command pattern approach to encapsulate actions
    - Forms the basis of both player and AI decision-making
+
+### Controller Layer
+
+1. **CardDragController**: Single drag entry point for all card interactions
+   - Resolves drag mode via `CardDragCapability` (deploy, order, countermeasure, attack, move)
+   - Finds drop targets via `CardDragTargetFinder`
+   - Executes actions via `CardDropResolver`, which calls `MatchManager` APIs
 
 ### UI Layer
 
@@ -122,6 +142,10 @@ The Kardx architecture is designed to create a maintainable, testable, and scala
    - Subscribes to MatchManager events to update the display
    - Orchestrates card UI creation and management
    - Avoids direct data model manipulation
+
+3. **ViewManager / ViewRegistry**: Tracks card view instances
+   - Creates and destroys `CardView` objects for model cards
+   - Keeps view lifecycle separate from zone membership changes
 
 ## Implementation Guidelines
 
@@ -170,6 +194,26 @@ The Kardx architecture is designed to create a maintainable, testable, and scala
 
    // Good: Using ToList() when manipulating IReadOnlyList in UI
    var position = hand.ToList().IndexOf(card);
+   ```
+
+5. **Route Zone Changes Through CardCollection**:
+
+   ```csharp
+   // Good: Battlefield slot changes delegate to CardCollection
+   public bool DeployCard(Card card, int slotIndex)
+   {
+       if (!slots[slotIndex].SetCard(card))
+           return false;
+
+       if (!cards.Contains(card))
+           AddCard(card); // sets owner, zone, and raises OnCardAdded
+
+       return true;
+   }
+
+   // Bad: mutating cards list or raising zone events directly from Battlefield
+   cards.Add(card);
+   OnCardAdded?.Invoke(card, this);
    ```
 
 ### UI Classes (e.g., `CardView`, `MatchView`)
@@ -307,6 +351,23 @@ public class Decision
 3. `StrategyPlanner` determines and executes a sequence of `Decision` objects
 4. Each decision triggers appropriate events via `MatchManager`
 5. `MatchView` updates the UI based on those events
+
+### Example 4: Unit Attack
+
+**Correct Flow**:
+
+1. User drags a battlefield unit toward an opponent slot or HQ
+2. `CardDragCapability` resolves `CardDragMode.BattlefieldAction` and checks `CombatRules.CanUnitAttack`
+3. `CardDragTargetFinder` validates the drop target via `MatchManager.CanAttack` or `CanAttackHQ`
+4. `CardDropResolver` calls `MatchManager.InitiateAttack` or `InitiateAttackOnHQ`
+5. `MatchManager` applies damage, spends operation cost, and fires `OnAttackCompleted`
+6. `MatchView` and battlefield views update from events and `OnUIUpdateNeeded`
+
+**Validation layers**:
+
+- UI drag eligibility: `CardDragCapability.CanAttack`
+- Target legality: `CombatRules.IsValidAttackTarget` / `CanAttackHQ`
+- Model gate with credits: `MatchManager.CanAttack` / `CanAttackHQ`
 
 ## Future Architecture Considerations
 
