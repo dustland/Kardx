@@ -130,6 +130,9 @@ public class AbilitySystem
     public void ProcessTurnEnd(Player player);
     public void ProcessCardDeployed(Card card);
     public void ProcessCardDamaged(Card card, int damage, Card source);
+    public void ProcessAttack(Card attacker, Card defender);
+    public void ProcessDefend(Card defender, Card attacker);
+    public void ProcessCardDestroyed(Card card);
 
     // Execute ability
     public bool ExecuteAbility(Ability ability, List<Card> targets = null);
@@ -285,4 +288,4 @@ Extensible Definitions: Extend basic ability types through custom parameters
 
 ---
 
-_Document Last Updated: 2025-02-26_
+_Document Last Updated: 2026-07-03_

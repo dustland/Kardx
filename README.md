@@ -12,14 +12,15 @@ Kardx is a turn-based card game where players deploy units to the battlefield, u
 - Ability-based gameplay mechanics
 - Battlefield positioning strategy
 - Hand and resource management
+- Unified card drag-and-drop for deploy, attack, move, and order play
 
 ## Design Documents
 
 For developers who want to understand the project better:
 
 - [Architecture](./Docs/Arch.md) - Overview and design principles of the game's architecture
-- [Data System Design](./Docs/Data.md) - Data structures, demonstrates how to make model-view-controller (MVC) game design
-- [Ability System Design](./Docs/Ability.md) - How card abilities work, demonstrates how to make data-driven system design
+- [Data System Design](./Docs/Data.md) - Data structures and the model-view-controller (MVC) layout
+- [Ability System Design](./Docs/Ability.md) - How card abilities work in the data-driven system
 
 ## Getting Started
 
@@ -37,7 +38,7 @@ Install these packages to work with the project:
    - Windsurf offers better performance than Cursor IDE
 
 1. **DOTween**
- 	 - This is a Unity package for animation, required in this project.
+   - This is a Unity package for animation, required in this project.
 
 1. **Unity Extension**
    - It is strongly recommended to install the Unity extension for VSCode in Windsurf. Since it did not release as open-vsx, you should look for this extension (and also C# and C# DevKit) in VSCode (version later than 1.96) and download it as vsx file and then manually install in Windsurf.
@@ -54,21 +55,30 @@ All code and assets are organized in the `Assets` folder:
 
 ### Code Organization
 
-- **`Assets/Scripts/Core`** - Core game logic
-  - Card, Player, Board, and Ability classes
-  - **`/Acting`** - Ability system implementation (card effects and triggers)
-  - **`/Planning`** - Strategy planning logic of opponent, for both AI and remote players
-  - **`/AI`** - AI logic for the opponent (to be implemented)
+The codebase follows an MVC layout under `Assets/Scripts/`:
 
-- **`Assets/Scripts/UI`** - User interface components
-  - **`/Components`** - connected to Unity UI elements
-  - **`/Scenes`** - connected to Unity Scenes, the most important one is `MatchView`
+- **`Models/`** - Game state and rules
+  - **`Cards/`** - `Card`, `CardType`, `CardCollection`, `Hand`, `Deck`, `Battlefield`, `DiscardPile`
+  - **`Match/`** - `Board`, `Player`, `MatchManager`
+  - **`Abilities/`** - Ability type definitions
+- **`Views/`** - UI components that reflect model state
+  - **`Cards/`** - `CardView`, `CardDetailView`
+  - **`Hand/`** - `PlayerHandView`, `OpponentHandView`
+  - **`Match/`** - `MatchView`, battlefield views, card slots, attack arrow
+  - **`Home/`** - Home screen
+- **`Controllers/`** - Input handling
+  - **`DragHandlers/`** - Unified drag workflow (`CardDragController`, `CardDragCapability`, `CardDropResolver`)
+- **`Managers/`** - Cross-cutting services (`ViewManager`, `ViewRegistry`, `TabManager`)
+- **`Acting/`** - Ability system runtime (`AbilitySystem`, effect handlers)
+- **`Planning/`** - AI and strategy planning (`StrategyPlanner`, `DummyStrategyProvider`)
+- **`Utils/`** - Shared utilities (`CombatRules`, `CardLoader`, `GameStateValidator`)
 
 ### Asset Organization
 
 - **`Assets/Sprites`** - Static game sprites
 - **`Assets/Resources`** - Dynamically loaded art (card faces, etc.)
 - **`Assets/StreamingAssets`** - JSON data files (CardTypes, AbilityTypes)
+- **`Assets/Scenes`** - `StartingScene`, `HomeScene`, `BattleScene`, `CardScene`
 
 ### Development Tools
 
@@ -85,11 +95,25 @@ A utility editor tool to help locate GameObjects with missing script references 
 
 This tool is particularly helpful when you encounter the "The referenced script (Unknown) on this Behaviour is missing!" error, which doesn't provide location information.
 
+## Web Build and Deployment
+
+The project includes a GitHub Actions workflow (`.github/workflows/webgl-pages.yml`) that builds a WebGL player and deploys it to GitHub Pages on pushes to `main`.
+
+Required repository secrets for CI builds:
+
+- `UNITY_LICENSE`
+- `UNITY_EMAIL`
+- `UNITY_PASSWORD`
+
+See [game.ci activation docs](https://game.ci/docs/github/activation) for setup.
+
 ## Development Tips
 
 - Read the design documents before making changes
 - The game uses a data-driven approach - many game elements are defined in JSON
-- Check the `CardLoader.cs` and `AbilityType.cs` files to understand how data is loaded
+- Check `CardLoader.cs`, `DeckBuilder.cs`, and `AbilityType.cs` to understand how data is loaded
+- Zone changes (`Hand`, `Battlefield`, etc.) must go through `CardCollection` APIs so ownership, zone state, and events stay consistent
+- Combat targeting rules live in `CombatRules.cs`; `MatchManager.CanAttack` adds credit checks on top
 - Use the Unity Console to debug issues during gameplay
 
 ## License

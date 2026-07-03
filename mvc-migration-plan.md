@@ -1,66 +1,57 @@
 # MVC Migration Plan for Kardx
 
-## Folder Structure
+> **Status: Completed.** The codebase now follows the structure below. This document is kept as a historical reference and onboarding map.
+
+## Current Folder Structure
+
 ```
 /Assets/Scripts/
-  /Models/            # All data models and game logic
-    /Cards/           # Card data models, collection structures
-    /Players/         # Player data models
-    /Game/            # Game state and rules
+  /Models/            # Data models and match rules
+    /Cards/           # Card, CardType, CardCollection, Hand, Deck, Battlefield, DiscardPile
+    /Match/           # Board, Player, MatchManager
+    /Abilities/       # Ability type definitions
   /Views/             # UI components that render game state
-    /Cards/           # CardView and specialized card views
-    /Battlefield/     # Battlefield visualization
-    /Hand/            # Hand visualization  
-    /Match/           # Overall match visualization
-  /Controllers/       # Components that handle user input
-    /DragHandlers/    # Drag & drop controllers
-    /InputHandlers/   # Other forms of input handling
-  /Managers/          # Cross-cutting service components like ViewManager
-  /Utils/             # Shared utilities
+    /Cards/           # CardView, CardDetailView
+    /Hand/            # PlayerHandView, OpponentHandView
+    /Match/           # MatchView, battlefield views, card slots
+    /Home/            # Home screen
+  /Controllers/       # Input handling
+    /DragHandlers/    # Unified drag workflow (CardDragController, CardDropResolver, etc.)
+  /Managers/          # ViewManager, ViewRegistry, TabManager
+  /Acting/            # AbilitySystem runtime
+  /Planning/          # StrategyPlanner, AI providers
+  /Utils/             # CombatRules, CardLoader, GameStateValidator, etc.
+  /Debugging/         # Editor/runtime debug helpers
 ```
 
-## Namespace Updates
-When moving files, update the namespace according to this pattern:
-- `Kardx.Core` → `Kardx.Models`
-- `Kardx.UI` → `Kardx.Views` 
-- Drag handlers from UI → `Kardx.Controllers`
-- Additional subfolders appended to namespace: `Kardx.Models.Cards`, `Kardx.Views.Battlefield`, etc.
+## Namespace Map
 
-## Migration Phases
+| Legacy | Current |
+| --- | --- |
+| `Kardx.Core` | `Kardx.Models` |
+| `Kardx.UI` | `Kardx.Views` |
+| UI drag handlers | `Kardx.Controllers.DragHandlers` |
+| ViewManager / ViewRegistry | `Kardx.Managers` |
 
-### Phase 1: Models
-1. Move Core/Card.cs → Models/Cards/Card.cs
-2. Move Core/Deck.cs → Models/Cards/Deck.cs
-3. Move Core/Hand.cs → Models/Cards/Hand.cs
-4. Move Core/Player.cs → Models/Players/Player.cs
-5. Move Core/MatchManager.cs → Models/Game/MatchManager.cs
+Sub-namespaces follow folder layout, for example `Kardx.Models.Cards`, `Kardx.Views.Match`.
 
-### Phase 2: Views
-1. Move UI/CardView.cs → Views/Cards/CardView.cs
-2. Move UI/HandView.cs → Views/Hand/HandView.cs
-3. Move UI/BaseBattlefieldView.cs → Views/Battlefield/BaseBattlefieldView.cs
-4. Move UI/PlayerBattlefieldView.cs → Views/Battlefield/PlayerBattlefieldView.cs
-5. Move UI/OpponentBattlefieldView.cs → Views/Battlefield/OpponentBattlefieldView.cs
-6. Move UI/MatchView.cs → Views/Match/MatchView.cs
+## Migration Notes
 
-### Phase 3: Controllers
-1. Move UI/UnitDeployDragHandler.cs → Controllers/DragHandlers/UnitDeployDragHandler.cs
-2. Move UI/OrderDeployDragHandler.cs → Controllers/DragHandlers/OrderDeployDragHandler.cs
-3. Move UI/AbilityDragHandler.cs → Controllers/DragHandlers/AbilityDragHandler.cs
+The original plan assumed separate `Models/Players` and `Models/Game` folders. The implemented layout places `Player` and `MatchManager` under `Models/Match/` and keeps all zone types under `Models/Cards/`.
 
-### Phase 4: Managers
-1. Move UI/ViewManager.cs → Managers/ViewManager.cs
-2. Move UI/ViewRegistry.cs → Managers/ViewRegistry.cs
+Legacy per-action drag handlers (`UnitDeployDragHandler`, `OrderDeployDragHandler`, `AbilityDragHandler`) were replaced by a single `CardDragController` with mode resolution in `CardDragCapability`.
 
-## Testing Strategy
-After each file migration:
-1. Fix any missing references or imports
-2. Compile to check for errors
-3. Ensure functionality still works
+## Key Post-Migration Conventions
 
-## Recommended Migration Order
-Migrate from the bottom up in the dependency chain:
-1. Models first (least dependencies)
-2. Controllers next (depend on Models)
-3. Views after (depend on Models and Controllers)
-4. Managers last (depend on all other layers)
+1. **Zone changes** go through `CardCollection.AddCard` / `RemoveCard`, including `Battlefield` slot operations.
+2. **Combat validation** lives in `CombatRules`; `MatchManager` adds credit checks and orchestrates resolution.
+3. **UI updates** subscribe to `MatchManager` events; views do not mutate model state directly.
+4. **Card views** are tracked by `ViewRegistry` and created through `ViewManager`.
+
+## Testing Checklist
+
+After structural changes:
+
+1. Fix missing references or imports
+2. Compile in Unity
+3. Playtest deploy, move, attack, order play, and countermeasure flows in `BattleScene`

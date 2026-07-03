@@ -59,37 +59,58 @@ public class Card
 
 ### Player State
 
-The player model administers all player-specific resources and card collections. Exposing these collections as read-only ensures that state modifications occur exclusively through validated methods. Key attributes include:
+The player model administers all player-specific resources and card collections. Each zone is a `CardCollection` subclass that enforces zone rules and emits membership events. Key attributes include:
 
-- **Battlefield Capacity**: A fixed size of 5 slots
+- **Battlefield Capacity**: 5 fixed slots (`Battlefield.SLOT_COUNT`)
+- **Frontline**: Slots 0–2; rear line slots 3–4
 - **Hand Limit**: Maximum of 10 cards
-- **Credit Limit**: 9 credits per player
+- **Credit Limit**: 12 credits per player (`GameConstants.MaxCredits`)
 - **Faction Alignment**
 - **Headquarters Card**
 
 ```csharp
 public class Player
 {
-    public const int BATTLEFIELD_SLOT_COUNT = 5;
-    private const int MAX_HAND_SIZE = 10;
-    private const int MAX_CREDITS = 9;
-
-    private string playerId;
-    private int credits;
-    private Faction faction;
-
-    private readonly List<Card> hand = new();
-    private readonly Card[] battlefield = new Card[BATTLEFIELD_SLOT_COUNT];
-    private readonly Stack<Card> deck = new();
-    private readonly Queue<Card> discardPile = new();
+    private Hand hand;
+    private Battlefield battlefield;
+    private Deck deck;
+    private DiscardPile discardPile;
     private Card headquartersCard;
 
-    public IReadOnlyList<Card> Hand => hand;
-    public IReadOnlyList<Card> Battlefield => Array.AsReadOnly(battlefield);
-    public IReadOnlyList<Card> Deck => deck.ToList();
-    public IReadOnlyList<Card> DiscardPile => discardPile.ToList();
+    public Hand Hand => hand;
+    public Battlefield Battlefield => battlefield;
+    public Deck Deck => deck;
+    public DiscardPile DiscardPile => discardPile;
+    public Card Headquarter => headquartersCard;
+
+    public bool DeployUnitCard(Card card, int slotIndex);
+    public bool DeployOrderCard(Card card);
+    public bool MoveUnitOnBattlefield(Card card, int toSlotIndex);
+    public bool PlayCountermeasureCard(Card card);
+    public bool HasFrontlineUnits();
 }
 ```
+
+### CardCollection and Zones
+
+All card-holding zones extend `CardCollection`:
+
+```csharp
+public abstract class CardCollection
+{
+    public event Action<Card, CardCollection> OnCardAdded;
+    public event Action<Card, CardCollection> OnCardRemoved;
+
+    public virtual void AddCard(Card card);      // sets owner + zone, raises OnCardAdded
+    public virtual bool RemoveCard(Card card);   // clears zone, raises OnCardRemoved
+    public virtual bool Contains(Card card);
+    public IReadOnlyList<Card> Cards { get; }
+}
+```
+
+`Battlefield` adds slot semantics on top of this base class. Slot placement methods (`DeployCard`, `RemoveCard`, `RemoveCardAt`, `MoveCard`) must delegate membership changes to `AddCard` / `RemoveCard` so zone state and events stay consistent.
+
+Use `GetSlotIndex(card)` to locate a card on the battlefield.
 
 ## Data Types
 
@@ -179,14 +200,15 @@ Board
 ├── Players[2]                    // Exactly 2 players
 │   ├── Deck                     // Cards available for drawing
 │   ├── Hand                     // Cards held in hand (max 10)
-│   ├── Battlefield[5]           // Fixed deployment slots
+│   ├── Battlefield[5]           // Fixed deployment slots (CardCollection + slots)
 │   │   └── Card                 // Deployed card
 │   │       ├── CardType         // Static data definition
 │   │       ├── RuntimeState     // Dynamic values (e.g., Defense, Attack)
 │   │       │   └── Modifiers    // Temporary effects
 │   │       └── InstanceData     // Unique properties (ID, Ownership, FaceDown)
-│   └── DiscardPile             // Cards discarded or removed from play
-└── ActiveEffects               // Global effects influencing game rules
+│   ├── DiscardPile             // Cards discarded or removed from play
+│   └── Headquarter             // Special card tracked outside the 5 slots
+└── Turn / phase state
 ```
 
 This structure guarantees:
@@ -214,15 +236,24 @@ Key validations include:
 public class Player
 {
     public Card DrawCard(bool faceDown = false);
-    public bool DeployCard(Card card, int position);
-    public bool DiscardFromHand(Card card);
+    public bool DeployUnitCard(Card card, int slotIndex);
+    public bool DeployOrderCard(Card card);
+    public bool MoveUnitOnBattlefield(Card card, int toSlotIndex);
+    public bool PlayCountermeasureCard(Card card);
     public bool RemoveFromBattlefield(Card card);
 }
 
 public class MatchManager
 {
-    public bool CanDeployCard(Card card);
+    public bool CanDeployUnitCard(Card card);
+    public bool CanDeployOrderCard(Card card);
     public bool DeployCard(Card card, int position);
+    public bool CanMoveUnit(Card card, int toSlotIndex);
+    public bool MoveUnit(Card card, int toSlotIndex);
+    public bool CanAttack(Card attacker, Card defender);
+    public bool CanAttackHQ(Card attacker, Player defendingPlayer);
+    public bool InitiateAttack(Card attacker, Card defender);
+    public bool InitiateAttackOnHQ(Card attacker, Player defendingPlayer);
 }
 ```
 
@@ -252,39 +283,28 @@ public enum TurnPhase
 
 Resource management follows a stringent hierarchical model. Individual players manage their credits and card slots, while the `MatchManager` sets global constraints such as turn limits and starting conditions.
 
-**Game Constants:**
+**Game Constants (`GameConstants`):**
 
 - Battlefield slots: 5 per player
+- Frontline slots: 3 (indices 0–2)
 - Maximum hand size: 10 cards
-- Credit limit: 9 per player
+- Credit limit: 12 per player
 - Starting hand: 4 cards
 - Maximum turns: 50
+- Standard deck size: 30 cards
+- HQ base defense: 20
 
 ```csharp
-public class Player
+public static class GameConstants
 {
-    public const int BATTLEFIELD_SLOT_COUNT = 5;
-    private const int MAX_HAND_SIZE = 10;
-    private const int MAX_CREDITS = 9;
-
-    private int credits;
-    private readonly List<Card> hand = new();
-    private readonly Card[] battlefield = new Card[BATTLEFIELD_SLOT_COUNT];
-    private readonly Stack<Card> deck = new();
-    private readonly Queue<Card> discardPile = new();
-
-    public bool SpendCredits(int amount);
-    public void AddCredits(int amount);
-    public void StartTurn(int turnNumber);
-}
-
-public class MatchManager
-{
-    private readonly int startingHandSize = 4;
-    private readonly int maxTurns = 50;
-
-    public void StartMatch(string player1Id, string player2Id,
-                         Faction player1Faction, Faction player2Faction);
+    public const int BattlefieldSlotCount = 5;
+    public const int FrontlineSlotCount = 3;
+    public const int MaxHandSize = 10;
+    public const int MaxCredits = 12;
+    public const int StartingHandSize = 4;
+    public const int MaxTurns = 50;
+    public const int DeckSize = 30;
+    public const int HqBaseDefense = 20;
 }
 ```
 
@@ -425,6 +445,19 @@ This JSON file defines the rules for each card:
    - Game designers can update the JSON to tweak stats and abilities, enabling rapid iteration on game mechanics without modifying engine code.
 
 This approach decouples game logic from data definitions, promoting a flexible and maintainable battle system design.
+
+## Combat System
+
+Combat rules are centralized in `CombatRules` (`Assets/Scripts/Utils/CombatRules.cs`):
+
+| Method | Purpose |
+| --- | --- |
+| `CanUnitAttack` | Unit may attack this turn (Blitz, summoning sickness, already attacked) |
+| `IsValidAttackTarget` | Defender is a legal target (Guard, Smokescreen, ownership, frontline) |
+| `CanAttackHQ` | HQ may be attacked when frontline is empty |
+| `GetValidAttackTargets` | All legal targets for UI highlight and AI |
+
+`MatchManager` adds credit checks (`OperationCost`) on top of `CombatRules` via `CanAttack` and `CanAttackHQ`. All attacks should flow through `InitiateAttack` / `InitiateAttackOnHQ` so damage, counterattack, ability hooks, and death handling stay consistent.
 
 ## UI Components
 
