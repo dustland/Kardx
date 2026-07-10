@@ -163,6 +163,7 @@ static func _test_terminal_end_trigger_stops_turn_transition(t) -> void:
 	t.assert_eq(controller.state.active_player_id, before_active_player_id, "terminal end trigger does not switch players")
 	t.assert_eq(controller.state.turn, before_turn, "terminal end trigger does not start another turn")
 	t.assert_eq(_event_types(result.events), [], "terminal end trigger emits no later lifecycle events")
+	controller.debug_set_trigger_hook(Callable())
 
 static func _test_terminal_modifier_expiry_stops_turn_transition(t) -> void:
 	var controller := _started_controller(301)
@@ -181,6 +182,7 @@ static func _test_terminal_modifier_expiry_stops_turn_transition(t) -> void:
 	t.assert_eq(controller.state.active_player_id, before_active_player_id, "terminal modifier expiry does not switch players")
 	t.assert_eq(controller.state.turn, before_turn, "terminal modifier expiry does not start another turn")
 	t.assert_eq(_event_types(result.events), [], "terminal modifier expiry emits no later lifecycle events")
+	controller.debug_set_modifier_expiry_hook(Callable())
 
 static func _test_seeded_turns_are_deterministic(t) -> void:
 	var first := _started_controller(301)
