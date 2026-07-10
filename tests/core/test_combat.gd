@@ -556,6 +556,30 @@ static func _test_headquarters_guard_and_locked_target(t) -> void:
 	t.assert_eq(multi.reason_code, "invalid_target", "Headquarters attack rejects multiple targets")
 	t.assert_eq(_digest(multi_controller), multi_before, "multiple Headquarters targets are atomic")
 
+	var unit_target_controller := _controller(4792)
+	var unit_target_attacker := _card("unit-target-hq-attacker", "player", "Artillery", 2, 5)
+	var unit_target := _card("unit-target-hq-defender", "opponent", "Infantry", 1, 4)
+	_place_support(unit_target_controller, unit_target_attacker, 0)
+	_place_support(unit_target_controller, unit_target, 0)
+	_ready(unit_target_controller, unit_target_attacker)
+	var unit_target_before := _digest(unit_target_controller)
+	var unit_target_result = unit_target_controller.submit_action(GameAction.create(
+		"attack_hq", "player", unit_target_attacker.instance_id, [unit_target.instance_id], {}, unit_target_controller.state.sequence
+	))
+	t.assert_eq(unit_target_result.reason_code, "invalid_target", "Headquarters attack rejects an existing unit instance ID")
+	t.assert_eq(_digest(unit_target_controller), unit_target_before, "existing unit Headquarters target rejection is atomic")
+
+	var unknown_target_controller := _controller(4793)
+	var unknown_target_attacker := _card("unknown-target-hq-attacker", "player", "Artillery", 2, 5)
+	_place_support(unknown_target_controller, unknown_target_attacker, 0)
+	_ready(unknown_target_controller, unknown_target_attacker)
+	var unknown_target_before := _digest(unknown_target_controller)
+	var unknown_target_result = unknown_target_controller.submit_action(GameAction.create(
+		"attack_hq", "player", unknown_target_attacker.instance_id, ["unknown-unit-instance-id"], {}, unknown_target_controller.state.sequence
+	))
+	t.assert_eq(unknown_target_result.reason_code, "invalid_target", "Headquarters attack rejects an unknown target ID")
+	t.assert_eq(_digest(unknown_target_controller), unknown_target_before, "unknown Headquarters target rejection is atomic")
+
 	var fallback_controller := _controller(4791)
 	var fallback_attacker := _card("fallback-hq-attacker", "player", "Artillery", 2, 5)
 	_place_support(fallback_controller, fallback_attacker, 0)
