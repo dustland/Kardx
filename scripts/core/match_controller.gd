@@ -9,9 +9,14 @@ const GameAction = preload("res://scripts/core/game_action.gd")
 const GameConstants = preload("res://scripts/core/game_constants.gd")
 const MatchState = preload("res://scripts/core/match_state.gd")
 const PlayerState = preload("res://scripts/core/player_state.gd")
+const ReplayLog = preload("res://scripts/core/replay_log.gd")
 
 var state: MatchState
 var initial_deck_ids: Dictionary
+var card_definitions: Dictionary
+var replay_log: ReplayLog
+var event_history: Array = []
+var invalid_diagnostics: Dictionary = {}
 var _definitions: Dictionary
 var _rng := RandomNumberGenerator.new()
 var _effect_engine: EffectEngine
@@ -20,7 +25,8 @@ var _debug_modifier_expiry_hook: Callable
 
 static func create(card_definitions: Dictionary, player_deck: Array, opponent_deck: Array, seed: int) -> MatchController:
 	var controller: MatchController = load("res://scripts/core/match_controller.gd").new()
-	controller._definitions = card_definitions.duplicate(true)
+	controller.card_definitions = card_definitions.duplicate(true)
+	controller._definitions = controller.card_definitions.duplicate(true)
 	controller.initial_deck_ids = {
 		"player": player_deck.duplicate(),
 		"opponent": opponent_deck.duplicate(),
@@ -32,9 +38,16 @@ static func create(card_definitions: Dictionary, player_deck: Array, opponent_de
 	controller._effect_engine = EffectEngine.create(controller.state, controller._definitions, controller._rng)
 	controller._shuffle_deck(player.deck)
 	controller._shuffle_deck(opponent.deck)
+	controller.replay_log = ReplayLog.create(seed, player_deck, opponent_deck)
 	return controller
 
 func submit_action(action: GameAction) -> ActionResult:
+	if state == null:
+		return ActionResult.reject("match_uninitialized", "Match is not initialized")
+	if state.phase == "invalid":
+		return _reject(action, "match_invalid", "Match is invalid")
+	if _is_terminal():
+		return _reject(action, "match_complete", "Match is complete")
 	if action.expected_sequence > 0 and action.expected_sequence != state.sequence:
 		return _reject(action, "stale_action", "State changed")
 	var transaction := _capture_transaction()
@@ -46,7 +59,262 @@ func submit_action(action: GameAction) -> ActionResult:
 		if not resolution.valid:
 			return _reject_rule(action, resolution)
 		return _reject(action, result.reason_code, result.message)
+	var invariants := _validate_invariants()
+	if not invariants.valid:
+		return _abort_invalid("state_invariant", invariants)
+	event_history.append_array(result.events.duplicate(true))
+	replay_log.record(action, state.sequence)
+	replay_log.starting_player_id = state.starting_player_id
+	replay_log.terminal_result = _replay_terminal_result()
 	return result
+
+func state_hash() -> String:
+	return JSON.stringify(_canonicalize(_authoritative_state())).sha256_text()
+
+func _replay_terminal_result() -> Dictionary:
+	return {
+		"phase": state.phase,
+		"winner_id": state.winner_id,
+		"sequence": state.sequence,
+	}
+
+func _authoritative_state() -> Dictionary:
+	var players := {}
+	for player_id in state.players:
+		var player: PlayerState = state.players[player_id]
+		players[player_id] = {
+			"id": player.id,
+			"nation": player.nation,
+			"headquarters": _card_state(player.headquarters),
+			"deck": _cards_state(player.deck),
+			"hand": _cards_state(player.hand),
+			"support_line": _cards_state(player.support_line),
+			"discard": _cards_state(player.discard),
+			"active_countermeasures": _cards_state(player.active_countermeasures),
+			"credit_slots": player.credit_slots,
+			"credit": player.credit,
+			"fatigue": player.fatigue,
+			"turns_started": player.turns_started,
+			"mulligan_used": player.mulligan_used,
+			"mulligan_confirmed": player.mulligan_confirmed,
+			"max_hand_size": player.max_hand_size,
+		}
+	return {
+		"players": players,
+		"active_player_id": state.active_player_id,
+		"starting_player_id": state.starting_player_id,
+		"turn": state.turn,
+		"frontline": _cards_state(state.frontline),
+		"frontline_controller_id": state.frontline_controller_id,
+		"winner_id": state.winner_id,
+		"seed": state.seed,
+		"rng_state": state.rng_state,
+		"rng_internal_state": _rng.state,
+		"sequence": state.sequence,
+		"phase": state.phase,
+		"invalid_diagnostics": invalid_diagnostics.duplicate(true),
+	}
+
+func _abort_invalid(code: String, details: Dictionary = {}) -> ActionResult:
+	if state == null:
+		return ActionResult.reject("match_invalid", "Match is invalid")
+	if state.phase == "invalid":
+		return _reject(GameAction.create("", ""), "match_invalid", "Match is invalid")
+	invalid_diagnostics = {
+		"code": code,
+		"details": details.duplicate(true),
+	}
+	state.phase = "invalid"
+	var events: Array = []
+	_emit(events, "match_invalid", invalid_diagnostics.duplicate(true))
+	event_history.append_array(events.duplicate(true))
+	var result := ActionResult.reject("match_invalid", "Match is invalid", state.snapshot_for("system"))
+	result.events = events
+	return result
+
+func _validate_invariants() -> Dictionary:
+	if state == null:
+		return {"valid": false, "code": "state_missing"}
+	if state.phase == "invalid":
+		return {"valid": true}
+	if not state.players.has("player") or not state.players.has("opponent") or state.players.size() != 2:
+		return {"valid": false, "code": "invalid_players"}
+	if state.frontline.size() != GameConstants.FRONTLINE_SLOTS:
+		return {"valid": false, "code": "invalid_frontline_size"}
+	var seen_references := {}
+	var seen_instance_ids := {}
+	for player_id_value in state.players:
+		var player_id := str(player_id_value)
+		var player: PlayerState = state.players[player_id]
+		if player == null or player.id != player_id:
+			return {"valid": false, "code": "invalid_player", "player_id": player_id}
+		var headquarters_result := _validate_card_membership(
+			player.headquarters, player_id, "headquarters", -1, "headquarters", seen_references, seen_instance_ids
+		)
+		if not headquarters_result.valid:
+			return headquarters_result
+		if player.headquarters.category != "Headquarters":
+			return {"valid": false, "code": "invalid_headquarters", "player_id": player_id}
+		for zone_info in [
+			{"cards": player.deck, "zone": "deck", "slots": false},
+			{"cards": player.hand, "zone": "hand", "slots": false},
+			{"cards": player.support_line, "zone": "support_line", "slots": true},
+			{"cards": player.discard, "zone": "discard", "slots": false},
+		]:
+			var collection_result := _validate_card_collection(
+				zone_info.cards,
+				player_id,
+				str(zone_info.zone),
+				bool(zone_info.slots),
+				seen_references,
+				seen_instance_ids
+			)
+			if not collection_result.valid:
+				return collection_result
+	var frontline_owner_id := ""
+	for slot in range(state.frontline.size()):
+		var frontline_card = state.frontline[slot]
+		if frontline_card == null:
+			continue
+		if not state.players.has(frontline_card.owner_id):
+			return {"valid": false, "code": "invalid_frontline_owner", "slot": slot}
+		var frontline_result := _validate_card_membership(
+			frontline_card,
+			frontline_card.owner_id,
+			"frontline",
+			slot,
+			"frontline",
+			seen_references,
+			seen_instance_ids
+		)
+		if not frontline_result.valid:
+			return frontline_result
+		if frontline_owner_id.is_empty():
+			frontline_owner_id = frontline_card.owner_id
+		elif frontline_owner_id != frontline_card.owner_id:
+			return {"valid": false, "code": "mixed_frontline_owners"}
+	if not _is_terminal() and frontline_owner_id != state.frontline_controller_id:
+		return {
+			"valid": false,
+			"code": "invalid_frontline_controller",
+			"expected_controller_id": frontline_owner_id,
+			"actual_controller_id": state.frontline_controller_id,
+		}
+	return _validate_terminal_invariants()
+
+func _validate_card_collection(
+	cards: Array,
+	owner_id: String,
+	zone: String,
+	uses_slots: bool,
+	seen_references: Dictionary,
+	seen_instance_ids: Dictionary
+) -> Dictionary:
+	for index in range(cards.size()):
+		var card = cards[index]
+		if card == null:
+			if uses_slots:
+				continue
+			return {"valid": false, "code": "null_card", "zone": zone, "index": index}
+		var slot := index if uses_slots else -1
+		var result := _validate_card_membership(card, owner_id, zone, slot, zone, seen_references, seen_instance_ids)
+		if not result.valid:
+			return result
+	return {"valid": true}
+
+func _validate_card_membership(
+	card,
+	owner_id: String,
+	zone: String,
+	slot: int,
+	location: String,
+	seen_references: Dictionary,
+	seen_instance_ids: Dictionary
+) -> Dictionary:
+	if card == null:
+		return {"valid": false, "code": "null_card", "location": location}
+	if seen_references.has(card) or seen_instance_ids.has(card.instance_id):
+		return {"valid": false, "code": "duplicate_card_reference", "instance_id": card.instance_id}
+	seen_references[card] = true
+	seen_instance_ids[card.instance_id] = true
+	if card.owner_id != owner_id:
+		return {"valid": false, "code": "card_owner_mismatch", "instance_id": card.instance_id}
+	if card.zone != zone:
+		return {"valid": false, "code": "card_zone_mismatch", "instance_id": card.instance_id, "expected_zone": zone, "actual_zone": card.zone}
+	if card.slot != slot:
+		return {"valid": false, "code": "card_slot_mismatch", "instance_id": card.instance_id, "expected_slot": slot, "actual_slot": card.slot}
+	if zone != "headquarters" and card.category == "Headquarters":
+		return {"valid": false, "code": "headquarters_in_card_zone", "instance_id": card.instance_id}
+	return {"valid": true}
+
+func _validate_terminal_invariants() -> Dictionary:
+	var player: PlayerState = state.players.player
+	var opponent: PlayerState = state.players.opponent
+	if state.phase == "complete":
+		if not state.players.has(state.winner_id):
+			return {"valid": false, "code": "terminal_winner_missing"}
+		if state.players[state.winner_id].headquarters.current_defense <= 0:
+			return {"valid": false, "code": "terminal_headquarters_contradiction"}
+		return {"valid": true}
+	if not state.winner_id.is_empty():
+		return {"valid": false, "code": "winner_without_complete_phase"}
+	if player.headquarters.current_defense <= 0 or opponent.headquarters.current_defense <= 0:
+		return {"valid": false, "code": "defeated_headquarters_without_terminal_state"}
+	return {"valid": true}
+
+func _cards_state(cards: Array) -> Array:
+	var serialized: Array = []
+	for card in cards:
+		serialized.append(_card_state(card))
+	return serialized
+
+func _card_state(card) -> Variant:
+	if card == null:
+		return null
+	return {
+		"definition_id": card.definition_id,
+		"instance_id": card.instance_id,
+		"owner_id": card.owner_id,
+		"title": card.title,
+		"category": card.category,
+		"unit_type": card.unit_type,
+		"base_attack": card.base_attack,
+		"current_attack": card.current_attack,
+		"base_defense": card.base_defense,
+		"current_defense": card.current_defense,
+		"deployment_cost": card.deployment_cost,
+		"operation_cost": card.operation_cost,
+		"keywords": card.keywords.duplicate(true),
+		"abilities": card.abilities.duplicate(true),
+		"zone": card.zone,
+		"slot": card.slot,
+		"operations_used": card.operations_used,
+		"operation_chain": card.operation_chain,
+		"smokescreen_revealed": card.smokescreen_revealed,
+		"deployed_turn": card.deployed_turn,
+		"modifiers": card.modifiers.duplicate(true),
+		"statuses": card.statuses.duplicate(true),
+		"face_down": card.face_down,
+		"countermeasure_active": card.countermeasure_active,
+		"countermeasure_activation_cost": card.countermeasure_activation_cost,
+	}
+
+func _canonicalize(value: Variant) -> Variant:
+	if value is Dictionary:
+		var keys: Array = []
+		for key in value:
+			keys.append(str(key))
+		keys.sort()
+		var canonical := {}
+		for key in keys:
+			canonical[key] = _canonicalize(value[key])
+		return canonical
+	if value is Array:
+		var canonical_array: Array = []
+		for entry in value:
+			canonical_array.append(_canonicalize(entry))
+		return canonical_array
+	return value
 
 func _dispatch_action(action: GameAction) -> ActionResult:
 	match action.type:
@@ -986,7 +1254,7 @@ func _check_headquarters_death(player: PlayerState) -> void:
 	state.phase = "complete"
 
 func _is_terminal() -> bool:
-	return state.phase == "complete" or not state.winner_id.is_empty()
+	return state.phase == "complete" or state.phase == "invalid" or not state.winner_id.is_empty()
 
 func _shuffle_deck(deck: Array) -> void:
 	for index in range(deck.size() - 1, 0, -1):
