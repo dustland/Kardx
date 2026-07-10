@@ -56,7 +56,7 @@ func _build_interface() -> void:
 	header.custom_minimum_size.y = 64
 	page.add_child(header)
 	var title := Label.new()
-	title.text = "OPENKARDS"
+	title.text = "OPENCARDS"
 	title.add_theme_font_size_override("font_size", 30)
 	title.add_theme_color_override("font_color", palette.accent)
 	header.add_child(title)

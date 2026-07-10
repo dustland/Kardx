@@ -1,6 +1,6 @@
-# OpenKards
+# OpenCards
 
-OpenKards is now the Godot 4 main project. The original Unity project is preserved on the `unity` branch.
+OpenCards is now the Godot 4 main project. The original Unity project is preserved on the `unity` branch.
 
 ## Run
 

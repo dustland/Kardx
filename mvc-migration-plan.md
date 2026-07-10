@@ -1,4 +1,4 @@
-# MVC Migration Plan for OpenKards
+# MVC Migration Plan for OpenCards
 
 > **Status: Completed.** The codebase now follows the structure below. This document is kept as a historical reference and onboarding map.
 
@@ -28,12 +28,12 @@
 
 | Legacy | Current |
 | --- | --- |
-| `OpenKards.Core` | `OpenKards.Models` |
-| `OpenKards.UI` | `OpenKards.Views` |
-| UI drag handlers | `OpenKards.Controllers.DragHandlers` |
-| ViewManager / ViewRegistry | `OpenKards.Managers` |
+| `OpenCards.Core` | `OpenCards.Models` |
+| `OpenCards.UI` | `OpenCards.Views` |
+| UI drag handlers | `OpenCards.Controllers.DragHandlers` |
+| ViewManager / ViewRegistry | `OpenCards.Managers` |
 
-Sub-namespaces follow folder layout, for example `OpenKards.Models.Cards`, `OpenKards.Views.Match`.
+Sub-namespaces follow folder layout, for example `OpenCards.Models.Cards`, `OpenCards.Views.Match`.
 
 ## Migration Notes
 

@@ -1,8 +1,8 @@
-; OpenKards Godot project
+; OpenCards Godot project
 config_version=5
 
 [application]
-config/name="OpenKards"
+config/name="OpenCards"
 run/main_scene="res://scenes/main.tscn"
 
 [display]
