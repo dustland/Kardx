@@ -473,38 +473,46 @@ static func _test_ambush_first_strike(t) -> void:
 
 
 static func _test_headquarters_guard_and_locked_target(t) -> void:
-	for unit_type in ["Infantry", "Tank", "Fighter"]:
-		var guarded_controller := _controller(475)
-		var attacker := _card("guarded-hq-attacker-%s" % unit_type, "player", unit_type, 2, 5)
-		var guard := _card("guarded-hq-guard-%s" % unit_type, "opponent", "Infantry", 1, 4, 0, 0, ["Guard"])
-		_place_frontline(guarded_controller, attacker, 0)
-		_place_support(guarded_controller, guard, 0)
-		_ready(guarded_controller, attacker)
-		var hq_id: String = guarded_controller.state.players.opponent.headquarters.instance_id
-		t.assert_true(
-			not CombatRules.legal_targets(guarded_controller.state, attacker.instance_id).has(hq_id),
-			"%s cannot select Headquarters protected by adjacent Guard" % unit_type
-		)
-		var before := _digest(guarded_controller)
-		var rejected = guarded_controller.submit_action(GameAction.create(
-			"attack_hq", "player", attacker.instance_id, [hq_id], {}, guarded_controller.state.sequence
-		))
-		t.assert_eq(rejected.reason_code, "guard_protected", "%s Headquarters Guard rejection is stable" % unit_type)
-		t.assert_eq(_digest(guarded_controller), before, "%s guarded Headquarters rejection is atomic" % unit_type)
+	var guard_restricted := ["Infantry", "Tank", "Fighter"]
+	var hq_guard_slots := {
+		0: false,
+		1: true,
+		2: true,
+		3: false,
+	}
+	for guard_slot in hq_guard_slots:
+		for unit_type in guard_restricted:
+			var guarded_controller := _controller(475)
+			var attacker := _card("hq-guard-attacker-%s-%d" % [unit_type, guard_slot], "player", unit_type, 2, 5)
+			var guard := _card("hq-guard-%s-%d" % [unit_type, guard_slot], "opponent", "Infantry", 1, 4, 0, 0, ["Guard"])
+			_place_frontline(guarded_controller, attacker, 0)
+			_place_support(guarded_controller, guard, guard_slot)
+			_ready(guarded_controller, attacker)
+			var hq_id: String = guarded_controller.state.players.opponent.headquarters.instance_id
+			var before := _digest(guarded_controller)
+			var result = guarded_controller.submit_action(GameAction.create(
+				"attack_hq", "player", attacker.instance_id, [hq_id], {}, guarded_controller.state.sequence
+			))
+			if hq_guard_slots[guard_slot]:
+				t.assert_eq(result.reason_code, "guard_protected", "%s Guard in adjacent HQ slot %d blocks attack" % [unit_type, guard_slot])
+				t.assert_eq(_digest(guarded_controller), before, "%s blocked Headquarters attack is atomic" % unit_type)
+			else:
+				t.assert_true(result.accepted, "%s Guard in outer support slot %d does not block Headquarters" % [unit_type, guard_slot])
 
 	for unit_type in ["Artillery", "Bomber"]:
-		var bypass_controller := _controller(476)
-		var attacker := _card("bypass-hq-attacker-%s" % unit_type, "player", unit_type, 2, 5)
-		var guard := _card("bypass-hq-guard-%s" % unit_type, "opponent", "Infantry", 1, 4, 0, 0, ["Guard"])
-		_place_support(bypass_controller, attacker, 1)
-		_place_support(bypass_controller, guard, 0)
-		_ready(bypass_controller, attacker)
-		var hq_id: String = bypass_controller.state.players.opponent.headquarters.instance_id
-		var result = bypass_controller.submit_action(GameAction.create(
-			"attack_hq", "player", attacker.instance_id, [hq_id], {}, bypass_controller.state.sequence
-		))
-		t.assert_true(result.accepted, "%s bypasses Headquarters Guard" % unit_type)
-		t.assert_eq(bypass_controller.state.players.opponent.headquarters.current_defense, 18, "%s damages guarded Headquarters" % unit_type)
+		for guard_slot in [1, 2]:
+			var bypass_controller := _controller(476)
+			var attacker := _card("hq-bypass-attacker-%s-%d" % [unit_type, guard_slot], "player", unit_type, 2, 5)
+			var guard := _card("hq-bypass-guard-%s-%d" % [unit_type, guard_slot], "opponent", "Infantry", 1, 4, 0, 0, ["Guard"])
+			_place_support(bypass_controller, attacker, 0)
+			_place_support(bypass_controller, guard, guard_slot)
+			_ready(bypass_controller, attacker)
+			var hq_id: String = bypass_controller.state.players.opponent.headquarters.instance_id
+			var result = bypass_controller.submit_action(GameAction.create(
+				"attack_hq", "player", attacker.instance_id, [hq_id], {}, bypass_controller.state.sequence
+			))
+			t.assert_true(result.accepted, "%s bypasses Guard in adjacent HQ slot %d" % [unit_type, guard_slot])
+			t.assert_eq(bypass_controller.state.players.opponent.headquarters.current_defense, 18, "%s damages guarded Headquarters" % unit_type)
 
 	var direct_controller := _controller(477)
 	var direct_attacker := _card("direct-hq-attacker", "player", "Artillery", 2, 5)

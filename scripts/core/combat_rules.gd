@@ -4,6 +4,8 @@ extends RefCounted
 const CardInstance = preload("res://scripts/core/card_instance.gd")
 const GameConstants = preload("res://scripts/core/game_constants.gd")
 
+const HQ_ADJACENT_SUPPORT_SLOTS := [1, 2] # inner-left, inner-right
+
 const TYPE_RULES := {
 	"Infantry": {
 		"long_range": false,
@@ -122,7 +124,7 @@ static func validate_hq_attack(state, attacker_id: String, defender_player_id: S
 		if attacker.zone != "frontline" or state.frontline_controller_id != attacker.owner_id:
 			return _invalid("invalid_target")
 	var headquarters: CardInstance = state.players[defender_player_id].headquarters
-	if not _passes_guard_adjacency(state, attacker, headquarters):
+	if not _passes_hq_guard_adjacency(state, attacker, headquarters):
 		return _invalid("guard_protected")
 	if headquarters.current_defense <= 0:
 		return _invalid("invalid_target")
@@ -211,6 +213,20 @@ static func _passes_guard_adjacency(state, attacker: CardInstance, defender: Car
 		if adjacent != null \
 			and adjacent.owner_id == defender.owner_id \
 			and adjacent.has_keyword_or_status("Guard"):
+			return false
+	return true
+
+
+static func _passes_hq_guard_adjacency(state, attacker: CardInstance, headquarters: CardInstance) -> bool:
+	var rules: Dictionary = TYPE_RULES.get(attacker.unit_type, {})
+	if not bool(rules.get("guard_restricted", false)):
+		return true
+	var support_line: Array = state.players[headquarters.owner_id].support_line
+	for support_slot in HQ_ADJACENT_SUPPORT_SLOTS:
+		var guard = support_line[support_slot]
+		if guard != null \
+			and guard.owner_id == headquarters.owner_id \
+			and guard.has_keyword_or_status("Guard"):
 			return false
 	return true
 
