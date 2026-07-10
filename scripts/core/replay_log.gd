@@ -51,7 +51,7 @@ func record_invalid_terminal(
 
 
 func to_dict() -> Dictionary:
-	return {
+	var payload := {
 		"seed": seed,
 		"player_deck_ids": player_deck_ids.duplicate(true),
 		"opponent_deck_ids": opponent_deck_ids.duplicate(true),
@@ -59,11 +59,15 @@ func to_dict() -> Dictionary:
 		"actions": actions.duplicate(true),
 		"terminal_result": terminal_result.duplicate(true),
 	}
+	payload["integrity_hash"] = _integrity_hash(payload)
+	return payload
 
 
 static func from_dict(data) -> ReplayLog:
 	var log: ReplayLog = load("res://scripts/core/replay_log.gd").new()
-	var validation := _validate_log(data)
+	var validation := _validate_integrity(data)
+	if validation.valid:
+		validation = _validate_log(data)
 	if not validation.valid:
 		log.validation_error = {"code": str(validation.code)}
 		return log
@@ -150,7 +154,7 @@ func _replay_invalid_terminal(controller):
 static func _validate_log(data) -> Dictionary:
 	if not (data is Dictionary):
 		return {"valid": false, "code": "log_not_dictionary"}
-	for field in ["seed", "player_deck_ids", "opponent_deck_ids", "starting_player_id", "actions", "terminal_result"]:
+	for field in ["seed", "player_deck_ids", "opponent_deck_ids", "starting_player_id", "actions", "terminal_result", "integrity_hash"]:
 		if not data.has(field):
 			return {"valid": false, "code": "missing_%s" % field}
 	if typeof(data.seed) != TYPE_INT:
@@ -166,6 +170,52 @@ static func _validate_log(data) -> Dictionary:
 		if not action_entry_validation.valid:
 			return action_entry_validation
 	return _validate_terminal_result(data.terminal_result)
+
+
+static func _validate_integrity(data) -> Dictionary:
+	if not (data is Dictionary) or not data.has("integrity_hash") or typeof(data.integrity_hash) != TYPE_STRING:
+		return {"valid": false, "code": "invalid_integrity_hash"}
+	if _integrity_hash(data) != data.integrity_hash:
+		return {"valid": false, "code": "integrity_hash_mismatch"}
+	return {"valid": true}
+
+
+static func _integrity_hash(data: Dictionary) -> String:
+	var payload := data.duplicate(true)
+	payload.erase("integrity_hash")
+	return JSON.stringify(_canonical_integrity_value(payload)).sha256_text()
+
+
+static func _canonical_integrity_value(value) -> Variant:
+	if value is Dictionary:
+		var entries: Array = []
+		for key in value:
+			var key_record := _canonical_integrity_key(key)
+			entries.append({
+				"sort_key": JSON.stringify(key_record),
+				"key": key_record,
+				"value": _canonical_integrity_value(value[key]),
+			})
+		entries.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
+			return str(left.sort_key) < str(right.sort_key)
+		)
+		var canonical_entries: Array = []
+		for entry in entries:
+			canonical_entries.append({"key": entry.key, "value": entry.value})
+		return {"dictionary_entries": canonical_entries}
+	if value is Array:
+		var canonical_array: Array = []
+		for entry in value:
+			canonical_array.append(_canonical_integrity_value(entry))
+		return canonical_array
+	return value
+
+
+static func _canonical_integrity_key(key) -> Dictionary:
+	var key_value = key
+	if not (key is bool or key is int or key is float or key is String or key == null):
+		key_value = str(key)
+	return {"type": typeof(key), "value": key_value}
 
 
 static func _validate_action_entry(entry) -> Dictionary:

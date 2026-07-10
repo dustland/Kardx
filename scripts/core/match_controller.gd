@@ -303,6 +303,8 @@ func _validate_invalid_replay_snapshot(snapshot: Dictionary) -> Dictionary:
 			return {"valid": false, "code": "invalid_snapshot_frontline"}
 		if not (snapshot.get(field, null) is Dictionary) and field == "invalid_diagnostics":
 			return {"valid": false, "code": "invalid_snapshot_diagnostics"}
+	if not (snapshot.phase in ["setup", "mulligan", "action"]) or not snapshot.invalid_diagnostics.is_empty():
+		return {"valid": false, "code": "invalid_snapshot_pre_abort_state"}
 	if snapshot.players.size() != 2:
 		return {"valid": false, "code": "invalid_snapshot_players"}
 	var seen_instance_ids := {}
@@ -315,18 +317,46 @@ func _validate_invalid_replay_snapshot(snapshot: Dictionary) -> Dictionary:
 			or seen_instance_ids.has(card_data.instance_id) \
 			or not _valid_snapshot_definition(card_data) \
 			or not (card_data.owner_id in ["player", "opponent"]) \
-			or not card_data.zone in ["headquarters", "deck", "hand", "support_line", "discard", "frontline"]:
+			or not (card_data.zone in ["headquarters", "deck", "hand", "support_line", "discard", "frontline"]):
 			return {"valid": false, "code": "invalid_snapshot_card"}
 		seen_instance_ids[card_data.instance_id] = true
-	var referenced_card_ids := {}
+	var primary_card_ids := {}
+	var headquarters_ids := {}
+	var hand_ids_by_player := {}
 	for player_id in ["player", "opponent"]:
-		if not snapshot.players.has(player_id) \
-			or not _valid_player_snapshot(snapshot.players[player_id], snapshot.cards, player_id, referenced_card_ids):
+		if not snapshot.players.has(player_id) or not _valid_player_snapshot_fields(snapshot.players[player_id], player_id):
 			return {"valid": false, "code": "invalid_snapshot_player"}
-	if not _valid_card_id_array(snapshot.frontline, snapshot.cards, "", referenced_card_ids, true):
+		var player_snapshot: Dictionary = snapshot.players[player_id]
+		if not _valid_snapshot_headquarters(player_snapshot.headquarters, snapshot.cards, player_id, headquarters_ids):
+			return {"valid": false, "code": "invalid_snapshot_headquarters"}
+		if not _valid_snapshot_primary_zone(player_snapshot.deck, snapshot.cards, player_id, "deck", primary_card_ids, false):
+			return {"valid": false, "code": "invalid_snapshot_deck"}
+		if not _valid_snapshot_primary_zone(player_snapshot.hand, snapshot.cards, player_id, "hand", primary_card_ids, false):
+			return {"valid": false, "code": "invalid_snapshot_hand"}
+		hand_ids_by_player[player_id] = _snapshot_id_set(player_snapshot.hand)
+		if player_snapshot.support_line.size() != GameConstants.SUPPORT_UNIT_SLOTS \
+			or not _valid_snapshot_primary_zone(player_snapshot.support_line, snapshot.cards, player_id, "support_line", primary_card_ids, true):
+			return {"valid": false, "code": "invalid_snapshot_support_line"}
+		if not _valid_snapshot_primary_zone(player_snapshot.discard, snapshot.cards, player_id, "discard", primary_card_ids, false):
+			return {"valid": false, "code": "invalid_snapshot_discard"}
+		if not _valid_snapshot_active_countermeasures(player_snapshot.active_countermeasures, snapshot.cards, player_id, hand_ids_by_player[player_id]):
+			return {"valid": false, "code": "invalid_snapshot_active_countermeasures"}
+	if snapshot.frontline.size() != GameConstants.FRONTLINE_SLOTS \
+		or not _valid_snapshot_primary_zone(snapshot.frontline, snapshot.cards, "", "frontline", primary_card_ids, true):
 		return {"valid": false, "code": "invalid_snapshot_frontline"}
+	var frontline_controller := ""
+	for card_id in snapshot.frontline:
+		if card_id != null:
+			frontline_controller = snapshot.cards[card_id].owner_id
+			break
+	if frontline_controller != snapshot.frontline_controller_id:
+		return {"valid": false, "code": "invalid_snapshot_frontline_controller"}
 	for card_id in snapshot.cards:
-		if not referenced_card_ids.has(card_id):
+		var card: Dictionary = snapshot.cards[card_id]
+		if card.category == "Headquarters":
+			if not headquarters_ids.has(card_id):
+				return {"valid": false, "code": "unreferenced_snapshot_headquarters"}
+		elif not primary_card_ids.has(card_id):
 			return {"valid": false, "code": "unreferenced_snapshot_card"}
 	return {"valid": true}
 
@@ -338,47 +368,75 @@ func _valid_snapshot_definition(card_data: Dictionary) -> bool:
 	var definition: Dictionary = _definitions[card_data.definition_id]
 	return str(definition.get("category", "")) == card_data.category
 
-func _valid_player_snapshot(data, cards: Dictionary, player_id: String, referenced_card_ids: Dictionary) -> bool:
+func _valid_player_snapshot_fields(data, player_id: String) -> bool:
 	if not (data is Dictionary):
 		return false
 	for field in ["id", "nation", "headquarters"]:
 		if typeof(data.get(field, null)) != TYPE_STRING:
 			return false
-	if data.id != player_id or not _valid_card_reference(data.headquarters, cards, player_id, referenced_card_ids, false):
+	if data.id != player_id:
 		return false
-	var headquarters: Dictionary = cards[data.headquarters]
-	if headquarters.category != "Headquarters" or headquarters.zone != "headquarters":
-		return false
-	for field in ["deck", "hand", "discard", "active_countermeasures"]:
-		if not _valid_card_id_array(data.get(field, null), cards, player_id, referenced_card_ids, false):
+	for field in ["deck", "hand", "support_line", "discard", "active_countermeasures"]:
+		if not (data.get(field, null) is Array):
 			return false
-	if not _valid_card_id_array(data.get("support_line", null), cards, player_id, referenced_card_ids, true):
-		return false
 	for field in ["credit_slots", "credit", "fatigue", "turns_started", "max_hand_size"]:
 		if typeof(data.get(field, null)) != TYPE_INT:
 			return false
 	return typeof(data.get("mulligan_used", null)) == TYPE_BOOL and typeof(data.get("mulligan_confirmed", null)) == TYPE_BOOL
 
-func _valid_card_id_array(value, cards: Dictionary, owner_id: String, referenced_card_ids: Dictionary, allow_null: bool) -> bool:
+func _valid_snapshot_headquarters(card_id, cards: Dictionary, owner_id: String, headquarters_ids: Dictionary) -> bool:
+	if typeof(card_id) != TYPE_STRING or not cards.has(card_id) or headquarters_ids.has(card_id):
+		return false
+	var card: Dictionary = cards[card_id]
+	if card.owner_id != owner_id or card.category != "Headquarters" or card.zone != "headquarters" or card.slot != -1:
+		return false
+	headquarters_ids[card_id] = true
+	return true
+
+func _valid_snapshot_primary_zone(value, cards: Dictionary, owner_id: String, zone: String, primary_card_ids: Dictionary, allow_null: bool) -> bool:
 	if not (value is Array):
 		return false
-	for card_id in value:
+	for index in range(value.size()):
+		var card_id = value[index]
 		if card_id == null:
 			if allow_null:
 				continue
 			return false
-		if not _valid_card_reference(card_id, cards, owner_id, referenced_card_ids, allow_null):
+		if typeof(card_id) != TYPE_STRING or not cards.has(card_id) or primary_card_ids.has(card_id):
 			return false
+		var card: Dictionary = cards[card_id]
+		if card.category == "Headquarters" or card.zone != zone:
+			return false
+		if not owner_id.is_empty() and card.owner_id != owner_id:
+			return false
+		if zone in ["support_line", "frontline"]:
+			if card.slot != index:
+				return false
+		elif card.slot != -1:
+			return false
+		primary_card_ids[card_id] = true
 	return true
 
-func _valid_card_reference(card_id, cards: Dictionary, owner_id: String, referenced_card_ids: Dictionary, _allow_null: bool) -> bool:
-	if typeof(card_id) != TYPE_STRING or not cards.has(card_id):
+func _valid_snapshot_active_countermeasures(value, cards: Dictionary, owner_id: String, hand_ids: Dictionary) -> bool:
+	if not (value is Array):
 		return false
-	var card: Dictionary = cards[card_id]
-	if not owner_id.is_empty() and card.owner_id != owner_id:
-		return false
-	referenced_card_ids[card_id] = true
+	var seen := {}
+	for card_id in value:
+		if typeof(card_id) != TYPE_STRING or seen.has(card_id) or not hand_ids.has(card_id) or not cards.has(card_id):
+			return false
+		var card: Dictionary = cards[card_id]
+		if card.owner_id != owner_id or card.category != "Countermeasure" or card.zone != "hand" \
+			or not card.countermeasure_active or not card.face_down:
+			return false
+		seen[card_id] = true
 	return true
+
+func _snapshot_id_set(value: Array) -> Dictionary:
+	var ids := {}
+	for card_id in value:
+		if card_id != null:
+			ids[card_id] = true
+	return ids
 
 func _valid_card_snapshot(data) -> bool:
 	if not (data is Dictionary):

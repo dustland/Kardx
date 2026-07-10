@@ -10,9 +10,12 @@ static func run(t) -> void:
 	_test_replay_reproduces_setup_and_sequence_guard(t)
 	_test_replay_rejects_zero_tampered_expected_sequence(t)
 	_test_invalid_terminal_record_replays_deterministically(t)
-	_test_injected_zone_invalid_replays_authoritative_state(t)
+	_test_injected_zone_invalid_snapshot_is_rejected(t)
 	_test_tampered_invalid_terminal_metadata_aborts(t)
 	_test_invalid_snapshot_identity_and_reference_tampering_aborts(t)
+	_test_invalid_snapshot_primary_graph_tampering_aborts(t)
+	_test_invalid_snapshot_active_countermeasure_must_reference_hand(t)
+	_test_replay_integrity_hash_rejects_shape_valid_tampering(t)
 	_test_replay_schema_rejects_untrusted_logs(t)
 	_test_replay_aborts_on_tampered_sequence(t)
 	_test_replay_aborts_on_tampered_action(t)
@@ -60,7 +63,7 @@ static func _test_replay_rejects_zero_tampered_expected_sequence(t) -> void:
 
 	var replayed = ReplayLog.from_dict(tampered).replay(fixture.definitions)
 	t.assert_eq(replayed.state.phase, "invalid", "zeroed expected sequence aborts replay")
-	t.assert_eq(replayed.invalid_diagnostics.code, "replay_expected_sequence_diverged", "zeroed sequence has stable diagnostics")
+	t.assert_eq(replayed.invalid_diagnostics.code, "replay_invalid", "zeroed sequence is rejected by integrity validation")
 
 
 static func _test_invalid_terminal_record_replays_deterministically(t) -> void:
@@ -79,7 +82,7 @@ static func _test_invalid_terminal_record_replays_deterministically(t) -> void:
 	t.assert_eq(replayed.replay_log.actions.size(), 0, "invalid terminal replay does not log a fake action")
 
 
-static func _test_injected_zone_invalid_replays_authoritative_state(t) -> void:
+static func _test_injected_zone_invalid_snapshot_is_rejected(t) -> void:
 	var fixture := CoreCards.build_valid_fixture()
 	var controller := MatchController.create(fixture.definitions, fixture.player_deck, fixture.enemy_deck, 90230)
 	controller.submit_action(GameAction.create("start_match", "system", "", [], {}, controller.state.sequence))
@@ -88,11 +91,8 @@ static func _test_injected_zone_invalid_replays_authoritative_state(t) -> void:
 	var source_log: Dictionary = controller.replay_log.to_dict()
 
 	var replayed = ReplayLog.from_dict(source_log).replay(fixture.definitions)
-	t.assert_eq(replayed.state_hash(), controller.state_hash(), "injected invalid replay restores authoritative state hash")
-	t.assert_eq(replayed.event_history, controller.event_history, "injected invalid replay emits identical events")
-	t.assert_eq(replayed.state.sequence, controller.state.sequence, "injected invalid replay preserves sequence")
-	t.assert_eq(replayed.invalid_diagnostics, controller.invalid_diagnostics, "injected invalid replay preserves diagnostic details")
-	t.assert_eq(replayed.replay_log.actions, controller.replay_log.actions, "injected invalid replay logs no rejected action")
+	t.assert_eq(replayed.invalid_diagnostics.code, "replay_invalid", "cross-zone injected snapshot is rejected before restore")
+	t.assert_eq(_event_type_count(replayed.event_history, "match_invalid"), 1, "rejected injected snapshot emits one terminal event")
 
 
 static func _test_tampered_invalid_terminal_metadata_aborts(t) -> void:
@@ -137,9 +137,87 @@ static func _test_invalid_snapshot_identity_and_reference_tampering_aborts(t) ->
 	var foreign_zone_reference: Dictionary = source.duplicate(true)
 	foreign_zone_reference.terminal_result.state_snapshot.players.player.deck[0] = foreign_zone_reference.terminal_result.state_snapshot.players.opponent.headquarters
 	for tampered in [mismatched_key, duplicate_identity, unknown_definition, stale_zone_reference, foreign_zone_reference]:
+		tampered.integrity_hash = ReplayLog._integrity_hash(tampered)
 		var replayed = ReplayLog.from_dict(tampered).replay(fixture.definitions)
 		t.assert_eq(replayed.invalid_diagnostics.code, "replay_invalid", "invalid snapshot tampering has stable diagnostic")
 		t.assert_eq(_event_type_count(replayed.event_history, "match_invalid"), 1, "invalid snapshot tampering emits one terminal event")
+
+
+static func _test_invalid_snapshot_primary_graph_tampering_aborts(t) -> void:
+	var fixture := CoreCards.build_valid_fixture()
+	var controller := MatchController.create(fixture.definitions, fixture.player_deck, fixture.enemy_deck, 90234)
+	controller._abort_invalid("forced_invalid", {"source": "test"})
+	var source: Dictionary = controller.replay_log.to_dict()
+	var primary_id: String = str(source.terminal_result.state_snapshot.players.player.deck[0])
+	var duplicate_within_zone: Dictionary = source.duplicate(true)
+	duplicate_within_zone.terminal_result.state_snapshot.players.player.deck.append(primary_id)
+	var duplicate_cross_zone: Dictionary = source.duplicate(true)
+	duplicate_cross_zone.terminal_result.state_snapshot.players.player.hand.append(primary_id)
+	var wrong_slot: Dictionary = source.duplicate(true)
+	wrong_slot.terminal_result.state_snapshot.cards[primary_id].slot = 1
+	var wrong_zone: Dictionary = source.duplicate(true)
+	wrong_zone.terminal_result.state_snapshot.cards[primary_id].zone = "hand"
+	var orphan: Dictionary = source.duplicate(true)
+	orphan.terminal_result.state_snapshot.players.player.deck.remove_at(0)
+	var invalid_pre_abort_phase: Dictionary = source.duplicate(true)
+	invalid_pre_abort_phase.terminal_result.state_snapshot.phase = "invalid"
+	var complete_pre_abort_phase: Dictionary = source.duplicate(true)
+	complete_pre_abort_phase.terminal_result.state_snapshot.phase = "complete"
+	for tampered in [duplicate_within_zone, duplicate_cross_zone, wrong_slot, wrong_zone, orphan, invalid_pre_abort_phase, complete_pre_abort_phase]:
+		tampered.integrity_hash = ReplayLog._integrity_hash(tampered)
+		var replayed = ReplayLog.from_dict(tampered).replay(fixture.definitions)
+		t.assert_eq(replayed.invalid_diagnostics.code, "replay_invalid", "invalid primary snapshot graph has stable diagnostic")
+		t.assert_eq(_event_type_count(replayed.event_history, "match_invalid"), 1, "invalid primary snapshot graph emits one terminal event")
+
+
+static func _test_invalid_snapshot_active_countermeasure_must_reference_hand(t) -> void:
+	var fixture := CoreCards.build_valid_fixture()
+	fixture.definitions["us-00"].category = "Countermeasure"
+	var controller := MatchController.create(fixture.definitions, fixture.player_deck, fixture.enemy_deck, 90236)
+	var player = controller.state.players.player
+	var counter = null
+	for card in player.deck:
+		if card.definition_id == "us-00":
+			counter = card
+			break
+	player.deck.erase(counter)
+	player.hand.append(counter)
+	counter.zone = "hand"
+	counter.slot = -1
+	counter.countermeasure_active = true
+	counter.face_down = true
+	player.active_countermeasures.append(counter)
+	controller._abort_invalid("forced_invalid", {"source": "test"})
+	var tampered: Dictionary = controller.replay_log.to_dict()
+	tampered.terminal_result.state_snapshot.players.player.active_countermeasures[0] = tampered.terminal_result.state_snapshot.players.player.deck[0]
+	tampered.integrity_hash = ReplayLog._integrity_hash(tampered)
+	var replayed = ReplayLog.from_dict(tampered).replay(fixture.definitions)
+	t.assert_eq(replayed.invalid_diagnostics.code, "replay_invalid", "active Countermeasure must reference its primary hand object")
+	t.assert_eq(_event_type_count(replayed.event_history, "match_invalid"), 1, "invalid active Countermeasure reference emits one terminal event")
+
+
+static func _test_replay_integrity_hash_rejects_shape_valid_tampering(t) -> void:
+	var fixture := CoreCards.build_valid_fixture()
+	var controller := MatchController.create(fixture.definitions, fixture.player_deck, fixture.enemy_deck, 90235)
+	controller._abort_invalid("forced_invalid", {"source": "test"})
+	var source: Dictionary = controller.replay_log.to_dict()
+	t.assert_true(source.has("integrity_hash"), "replay export includes integrity hash")
+	t.assert_eq(ReplayLog.from_dict(source).to_dict(), source, "replay export/import remains deterministic")
+	var changed_terminal_type: Dictionary = source.duplicate(true)
+	changed_terminal_type.terminal_result = {"type": "state", "phase": "setup", "winner_id": "", "sequence": 0}
+	var changed_snapshot_phase: Dictionary = source.duplicate(true)
+	changed_snapshot_phase.terminal_result.state_snapshot.phase = "mulligan"
+	var changed_actions: Dictionary = source.duplicate(true)
+	changed_actions.actions.append({
+		"action": {"type": "start_match", "actor_id": "system", "source_id": "", "target_ids": [], "payload": {}, "expected_sequence": 0},
+		"result_sequence": 0,
+	})
+	var changed_integrity: Dictionary = source.duplicate(true)
+	changed_integrity.integrity_hash = "tampered"
+	for tampered in [changed_terminal_type, changed_snapshot_phase, changed_actions, changed_integrity]:
+		var replayed = ReplayLog.from_dict(tampered).replay(fixture.definitions)
+		t.assert_eq(replayed.invalid_diagnostics.code, "replay_invalid", "shape-valid replay tampering has stable diagnostic")
+		t.assert_eq(_event_type_count(replayed.event_history, "match_invalid"), 1, "shape-valid replay tampering emits one terminal event")
 
 
 static func _event_type_count(events: Array, event_type: String) -> int:
@@ -183,7 +261,7 @@ static func _test_replay_aborts_on_tampered_sequence(t) -> void:
 
 	var replayed = ReplayLog.from_dict(tampered).replay(fixture.definitions)
 	t.assert_eq(replayed.state.phase, "invalid", "tampered replay aborts as invalid")
-	t.assert_eq(replayed.invalid_diagnostics.code, "replay_sequence_diverged", "replay exposes divergence diagnostics")
+	t.assert_eq(replayed.invalid_diagnostics.code, "replay_invalid", "replay sequence tampering is rejected by integrity validation")
 
 
 static func _test_replay_aborts_on_tampered_action(t) -> void:
@@ -199,7 +277,7 @@ static func _test_replay_aborts_on_tampered_action(t) -> void:
 
 	var replayed = ReplayLog.from_dict(tampered).replay(fixture.definitions)
 	t.assert_eq(replayed.state.phase, "invalid", "tampered action aborts replay")
-	t.assert_eq(replayed.invalid_diagnostics.code, "replay_action_rejected", "action tampering records rejection diagnostics")
+	t.assert_eq(replayed.invalid_diagnostics.code, "replay_invalid", "action tampering is rejected by integrity validation")
 
 
 static func _test_state_hash_is_canonical_for_dictionary_order(t) -> void:
