@@ -10,6 +10,7 @@ static func run(t) -> void:
 	_test_catalog_resolves_ability_ids_for_card_instances(t)
 	_test_card_ids_references_and_category_shapes(t)
 	_test_effect_schema_defaults_and_matrix(t)
+	_test_required_enum_strings_and_create_constraints(t)
 	_test_malformed_nested_content_stays_diagnostic(t)
 	_test_loader_reports_file_and_root_errors(t)
 	_test_schema_mutations_produce_targeted_diagnostics(t)
@@ -111,6 +112,57 @@ static func _test_effect_schema_defaults_and_matrix(t) -> void:
 	var codes := _codes(ContentValidator.validate(invalid))
 	t.assert_true(codes.has("invalid_hq_target_count"), "HQ selectors require one target")
 	t.assert_true(codes.has("invalid_target_effect_pair"), "HQ and zone-changing target pairs are rejected")
+
+static func _test_required_enum_strings_and_create_constraints(t) -> void:
+	var blank_enum_card := _card("blank-enums", [])
+	blank_enum_card.nation = ""
+	blank_enum_card.category = " "
+	blank_enum_card.rarity = "\t"
+	var blank_unit_type_card := _card("blank-unit-type", [])
+	blank_unit_type_card.unit_type = " "
+	var catalog := ContentCatalog.new()
+	catalog.cards = [blank_enum_card, blank_unit_type_card, _headquarters("hq-definition")]
+	catalog.abilities = [
+		{
+			"id": "blank-ability-enums",
+			"trigger": " ",
+			"conditions": {"target_owner": "\t"},
+			"target": {"selector": " "},
+			"effects": [{"type": " "}],
+		},
+		{
+			"id": "create-hq",
+			"trigger": "manual",
+			"conditions": {},
+			"target": {"selector": "none"},
+			"effects": [{"type": "create", "definition_id": "hq-definition", "destination": "hand"}],
+		},
+		{
+			"id": "create-invalid-destination",
+			"trigger": "manual",
+			"conditions": {},
+			"target": {"selector": "none"},
+			"effects": [{"type": "create", "definition_id": "blank-enums", "destination": "frontline"}],
+		},
+	]
+	catalog.decks = []
+	catalog.rules = _rules()
+	catalog.rebuild_indexes()
+
+	var errors := ContentValidator.validate(catalog)
+	for expected in [
+		{"code": "invalid_nation", "path": "cards[0].nation"},
+		{"code": "invalid_category", "path": "cards[0].category"},
+		{"code": "invalid_rarity", "path": "cards[0].rarity"},
+		{"code": "invalid_unit_type", "path": "cards[1].unit_type"},
+		{"code": "invalid_trigger", "path": "abilities[0].trigger"},
+		{"code": "invalid_conditions", "path": "abilities[0].conditions.target_owner"},
+		{"code": "invalid_target_selector", "path": "abilities[0].target.selector"},
+		{"code": "invalid_effect_type", "path": "abilities[0].effects[0].type"},
+		{"code": "invalid_create_definition", "path": "abilities[1].effects[0].definition_id"},
+		{"code": "invalid_create_destination", "path": "abilities[2].effects[0].destination"},
+	]:
+		t.assert_true(errors.any(func(error): return error.code == expected.code and error.path == expected.path), "reports %s at %s" % [expected.code, expected.path])
 
 static func _test_malformed_nested_content_stays_diagnostic(t) -> void:
 	var catalog := ContentCatalog.new()

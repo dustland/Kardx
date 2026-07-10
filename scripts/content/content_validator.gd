@@ -52,13 +52,13 @@ static func _validate_cards(diagnostics: Array[Dictionary], cards: Array, abilit
 		var category: String = str(card.get("category", "")) if _has_type(card, "category", TYPE_STRING) else ""
 		var unit_type: String = str(card.get("unit_type", "")) if _has_type(card, "unit_type", TYPE_STRING) else ""
 		var rarity: String = str(card.get("rarity", "")) if _has_type(card, "rarity", TYPE_STRING) else ""
-		if not nation.is_empty() and not NATIONS.has(nation):
+		if not NATIONS.has(nation):
 			_add(diagnostics, "invalid_nation", "%s.nation" % path, "nation must be one of %s" % ", ".join(NATIONS))
-		if not category.is_empty() and not CATEGORIES.has(category):
+		if not CATEGORIES.has(category):
 			_add(diagnostics, "invalid_category", "%s.category" % path, "category must be one of %s" % ", ".join(CATEGORIES))
 		if category == "Unit" and not UNIT_TYPES.has(unit_type):
 			_add(diagnostics, "invalid_unit_type", "%s.unit_type" % path, "unit_type must be one of %s for Units" % ", ".join(UNIT_TYPES))
-		if not rarity.is_empty() and not GameConstants.COPY_LIMITS.has(rarity):
+		if not GameConstants.COPY_LIMITS.has(rarity):
 			_add(diagnostics, "invalid_rarity", "%s.rarity" % path, "rarity must be defined by copy limits")
 		for field in ["deployment_cost", "operation_cost", "attack", "defense"]:
 			var value = card.get(field, null)
@@ -140,7 +140,7 @@ static func _validate_abilities(diagnostics: Array[Dictionary], abilities: Array
 		})
 		_validate_id(diagnostics, ability, path)
 		var trigger: String = str(ability.get("trigger", "")) if _has_type(ability, "trigger", TYPE_STRING) else ""
-		if not trigger.is_empty() and not TRIGGERS.has(trigger):
+		if not TRIGGERS.has(trigger):
 			_add(diagnostics, "invalid_trigger", "%s.trigger" % path, "trigger is not supported by EffectEngine")
 		_validate_conditions(diagnostics, ability.get("conditions", null), "%s.conditions" % path)
 		var target_info := _validate_target(diagnostics, ability.get("target", null), "%s.target" % path)
@@ -232,6 +232,10 @@ static func _validate_effect(diagnostics: Array[Dictionary], effect_value: Varia
 			_add(diagnostics, "missing_effect_field", "%s.definition_id" % path, "create effect needs a definition_id")
 		elif not cards_by_id.has(definition_id_value):
 			_add(diagnostics, "unknown_effect_definition", "%s.definition_id" % path, "create definition '%s' does not exist" % definition_id_value)
+		elif str(cards_by_id[definition_id_value].get("category", "")) == "Headquarters":
+			_add(diagnostics, "invalid_create_definition", "%s.definition_id" % path, "create definition cannot be a Headquarters")
+		if effect.has("destination") and (not effect.destination is String or not ["hand", "deck"].has(effect.destination)):
+			_add(diagnostics, "invalid_create_destination", "%s.destination" % path, "create destination must be hand or deck")
 	elif effect_type == "replace_event" and not _has_type(effect, "changes", TYPE_DICTIONARY):
 		_add(diagnostics, "missing_effect_field", "%s.changes" % path, "replace_event needs changes")
 
