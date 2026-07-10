@@ -16,6 +16,7 @@ static func run(t) -> void:
 	_test_blitz_fury_and_pinned(t)
 	_test_tank_advance_chain(t)
 	_test_damage_counterattack_and_destruction(t)
+	_test_lethal_retaliation_boundaries(t)
 	_test_ambush_first_strike(t)
 	_test_headquarters_guard_and_locked_target(t)
 	_test_headquarters_victory(t)
@@ -392,6 +393,57 @@ static func _test_damage_counterattack_and_destruction(t) -> void:
 			expected_defense,
 			"%s counterattack table entry is enforced" % unit_type
 		)
+
+
+static func _test_lethal_retaliation_boundaries(t) -> void:
+	for unit_type in ["Infantry", "Tank", "Fighter"]:
+		var controller := _controller(464)
+		var attacker := _card("lethal-attacker-%s" % unit_type, "player", unit_type, 3, 6, 0, 1)
+		var defender := _card("lethal-defender-%s" % unit_type, "opponent", "Infantry", 2, 3)
+		_place_support(controller, attacker, 0)
+		_place_frontline(controller, defender, 0)
+		_ready(controller, attacker)
+		var result = _attack(controller, attacker, defender)
+		t.assert_true(result.accepted, "%s lethal direct attack resolves" % unit_type)
+		t.assert_eq(attacker.current_defense, 4, "%s receives snapshotted retaliation from lethal defender" % unit_type)
+		t.assert_eq(defender.zone, "discard", "%s lethal defender is destroyed after retaliation" % unit_type)
+		t.assert_eq(
+			_event_types(result.events),
+			["credit_spent", "attack_started", "damage_dealt", "damage_dealt", "card_destroyed", "frontline_changed"],
+			"%s lethal attack resolves retaliation before destruction" % unit_type
+		)
+
+	for unit_type in ["Artillery", "Bomber"]:
+		var controller := _controller(465)
+		var attacker := _card("lethal-ranged-attacker-%s" % unit_type, "player", unit_type, 3, 6, 0, 1)
+		var defender := _card("lethal-ranged-defender-%s" % unit_type, "opponent", "Infantry", 2, 3)
+		_place_support(controller, attacker, 0)
+		_place_frontline(controller, defender, 0)
+		_ready(controller, attacker)
+		var result = _attack(controller, attacker, defender)
+		t.assert_true(result.accepted, "%s lethal direct attack resolves" % unit_type)
+		t.assert_eq(attacker.current_defense, 6, "%s lethal attack receives no retaliation" % unit_type)
+		t.assert_eq(
+			_event_types(result.events),
+			["credit_spent", "attack_started", "damage_dealt", "card_destroyed", "frontline_changed"],
+			"%s lethal attack follows the no-retaliation type boundary" % unit_type
+		)
+
+	var ambush_controller := _controller(466)
+	var ambush_attacker := _card("lethal-ambush-attacker", "player", "Infantry", 3, 6, 0, 1)
+	var ambush_defender := _card("lethal-ambush-defender", "opponent", "Infantry", 2, 3, 0, 0, ["Ambush"])
+	_place_support(ambush_controller, ambush_attacker, 0)
+	_place_frontline(ambush_controller, ambush_defender, 0)
+	_ready(ambush_controller, ambush_attacker)
+	var ambush_result = _attack(ambush_controller, ambush_attacker, ambush_defender)
+	t.assert_true(ambush_result.accepted, "lethal attack against Ambush resolves")
+	t.assert_eq(ambush_attacker.current_defense, 4, "Ambush deals only its first-strike damage before lethal destruction")
+	t.assert_eq(ambush_defender.zone, "discard", "lethally damaged Ambush is destroyed")
+	t.assert_eq(
+		_event_types(ambush_result.events),
+		["credit_spent", "attack_started", "damage_dealt", "damage_dealt", "card_destroyed", "frontline_changed"],
+		"Ambush first strike replaces normal retaliation on lethal attack"
+	)
 
 
 static func _test_ambush_first_strike(t) -> void:

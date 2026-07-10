@@ -279,11 +279,13 @@ func _attack_unit(action: GameAction) -> ActionResult:
 			_update_frontline_control(events)
 			return _accept(action, events)
 
+	var retaliation_damage := defender.current_attack
+	var resolves_retaliation := not ambush and CombatRules.receives_counterattack(attacker)
 	_deal_combat_damage(attacker, defender, attacker.current_attack, "attack", events)
+	if resolves_retaliation:
+		_deal_combat_damage(defender, attacker, retaliation_damage, "counterattack", events)
 	_destroy_if_dead(defender, events)
-	if defender.current_defense > 0 and not ambush and CombatRules.receives_counterattack(attacker):
-		_deal_combat_damage(defender, attacker, defender.current_attack, "counterattack", events)
-		_destroy_if_dead(attacker, events)
+	_destroy_if_dead(attacker, events)
 	_update_frontline_control(events)
 	return _accept(action, events)
 
