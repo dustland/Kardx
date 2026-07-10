@@ -106,6 +106,9 @@ func expire_temporary_modifiers(turn_player_id: String) -> Array[Dictionary]:
 		var modifier: Dictionary = modifier_value
 		if str(modifier.get("expires_on_turn_end_player_id", "")) != turn_player_id:
 			remaining.append(modifier)
+	for index in range(modifiers.size() - 1, -1, -1):
+		var modifier: Dictionary = modifiers[index]
+		if str(modifier.get("expires_on_turn_end_player_id", "")) != turn_player_id:
 			continue
 		current_attack -= int(modifier.get("attack_delta", 0))
 		current_defense = maxi(0, current_defense - int(modifier.get("defense_delta", 0)))

@@ -37,6 +37,9 @@ static func run(t) -> void:
 	_test_temporary_modifiers_expire_through_turn_lifecycle(t)
 	_test_reaction_checkpoints_halt_stale_actions(t)
 	_test_temporary_modifier_clamping_and_hq_expiry_lethal(t)
+	_test_combat_and_move_reactions_stop_stale_continuations(t)
+	_test_terminal_countermeasure_cleanup_is_bound_to_reaction(t)
+	_test_overlapping_temporary_modifiers_expire_in_reverse_order(t)
 
 
 static func _test_stat_and_status_effects(t) -> void:
@@ -1099,6 +1102,109 @@ static func _test_temporary_modifier_clamping_and_hq_expiry_lethal(t) -> void:
 	t.assert_eq(hq.current_defense, 3, "HQ lethal reaction repairs after modifier expiry")
 	t.assert_eq(hq_controller.state.winner_id, "", "HQ expiry repair prevents defeat")
 	t.assert_true(not _event_types(expiry.events).has("match_ended"), "prevented HQ expiry emits no terminal event")
+
+
+static func _test_combat_and_move_reactions_stop_stale_continuations(t) -> void:
+	var return_controller := _controller(553)
+	var attacker := _card("damage-return-attacker", "player", "Unit", 3, 5)
+	attacker.operation_cost = 2
+	var defender := _card("damage-return-defender", "opponent", "Unit", 1, 5)
+	defender.abilities = [_ability(
+		"return-damaging-attacker", "damage", {"selector": "action_targets", "count": 1}, [{"type": "return"}]
+	)]
+	_place_support(return_controller, attacker, 0)
+	_place_frontline(return_controller, defender, 0)
+	_ready(return_controller, attacker)
+	var returned = return_controller.submit_action(GameAction.create(
+		"attack_unit", "player", attacker.instance_id, [defender.instance_id], {}, return_controller.state.sequence
+	))
+	t.assert_true(returned.accepted, "damage reaction returning attacker accepts the paid combat action")
+	t.assert_eq(_event_types(returned.events).count("damage_dealt"), 1, "returned attacker receives no stale retaliation damage")
+	t.assert_eq(attacker.zone, "hand", "damage reaction returns the attacker")
+	t.assert_eq(return_controller.state.players.player.hand.count(attacker), 1, "returned attacker has one hand copy")
+	t.assert_true(not return_controller.state.players.player.discard.has(attacker), "returned attacker is not discarded from a stale combat reference")
+
+	var death_controller := _controller(554)
+	var death_attacker := _card("terminal-death-attacker", "player", "Unit", 3, 5)
+	var death_defender := _card("terminal-death-defender", "opponent", "Unit", 1, 1)
+	death_defender.abilities = [_ability(
+		"terminal-death", "death", {"selector": "friendly_hq", "count": 1}, [{"type": "damage", "amount": 20}]
+	)]
+	_place_support(death_controller, death_attacker, 0)
+	_place_frontline(death_controller, death_defender, 0)
+	_ready(death_controller, death_attacker)
+	var terminal = death_controller.submit_action(GameAction.create(
+		"attack_unit", "player", death_attacker.instance_id, [death_defender.instance_id], {}, death_controller.state.sequence
+	))
+	t.assert_true(terminal.accepted, "terminal death reaction accepts combat action")
+	var terminal_types := _event_types(terminal.events)
+	var terminal_index := terminal_types.find("match_ended")
+	t.assert_true(terminal_index >= 0, "terminal death reaction finalizes the match")
+	t.assert_true(not terminal_types.slice(terminal_index + 1).has("frontline_changed"), "terminal death stops stale Frontline updates")
+
+	var move_controller := _controller(555)
+	var mover := _card("terminal-move-source", "player")
+	mover.abilities = [_ability(
+		"terminal-move", "move", {"selector": "friendly_hq", "count": 1}, [{"type": "damage", "amount": 20}]
+	)]
+	_place_support(move_controller, mover, 0)
+	_ready(move_controller, mover)
+	var moved = move_controller.submit_action(GameAction.create(
+		"move_unit", "player", mover.instance_id, [], {"zone": "frontline", "slot": 0}, move_controller.state.sequence
+	))
+	t.assert_true(moved.accepted, "terminal move reaction accepts the movement action")
+	t.assert_eq(move_controller.state.frontline_controller_id, "", "terminal move skips Frontline control recalculation")
+	t.assert_true(not _event_types(moved.events).has("frontline_changed"), "terminal move emits no post-match Frontline event")
+
+
+static func _test_terminal_countermeasure_cleanup_is_bound_to_reaction(t) -> void:
+	var controller := _controller(556)
+	var attacker := _card("terminal-counter-attacker", "opponent", "Unit", 3, 5)
+	var defender := _card("terminal-counter-defender", "player", "Unit", 1, 5)
+	var counter := _countermeasure("terminal-counter", "player", 1)
+	counter.abilities = [_ability(
+		"terminal-counter-effect", "attack", {"selector": "friendly_hq", "count": 1}, [{"type": "damage", "amount": 20}], {"enemy": true}
+	)]
+	_place_support(controller, attacker, 0)
+	_place_frontline(controller, defender, 0)
+	_put_hand(controller, counter)
+	counter.countermeasure_active = true
+	counter.face_down = true
+	controller.state.players.player.active_countermeasures.append(counter)
+	controller.state.active_player_id = "opponent"
+	_ready(controller, attacker)
+	var result = controller.submit_action(GameAction.create(
+		"attack_unit", "opponent", attacker.instance_id, [defender.instance_id], {}, controller.state.sequence
+	))
+	t.assert_true(result.accepted, "terminal Countermeasure reaction accepts the paid attack")
+	t.assert_true(not counter.countermeasure_active and not counter.face_down, "terminal Countermeasure is revealed and inactive")
+	t.assert_eq(counter.zone, "discard", "terminal Countermeasure enters discard")
+	t.assert_eq(controller.state.players.player.discard.count(counter), 1, "terminal Countermeasure has one discard copy")
+	var event_types := _event_types(result.events)
+	t.assert_true(event_types.find("countermeasure_triggered") >= 0, "terminal Countermeasure emits its trigger event")
+	t.assert_true(event_types.find("countermeasure_triggered") < event_types.find("match_ended"), "Countermeasure cleanup event precedes terminal match event")
+
+
+static func _test_overlapping_temporary_modifiers_expire_in_reverse_order(t) -> void:
+	var controller := _controller(557)
+	var source := _card("overlap-modifier-source", "player")
+	var target := _card("overlap-modifier-target", "opponent", "Unit", 2, 3)
+	source.abilities = [_ability(
+		"overlap-modifiers", "manual", {"selector": "enemy_unit", "count": 1}, [
+			{"type": "buff", "defense": 4, "duration": "turn"},
+			{"type": "debuff", "defense": 8, "duration": "turn"},
+		]
+	)]
+	_place_support(controller, source, 0)
+	_place_support(controller, target, 0)
+	var applied = controller.submit_action(GameAction.create(
+		"activate_ability", "player", source.instance_id, [target.instance_id], {"ability_id": "overlap-modifiers"}, controller.state.sequence
+	))
+	t.assert_true(applied.accepted, "overlapping temporary modifiers apply")
+	t.assert_eq(target.current_defense, 0, "overlapping modifier sequence clamps defense at zero")
+	controller.submit_action(GameAction.create("end_turn", "player", "", [], {}, controller.state.sequence))
+	t.assert_eq(target.current_defense, 3, "reverse-order expiry restores original defense exactly")
+	t.assert_eq(target.modifiers.size(), 0, "overlapping modifiers expire once")
 
 
 static func _resolve(

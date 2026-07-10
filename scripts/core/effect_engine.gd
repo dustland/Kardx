@@ -561,12 +561,26 @@ func _check_lethal(card: CardInstance) -> void:
 	if card.category == "Unit":
 		_destroy(card)
 	elif card.category == "Headquarters" and state.winner_id.is_empty():
+		var countermeasure_cleanups := _take_pending_countermeasure_cleanups()
 		queue.push_front({"type": "finalize_hq_lethal", "target_id": card.instance_id})
+		_restore_pending_countermeasure_cleanups(countermeasure_cleanups)
 		_enqueue_trigger("hq_lethal", {
 			"source_id": card.instance_id,
 			"actor_id": _resolving_actor_id,
 			"target_ids": [card.instance_id],
 		})
+
+
+func _take_pending_countermeasure_cleanups() -> Array[Dictionary]:
+	var cleanups: Array[Dictionary] = []
+	while not queue.is_empty() and str(queue[0].get("type", "")) == "trigger_countermeasure":
+		cleanups.append(queue.pop_front())
+	return cleanups
+
+
+func _restore_pending_countermeasure_cleanups(cleanups: Array[Dictionary]) -> void:
+	for index in range(cleanups.size() - 1, -1, -1):
+		queue.push_front(cleanups[index])
 
 
 func _queue_damage_checkpoint(target: CardInstance, source_id: String) -> void:

@@ -377,6 +377,8 @@ func _move_unit(action: GameAction) -> ActionResult:
 		"actor_id": player.id,
 		"target_ids": [],
 	}, events)
+	if _is_terminal() or not _is_current_frontline_unit(unit, slot):
+		return _accept(action, events)
 	_update_frontline_control(events, unit, player.id)
 	return _accept(action, events)
 
@@ -561,18 +563,31 @@ func _attack_unit(action: GameAction) -> ActionResult:
 	var ambush := CombatRules.receives_counterattack(attacker) and CombatRules.is_ambush(defender)
 	if ambush:
 		_deal_combat_damage(defender, attacker, defender.current_attack, "ambush", events)
+		if _is_terminal() or not _can_continue_unit_attack(attacker, defender, uses_tank_chain):
+			return _accept(action, events)
 		var attacker_left_frontline := _destroy_if_dead(attacker, events)
+		if _is_terminal():
+			return _accept(action, events)
 		if attacker.current_defense <= 0:
 			_update_frontline_control(events, attacker if attacker_left_frontline else null, action.actor_id)
 			return _accept(action, events)
+		if not _is_current_battlefield_unit(attacker):
+			return _accept(action, events)
 
-	var retaliation_damage := defender.current_attack
 	var resolves_retaliation := not ambush and CombatRules.receives_counterattack(attacker)
 	_deal_combat_damage(attacker, defender, attacker.current_attack, "attack", events)
+	if _is_terminal() or not _can_continue_unit_attack(attacker, defender, uses_tank_chain):
+		return _accept(action, events)
 	if resolves_retaliation:
-		_deal_combat_damage(defender, attacker, retaliation_damage, "counterattack", events)
+		_deal_combat_damage(defender, attacker, defender.current_attack, "counterattack", events)
+		if _is_terminal() or not _can_continue_unit_attack(attacker, defender, uses_tank_chain):
+			return _accept(action, events)
 	var defender_left_frontline := _destroy_if_dead(defender, events)
+	if _is_terminal() or not _is_current_battlefield_unit(attacker):
+		return _accept(action, events)
 	var attacker_left_frontline := _destroy_if_dead(attacker, events)
+	if _is_terminal():
+		return _accept(action, events)
 	var frontline_source: CardInstance = defender if defender_left_frontline else attacker if attacker_left_frontline else null
 	_update_frontline_control(events, frontline_source, action.actor_id)
 	return _accept(action, events)
@@ -899,6 +914,17 @@ func _can_continue_unit_attack(attacker: CardInstance, defender: CardInstance, u
 	return _validate_reserved_attack(attacker, uses_tank_chain, func() -> Dictionary:
 		return CombatRules.validate_unit_attack(state, attacker.instance_id, defender.instance_id)
 	)
+
+func _is_current_battlefield_unit(card: CardInstance) -> bool:
+	return CombatRules.find_card(state, card.instance_id) == card \
+		and card.zone in ["support_line", "frontline"]
+
+func _is_current_frontline_unit(card: CardInstance, slot: int) -> bool:
+	return _is_current_battlefield_unit(card) \
+		and card.zone == "frontline" \
+		and card.slot == slot \
+		and slot >= 0 and slot < state.frontline.size() \
+		and state.frontline[slot] == card
 
 func _can_continue_hq_attack(attacker: CardInstance, defender_player_id: String, uses_tank_chain: bool) -> bool:
 	if CombatRules.find_card(state, attacker.instance_id) != attacker:
