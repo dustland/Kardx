@@ -13,9 +13,17 @@ static func run(t) -> void:
 	t.assert_eq(unit.current_defense, 3, "runtime defense starts at base")
 	var hq := CardInstance.headquarters("us-hq", "player", "p-hq")
 	var player := PlayerState.create("player", "UnitedStates", hq, [unit])
+	var nested_keyword_card := CardInstance.from_definition({
+		"id": "us-engineer", "title": "Engineer Platoon", "category": "Unit",
+		"unit_type": "Infantry", "attack": 1, "defense": 2,
+		"keywords": [{"name": "fortify", "effect": {"defense": 2}}]
+	}, "player", "p-2")
+	player.hand = [nested_keyword_card]
 	var enemy := PlayerState.create("opponent", "SovietUnion", CardInstance.headquarters("su-hq", "opponent", "o-hq"), [])
 	var state := MatchState.create(player, enemy, 1234)
 	var enemy_view := state.snapshot_for("player")
 	t.assert_true(not enemy_view.players.opponent.has("deck_order"), "enemy deck order hidden")
 	enemy_view.players.player.hq_defense = 1
 	t.assert_eq(state.players.player.headquarters.current_defense, 20, "snapshot cannot mutate state")
+	enemy_view.players.player.hand[0].keywords[0].effect.defense = 99
+	t.assert_eq(nested_keyword_card.keywords[0].effect.defense, 2, "nested keyword snapshot cannot mutate state")

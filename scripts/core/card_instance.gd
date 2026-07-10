@@ -75,7 +75,7 @@ func to_public_dict(reveal: bool) -> Dictionary:
 		"attack": current_attack,
 		"defense": current_defense,
 		"operation_cost": operation_cost,
-		"keywords": keywords.duplicate(),
+		"keywords": keywords.duplicate(true),
 		"statuses": statuses.duplicate(true),
 		"zone": zone,
 		"slot": slot,
