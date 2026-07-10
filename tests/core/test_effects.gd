@@ -32,6 +32,9 @@ static func run(t) -> void:
 	_test_random_target_context_is_sampled_once(t)
 	_test_hq_lethal_is_a_prevention_checkpoint(t)
 	_test_hq_terminal_stops_trailing_effects(t)
+	_test_controller_trigger_checkpoints(t)
+	_test_cancelled_attacks_pay_before_countermeasures(t)
+	_test_temporary_modifiers_expire_through_turn_lifecycle(t)
 
 
 static func _test_stat_and_status_effects(t) -> void:
@@ -847,6 +850,143 @@ static func _test_hq_terminal_stops_trailing_effects(t) -> void:
 	t.assert_eq(event_types, ["credit_spent", "order_played", "damage_dealt", "match_ended", "card_discarded"], "terminal finalization precedes only Order cleanup")
 
 
+static func _test_controller_trigger_checkpoints(t) -> void:
+	var move_controller := _controller(540)
+	var mover := _card("checkpoint-mover", "player")
+	mover.abilities = [_ability("move-credit", "move", {"selector": "none"}, [{"type": "credit", "amount": 1, "player": "owner"}])]
+	_place_support(move_controller, mover, 0)
+	_ready(move_controller, mover)
+	var move_result = move_controller.submit_action(GameAction.create(
+		"move_unit", "player", mover.instance_id, [], {"zone": "frontline", "slot": 0}, move_controller.state.sequence
+	))
+	t.assert_true(move_result.accepted, "move checkpoint action resolves")
+	t.assert_true(_event_types(move_result.events).has("credit_changed"), "move trigger resolves after controller movement")
+
+	var draw_controller := _controller(541)
+	var drawn := _card("checkpoint-drawn", "player")
+	drawn.abilities = [_ability("draw-credit", "draw", {"selector": "none"}, [{"type": "credit", "amount": 1, "player": "owner"}])]
+	_put_deck(draw_controller, drawn)
+	var draw_events := draw_controller.debug_draw("player")
+	t.assert_true(_event_types(draw_events).has("credit_changed"), "draw checkpoint resolves for the drawn card")
+
+	var discard_controller := _controller(542)
+	var discard_order := _card("checkpoint-discard-order", "player", "Order", 0, 0, 1)
+	discard_order.abilities = [_ability("discard-credit", "discard", {"selector": "none"}, [{"type": "credit", "amount": 1, "player": "owner"}])]
+	_put_hand(discard_controller, discard_order)
+	var discard_result = discard_controller.submit_action(GameAction.create(
+		"play_order", "player", discard_order.instance_id, [], {}, discard_controller.state.sequence
+	))
+	t.assert_true(discard_result.accepted, "order discard checkpoint action resolves")
+	t.assert_true(_event_types(discard_result.events).has("credit_changed"), "discard trigger resolves after the order enters discard")
+
+	var combat_controller := _controller(543)
+	var attacker := _card("checkpoint-attacker", "player", "Unit", 2, 5)
+	var defender := _card("checkpoint-defender", "opponent", "Unit", 1, 5)
+	defender.abilities = [
+		_ability("defend-credit", "defend", {"selector": "none"}, [{"type": "credit", "amount": 1, "player": "owner"}]),
+		_ability("damage-credit", "damage", {"selector": "none"}, [{"type": "credit", "amount": 2, "player": "owner"}]),
+	]
+	_place_support(combat_controller, attacker, 0)
+	_place_frontline(combat_controller, defender, 0)
+	_ready(combat_controller, attacker)
+	var combat_result = combat_controller.submit_action(GameAction.create(
+		"attack_unit", "player", attacker.instance_id, [defender.instance_id], {}, combat_controller.state.sequence
+	))
+	t.assert_true(combat_result.accepted, "combat checkpoints action resolves")
+	t.assert_eq(combat_controller.state.players.opponent.credit, 13, "defend and damage triggers both resolve exactly once")
+
+	var frontline_controller := _controller(544)
+	var frontline_unit := _card("checkpoint-frontline-unit", "player", "Unit", 1, 1)
+	frontline_unit.abilities = [
+		_ability("frontline-gain-credit", "frontline_gained", {"selector": "none"}, [{"type": "credit", "amount": 1, "player": "owner"}]),
+		_ability("frontline-loss-credit", "frontline_lost", {"selector": "none"}, [{"type": "credit", "amount": 2, "player": "owner"}]),
+	]
+	var enemy := _card("checkpoint-frontline-enemy", "opponent", "Unit", 2, 5)
+	_place_support(frontline_controller, frontline_unit, 0)
+	_ready(frontline_controller, frontline_unit)
+	var gained_result = frontline_controller.submit_action(GameAction.create(
+		"move_unit", "player", frontline_unit.instance_id, [], {"zone": "frontline", "slot": 0}, frontline_controller.state.sequence
+	))
+	t.assert_true(gained_result.accepted, "Frontline gain action resolves")
+	t.assert_eq(frontline_controller.state.players.player.credit, 11, "Frontline gained trigger resolves once after operation payment")
+	frontline_controller.submit_action(GameAction.create("end_turn", "player", "", [], {}, frontline_controller.state.sequence))
+	_place_support(frontline_controller, enemy, 0)
+	_ready(frontline_controller, enemy)
+	var lost_result = frontline_controller.submit_action(GameAction.create(
+		"attack_unit", "opponent", enemy.instance_id, [frontline_unit.instance_id], {}, frontline_controller.state.sequence
+	))
+	t.assert_true(lost_result.accepted, "Frontline loss combat action resolves")
+	t.assert_eq(frontline_controller.state.players.player.credit, 13, "Frontline lost trigger resolves once when combat removes control")
+
+
+static func _test_cancelled_attacks_pay_before_countermeasures(t) -> void:
+	for target_type in ["unit", "headquarters"]:
+		var controller := _controller(545 if target_type == "unit" else 546)
+		var attacker := _card("cancelled-%s-attacker" % target_type, "opponent", "Unit", 3, 5)
+		attacker.operation_cost = 2
+		var target = controller.state.players.player.headquarters
+		if target_type == "unit":
+			target = _card("cancelled-unit-defender", "player", "Unit", 1, 5)
+			_place_frontline(controller, target, 0)
+			_place_support(controller, attacker, 0)
+		else:
+			_place_frontline(controller, attacker, 0)
+		var counter := _countermeasure("cancelled-%s-counter" % target_type, "player", 1)
+		counter.abilities = [
+			_ability("cancel-attack", "attack", {"selector": "none"}, [{"type": "replace_event", "changes": {"cancelled": true}}], {"enemy": true}),
+			_ability("counter-triggered-credit", "countermeasure_triggered", {"selector": "none"}, [{"type": "credit", "amount": 1, "player": "owner"}]),
+		]
+		_put_hand(controller, counter)
+		counter.countermeasure_active = true
+		counter.face_down = true
+		controller.state.players.player.active_countermeasures.append(counter)
+		controller.state.active_player_id = "opponent"
+		_ready(controller, attacker)
+		var before_credit: int = controller.state.players.opponent.credit
+		var action := GameAction.create(
+			"attack_unit" if target_type == "unit" else "attack_hq",
+			"opponent",
+			attacker.instance_id,
+			[target.instance_id],
+			{},
+			controller.state.sequence
+		)
+		var result = controller.submit_action(action)
+		t.assert_true(result.accepted, "%s attack Countermeasure cancellation resolves" % target_type)
+		t.assert_eq(controller.state.players.opponent.credit, before_credit - attacker.operation_cost, "%s attack still pays before cancellation" % target_type)
+		t.assert_eq(attacker.operations_used, 1, "%s attack reserves its operation before cancellation" % target_type)
+		t.assert_eq(_event_types(result.events).slice(0, 2), ["credit_spent", "attack_started"], "%s attack exposes payment before reaction" % target_type)
+		t.assert_true(_event_types(result.events).has("countermeasure_triggered"), "%s attack reveals the triggered Countermeasure" % target_type)
+		t.assert_eq(controller.state.players.player.credit, 11, "%s Countermeasure triggered checkpoint resolves once" % target_type)
+
+
+static func _test_temporary_modifiers_expire_through_turn_lifecycle(t) -> void:
+	var controller := _controller(547)
+	var source := _card("temporary-modifier-source", "player")
+	var target := _card("temporary-modifier-target", "opponent", "Unit", 2, 3)
+	source.abilities = [_ability(
+		"temporary-debuff",
+		"manual",
+		{"selector": "enemy_unit", "count": 1},
+		[{"type": "debuff", "attack": 1, "defense": 2, "duration": "turn"}]
+	)]
+	_place_support(controller, source, 0)
+	_place_support(controller, target, 0)
+	var applied = controller.submit_action(GameAction.create(
+		"activate_ability", "player", source.instance_id, [target.instance_id], {"ability_id": "temporary-debuff"}, controller.state.sequence
+	))
+	t.assert_true(applied.accepted, "temporary modifier action resolves")
+	t.assert_eq([target.current_attack, target.current_defense], [1, 1], "temporary debuff applies its stat deltas")
+	t.assert_eq(target.modifiers.size(), 1, "temporary debuff records expiry metadata")
+	var expired = controller.submit_action(GameAction.create("end_turn", "player", "", [], {}, controller.state.sequence))
+	t.assert_true(expired.accepted, "turn end expires temporary modifier")
+	t.assert_eq([target.current_attack, target.current_defense], [2, 3], "temporary modifier reverses both stats")
+	t.assert_eq(target.modifiers.size(), 0, "temporary modifier is removed after expiry")
+	t.assert_true(_event_types(expired.events).has("modifier_expired"), "expiry emits a deterministic lifecycle event")
+	controller.submit_action(GameAction.create("end_turn", "opponent", "", [], {}, controller.state.sequence))
+	t.assert_eq([target.current_attack, target.current_defense], [2, 3], "expired modifier cannot reverse stats twice")
+
+
 static func _resolve(
 	engine,
 	source,
@@ -1021,6 +1161,11 @@ static func _put_deck(controller: MatchController, card) -> void:
 	controller.state.players[card.owner_id].deck.append(card)
 	card.zone = "deck"
 	card.slot = -1
+
+
+static func _ready(controller: MatchController, card) -> void:
+	card.deployed_turn = controller.state.turn - 1
+	card.operations_used = 0
 
 
 static func _remove_card(controller: MatchController, card) -> void:

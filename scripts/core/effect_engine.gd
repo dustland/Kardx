@@ -143,7 +143,11 @@ func _prepare_trigger(trigger: String, context: Dictionary, resolve_random: bool
 			if source.category == "Countermeasure" and source.countermeasure_active and not effects.is_empty():
 				counter_triggered = true
 		if counter_triggered:
-			queued.append({"type": "trigger_countermeasure", "source_id": source.instance_id})
+			queued.append({
+				"type": "trigger_countermeasure",
+				"source_id": source.instance_id,
+				"actor_id": str(context.get("actor_id", source.owner_id)),
+			})
 	var reservation := _validate_retreat_reservations(queued)
 	if not reservation.valid:
 		return reservation
@@ -212,7 +216,7 @@ func _validate_effect(effect: Dictionary, applying: bool = false) -> Dictionary:
 		return {"valid": false, "code": "invalid_target"}
 	if selector != "random_enemy_unit" and not [
 		"credit", "credit_slots", "draw", "create", "replace_event",
-		"trigger_countermeasure", "frontline_changed", "match_ended", "finalize_hq_lethal",
+		"trigger_countermeasure", "frontline_changed", "match_ended", "finalize_hq_lethal", "check_lethal",
 	].has(effect_type) and target_ids.is_empty():
 		return {"valid": false, "code": "missing_target"}
 	var seen := {}
@@ -243,7 +247,12 @@ func _validate_effect(effect: Dictionary, applying: bool = false) -> Dictionary:
 func _apply_effect(effect: Dictionary) -> Dictionary:
 	var effect_type := str(effect.get("type", ""))
 	if effect_type == "trigger_countermeasure":
-		return _trigger_countermeasure(_find_card(str(effect.source_id)))
+		return _trigger_countermeasure(_find_card(str(effect.source_id)), str(effect.get("actor_id", "")))
+	if effect_type == "check_lethal":
+		var lethal_target := _find_card(str(effect.get("target_id", "")))
+		if lethal_target != null:
+			_check_lethal(lethal_target)
+		return {}
 	if effect_type == "frontline_changed":
 		return _event("frontline_changed", {
 			"previous_controller_id": str(effect.get("previous_controller_id", "")),
@@ -272,7 +281,7 @@ func _apply_effect(effect: Dictionary) -> Dictionary:
 		"damage":
 			for target in targets:
 				target.current_defense = maxi(0, target.current_defense - int(effect.get("amount", 0)))
-				_check_lethal(target)
+				_queue_damage_checkpoint(target, source.instance_id)
 			return _event("damage_dealt", {"source_id": source.instance_id, "target_id": _first_id(targets), "damage": int(effect.get("amount", 0))})
 		"repair":
 			for target in targets:
@@ -281,11 +290,19 @@ func _apply_effect(effect: Dictionary) -> Dictionary:
 		"buff", "debuff":
 			var sign := 1 if effect_type == "buff" else -1
 			for target in targets:
-				target.current_attack += sign * int(effect.get("attack", 0))
-				target.current_defense = maxi(0, target.current_defense + sign * int(effect.get("defense", 0)))
+				var attack_delta := sign * int(effect.get("attack", 0))
+				var defense_delta := sign * int(effect.get("defense", 0))
+				target.current_attack += attack_delta
+				target.current_defense = maxi(0, target.current_defense + defense_delta)
 				_check_lethal(target)
-				if effect_type == "buff" and not str(effect.get("duration", "")).is_empty():
-					target.modifiers.append(effect.duplicate(true))
+				if not str(effect.get("duration", "")).is_empty():
+					target.add_temporary_modifier(
+						attack_delta,
+						defense_delta,
+						effect.get("duration", ""),
+						str(effect.get("actor_id", source.owner_id)),
+						source.instance_id
+					)
 			return _event("stats_changed", {"source_id": source.instance_id, "target_id": _first_id(targets)})
 		"status":
 			for target in targets:
@@ -298,11 +315,11 @@ func _apply_effect(effect: Dictionary) -> Dictionary:
 		"draw":
 			var draw_player: Variant = _effect_player(effect, source)
 			for count in range(int(effect.get("count", 1))):
-				_draw(draw_player)
+				_draw(draw_player, source.instance_id)
 			return _event("card_drawn", {"player_id": draw_player.id})
 		"discard":
 			for target in targets:
-				_move_to_discard(target)
+				_move_to_discard(target, str(effect.get("actor_id", source.owner_id)))
 			return _event("card_discarded", {"target_id": _first_id(targets)})
 		"create":
 			var create_player: Variant = _effect_player(effect, source)
@@ -343,7 +360,7 @@ func _apply_effect(effect: Dictionary) -> Dictionary:
 	return _event("effect_resolved", {"source_id": source.instance_id, "effect_type": effect_type})
 
 
-func _trigger_countermeasure(counter: CardInstance) -> Dictionary:
+func _trigger_countermeasure(counter: CardInstance, actor_id: String) -> Dictionary:
 	var owner = _player_for(counter.owner_id, true)
 	owner.active_countermeasures.erase(counter)
 	owner.hand.erase(counter)
@@ -352,22 +369,29 @@ func _trigger_countermeasure(counter: CardInstance) -> Dictionary:
 	counter.zone = "discard"
 	counter.slot = -1
 	owner.discard.append(counter)
+	_enqueue_trigger("countermeasure_triggered", {
+		"source_id": counter.instance_id,
+		"actor_id": actor_id,
+		"target_ids": [],
+	})
 	return _event("countermeasure_triggered", {"player_id": owner.id, "instance_id": counter.instance_id})
 
 
-func _draw(player) -> void:
+func _draw(player, source_id: String) -> void:
 	if player.deck.is_empty():
 		player.headquarters.current_defense = maxi(0, player.headquarters.current_defense - player.fatigue)
 		player.fatigue += 1
-		_check_lethal(player.headquarters)
+		_queue_damage_checkpoint(player.headquarters, source_id)
 		return
 	var card: CardInstance = player.deck.pop_back()
 	if player.hand.size() >= GameConstants.MAX_HAND_SIZE:
 		card.zone = "discard"
 		player.discard.append(card)
+		_enqueue_trigger("discard", {"source_id": card.instance_id, "actor_id": _resolving_actor_id, "target_ids": []})
 		return
 	card.zone = "hand"
 	player.hand.append(card)
+	_enqueue_trigger("draw", {"source_id": card.instance_id, "actor_id": _resolving_actor_id, "target_ids": []})
 
 
 func _destroy(card: CardInstance) -> void:
@@ -397,11 +421,12 @@ func _retreat(card: CardInstance) -> void:
 	_queue_frontline_recalculation(card)
 
 
-func _move_to_discard(card: CardInstance) -> void:
+func _move_to_discard(card: CardInstance, actor_id: String) -> void:
 	_remove_from_zone(card)
 	card.zone = "discard"
 	card.slot = -1
 	_player_for(card.owner_id, true).discard.append(card)
+	_enqueue_trigger("discard", {"source_id": card.instance_id, "actor_id": actor_id, "target_ids": []})
 
 
 func _move_to_destination(card: CardInstance, player, destination: String) -> void:
@@ -540,6 +565,15 @@ func _check_lethal(card: CardInstance) -> void:
 			"actor_id": _resolving_actor_id,
 			"target_ids": [card.instance_id],
 		})
+
+
+func _queue_damage_checkpoint(target: CardInstance, source_id: String) -> void:
+	queue.push_front({"type": "check_lethal", "target_id": target.instance_id})
+	_enqueue_trigger("damage", {
+		"source_id": target.instance_id,
+		"actor_id": _resolving_actor_id,
+		"target_ids": [source_id],
+	})
 
 
 func _enqueue_trigger(trigger: String, context: Dictionary) -> void:

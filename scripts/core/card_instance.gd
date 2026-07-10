@@ -84,9 +84,38 @@ func has_keyword_or_status(keyword_name: String) -> bool:
 			return true
 	return bool(statuses.get(keyword_name, false))
 
+func add_temporary_modifier(
+	attack_delta: int,
+	defense_delta: int,
+	duration: Variant,
+	expires_on_turn_end_player_id: String,
+	source_id: String
+) -> void:
+	modifiers.append({
+		"attack_delta": attack_delta,
+		"defense_delta": defense_delta,
+		"duration": duration,
+		"expires_on_turn_end_player_id": expires_on_turn_end_player_id,
+		"source_id": source_id,
+	})
+
+func expire_temporary_modifiers(turn_player_id: String) -> Array[Dictionary]:
+	var remaining: Array = []
+	var expired: Array[Dictionary] = []
+	for modifier_value in modifiers:
+		var modifier: Dictionary = modifier_value
+		if str(modifier.get("expires_on_turn_end_player_id", "")) != turn_player_id:
+			remaining.append(modifier)
+			continue
+		current_attack -= int(modifier.get("attack_delta", 0))
+		current_defense = maxi(0, current_defense - int(modifier.get("defense_delta", 0)))
+		expired.append(modifier)
+	modifiers = remaining
+	return expired
+
 func to_public_dict(reveal: bool) -> Dictionary:
 	if not reveal:
-		return {"instance_id": instance_id, "hidden": true, "zone": zone}
+		return {"hidden": true, "zone": zone}
 	return {
 		"instance_id": instance_id,
 		"definition_id": definition_id,

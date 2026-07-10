@@ -277,7 +277,7 @@ func _end_turn(action: GameAction) -> ActionResult:
 	_resolve_trigger("turn_end", {"player_id": player.id}, events)
 	if _is_terminal():
 		return _accept(action, events)
-	_expire_temporary_modifiers(player)
+	_expire_temporary_modifiers(player, events)
 	if _is_terminal():
 		return _accept(action, events)
 	next_player.deactivate_countermeasures()
@@ -372,13 +372,12 @@ func _move_unit(action: GameAction) -> ActionResult:
 		"to_zone": "frontline",
 		"to_slot": slot,
 	})
-	if state.frontline_controller_id != player.id:
-		var previous_controller := state.frontline_controller_id
-		state.frontline_controller_id = player.id
-		_emit(events, "frontline_changed", {
-			"previous_controller_id": previous_controller,
-			"controller_id": player.id,
-		})
+	_resolve_trigger("move", {
+		"source_id": unit.instance_id,
+		"actor_id": player.id,
+		"target_ids": [],
+	}, events)
+	_update_frontline_control(events, unit, player.id)
 	return _accept(action, events)
 
 func _play_order(action: GameAction) -> ActionResult:
@@ -434,6 +433,7 @@ func _play_order(action: GameAction) -> ActionResult:
 	order.slot = -1
 	player.discard.append(order)
 	_emit(events, "card_discarded", {"player_id": player.id, "instance_id": order.instance_id})
+	_resolve_trigger("discard", {"source_id": order.instance_id, "actor_id": player.id, "target_ids": []}, events)
 	return _accept(action, events)
 
 
@@ -536,23 +536,31 @@ func _attack_unit(action: GameAction) -> ActionResult:
 		return _reject_rule(action, reaction_validation)
 
 	var events: Array = []
-	_resolve_trigger("attack", reaction_context, events)
-	if not _effect_engine.last_resolution.valid:
-		return _reject_rule(action, _effect_engine.last_resolution)
-	if bool(pending_event.get("cancelled", false)):
-		return _accept(action, events)
 	_reserve_attack_operation(attacker, events)
 	_emit(events, "attack_started", {
 		"attacker_id": attacker.instance_id,
 		"defender_id": defender.instance_id,
 		"target_type": "unit",
 	})
+	_resolve_trigger("attack", reaction_context, events)
+	if not _effect_engine.last_resolution.valid:
+		return _reject_rule(action, _effect_engine.last_resolution)
+	if bool(pending_event.get("cancelled", false)):
+		return _accept(action, events)
+	_resolve_trigger("defend", {
+		"source_id": defender.instance_id,
+		"actor_id": action.actor_id,
+		"target_ids": [attacker.instance_id],
+		"event": pending_event,
+	}, events)
+	if not _effect_engine.last_resolution.valid:
+		return _reject_rule(action, _effect_engine.last_resolution)
 	var ambush := CombatRules.receives_counterattack(attacker) and CombatRules.is_ambush(defender)
 	if ambush:
 		_deal_combat_damage(defender, attacker, defender.current_attack, "ambush", events)
-		_destroy_if_dead(attacker, events)
+		var attacker_left_frontline := _destroy_if_dead(attacker, events)
 		if attacker.current_defense <= 0:
-			_update_frontline_control(events)
+			_update_frontline_control(events, attacker if attacker_left_frontline else null, action.actor_id)
 			return _accept(action, events)
 
 	var retaliation_damage := defender.current_attack
@@ -560,9 +568,10 @@ func _attack_unit(action: GameAction) -> ActionResult:
 	_deal_combat_damage(attacker, defender, attacker.current_attack, "attack", events)
 	if resolves_retaliation:
 		_deal_combat_damage(defender, attacker, retaliation_damage, "counterattack", events)
-	_destroy_if_dead(defender, events)
-	_destroy_if_dead(attacker, events)
-	_update_frontline_control(events)
+	var defender_left_frontline := _destroy_if_dead(defender, events)
+	var attacker_left_frontline := _destroy_if_dead(attacker, events)
+	var frontline_source: CardInstance = defender if defender_left_frontline else attacker if attacker_left_frontline else null
+	_update_frontline_control(events, frontline_source, action.actor_id)
 	return _accept(action, events)
 
 func _attack_hq(action: GameAction) -> ActionResult:
@@ -619,6 +628,14 @@ func _attack_hq(action: GameAction) -> ActionResult:
 		return _reject_rule(action, _effect_engine.last_resolution)
 	if bool(pending_event.get("cancelled", false)):
 		return _accept(action, events)
+	_resolve_trigger("defend", {
+		"source_id": defender.headquarters.instance_id,
+		"actor_id": action.actor_id,
+		"target_ids": [attacker.instance_id],
+		"event": pending_event,
+	}, events)
+	if not _effect_engine.last_resolution.valid:
+		return _reject_rule(action, _effect_engine.last_resolution)
 	_deal_combat_damage(attacker, defender.headquarters, attacker.current_attack, "attack", events)
 	if defender.headquarters.current_defense <= 0:
 		_resolve_trigger("hq_lethal", {
@@ -657,10 +674,12 @@ func _draw_card(player: PlayerState, events: Array) -> void:
 		card.zone = "discard"
 		player.discard.append(card)
 		_emit(events, "card_overdrawn", {"player_id": player.id, "instance_id": card.instance_id})
+		_resolve_trigger("discard", {"source_id": card.instance_id, "actor_id": player.id, "target_ids": []}, events)
 		return
 	card.zone = "hand"
 	player.hand.append(card)
 	_emit(events, "card_drawn", {"player_id": player.id, "instance_id": card.instance_id})
+	_resolve_trigger("draw", {"source_id": card.instance_id, "actor_id": player.id, "target_ids": []}, events)
 
 func _start_turn(player: PlayerState, events: Array) -> void:
 	if _is_terminal():
@@ -754,10 +773,16 @@ func _deal_combat_damage(
 		"damage_type": damage_type,
 		"remaining_defense": target.current_defense,
 	})
+	_resolve_trigger("damage", {
+		"source_id": target.instance_id,
+		"actor_id": source.owner_id,
+		"target_ids": [source.instance_id],
+	}, events)
 
-func _destroy_if_dead(card: CardInstance, events: Array) -> void:
+func _destroy_if_dead(card: CardInstance, events: Array) -> bool:
 	if card.current_defense > 0 or card.zone == "discard" or card.category != "Unit":
-		return
+		return false
+	var left_frontline := card.zone == "frontline"
 	var player: PlayerState = state.players[card.owner_id]
 	if card.zone == "support_line":
 		if card.slot >= 0 and card.slot < player.support_line.size() and player.support_line[card.slot] == card:
@@ -774,8 +799,9 @@ func _destroy_if_dead(card: CardInstance, events: Array) -> void:
 		"instance_id": card.instance_id,
 	})
 	_resolve_trigger("death", {"source_id": card.instance_id, "actor_id": card.owner_id, "target_ids": []}, events)
+	return left_frontline
 
-func _update_frontline_control(events: Array) -> void:
+func _update_frontline_control(events: Array, source: CardInstance = null, actor_id: String = "") -> void:
 	var controller_id := ""
 	for card in state.frontline:
 		if card != null:
@@ -789,6 +815,20 @@ func _update_frontline_control(events: Array) -> void:
 		"previous_controller_id": previous_controller,
 		"controller_id": controller_id,
 	})
+	if source == null:
+		return
+	if not previous_controller.is_empty():
+		_resolve_trigger("frontline_lost", {
+			"source_id": source.instance_id,
+			"actor_id": actor_id,
+			"target_ids": [source.instance_id],
+		}, events)
+	if not controller_id.is_empty():
+		_resolve_trigger("frontline_gained", {
+			"source_id": source.instance_id,
+			"actor_id": actor_id,
+			"target_ids": [source.instance_id],
+		}, events)
 
 func _occupied_count(cards: Array) -> int:
 	var count := 0
@@ -809,11 +849,44 @@ func _resolve_trigger(trigger: String, context: Dictionary, events: Array) -> vo
 	if _effect_engine != null:
 		events.append_array(_effect_engine.resolve_trigger(trigger, context))
 
-func _expire_temporary_modifiers(player: PlayerState) -> void:
+func _expire_temporary_modifiers(player: PlayerState, events: Array = []) -> void:
 	if _is_terminal():
 		return
 	if _debug_modifier_expiry_hook.is_valid():
 		_debug_modifier_expiry_hook.call(player.id)
+	if _is_terminal():
+		return
+	var frontline_source: CardInstance = null
+	for card in _all_cards():
+		for modifier in card.expire_temporary_modifiers(player.id):
+			_emit(events, "modifier_expired", {
+				"instance_id": card.instance_id,
+				"source_id": str(modifier.get("source_id", "")),
+			})
+		var left_frontline := _destroy_if_dead(card, events)
+		if left_frontline:
+			frontline_source = card
+		if card.category == "Headquarters":
+			_check_headquarters_death(state.players[card.owner_id])
+		if _is_terminal():
+			_emit(events, "match_ended", {"winner_id": state.winner_id, "loser_id": card.owner_id})
+			return
+	_update_frontline_control(events, frontline_source, player.id)
+
+func _all_cards() -> Array[CardInstance]:
+	var cards: Array[CardInstance] = []
+	var seen := {}
+	for player_id in state.players:
+		var player: PlayerState = state.players[player_id]
+		if not seen.has(player.headquarters):
+			seen[player.headquarters] = true
+			cards.append(player.headquarters)
+		for collection in [player.deck, player.hand, player.support_line, player.discard, state.frontline]:
+			for card in collection:
+				if card != null and not seen.has(card):
+					seen[card] = true
+					cards.append(card)
+	return cards
 
 func _check_headquarters_death(player: PlayerState) -> void:
 	if player.headquarters.current_defense > 0 or _is_terminal():
