@@ -136,10 +136,7 @@ func _replay_invalid_terminal(controller):
 		return controller
 	if controller.state.sequence != terminal_result.pre_abort_sequence \
 		or controller.state_hash() != terminal_result.pre_abort_state_hash:
-		controller._abort_invalid("replay_invalid_terminal_sequence_diverged", {
-			"expected_sequence": terminal_result.pre_abort_sequence,
-			"actual_sequence": controller.state.sequence,
-		})
+		controller._abort_invalid("replay_invalid", {"reason": "invalid_terminal_metadata"})
 		return controller
 	var diagnostic: Dictionary = terminal_result.diagnostic
 	if terminal_result.result_sequence != terminal_result.pre_abort_sequence + 1 \

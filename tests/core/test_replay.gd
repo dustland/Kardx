@@ -12,6 +12,7 @@ static func run(t) -> void:
 	_test_invalid_terminal_record_replays_deterministically(t)
 	_test_injected_zone_invalid_replays_authoritative_state(t)
 	_test_tampered_invalid_terminal_metadata_aborts(t)
+	_test_invalid_snapshot_identity_and_reference_tampering_aborts(t)
 	_test_replay_schema_rejects_untrusted_logs(t)
 	_test_replay_aborts_on_tampered_sequence(t)
 	_test_replay_aborts_on_tampered_action(t)
@@ -105,10 +106,40 @@ static func _test_tampered_invalid_terminal_metadata_aborts(t) -> void:
 	bad_hash.terminal_result.state_hash = "tampered"
 	var bad_details: Dictionary = source.duplicate(true)
 	bad_details.terminal_result.diagnostic.details = {"source": "tampered"}
-	for tampered in [bad_result_sequence, bad_hash, bad_details]:
+	var bad_pre_sequence: Dictionary = source.duplicate(true)
+	bad_pre_sequence.terminal_result.pre_abort_sequence += 1
+	var bad_pre_hash: Dictionary = source.duplicate(true)
+	bad_pre_hash.terminal_result.pre_abort_state_hash = "tampered"
+	var bad_code: Dictionary = source.duplicate(true)
+	bad_code.terminal_result.diagnostic.code = "tampered"
+	var changed_snapshot: Dictionary = source.duplicate(true)
+	changed_snapshot.terminal_result.state_snapshot.players.player.credit += 1
+	for tampered in [bad_result_sequence, bad_hash, bad_details, bad_pre_sequence, bad_pre_hash, bad_code, changed_snapshot]:
 		var replayed = ReplayLog.from_dict(tampered).replay(fixture.definitions)
 		t.assert_eq(replayed.invalid_diagnostics.code, "replay_invalid", "tampered invalid metadata has stable diagnostic")
 		t.assert_eq(_event_type_count(replayed.event_history, "match_invalid"), 1, "tampered invalid metadata emits one terminal event")
+
+
+static func _test_invalid_snapshot_identity_and_reference_tampering_aborts(t) -> void:
+	var fixture := CoreCards.build_valid_fixture()
+	var controller := MatchController.create(fixture.definitions, fixture.player_deck, fixture.enemy_deck, 90233)
+	controller._abort_invalid("forced_invalid", {"source": "test"})
+	var source: Dictionary = controller.replay_log.to_dict()
+	var card_id: String = str(source.terminal_result.state_snapshot.cards.keys()[0])
+	var mismatched_key: Dictionary = source.duplicate(true)
+	mismatched_key.terminal_result.state_snapshot.cards[card_id].instance_id = "mismatched-id"
+	var duplicate_identity: Dictionary = source.duplicate(true)
+	duplicate_identity.terminal_result.state_snapshot.cards["duplicate-id"] = duplicate_identity.terminal_result.state_snapshot.cards[card_id].duplicate(true)
+	var unknown_definition: Dictionary = source.duplicate(true)
+	unknown_definition.terminal_result.state_snapshot.cards[card_id].definition_id = "unknown-definition"
+	var stale_zone_reference: Dictionary = source.duplicate(true)
+	stale_zone_reference.terminal_result.state_snapshot.players.player.deck[0] = "missing-card"
+	var foreign_zone_reference: Dictionary = source.duplicate(true)
+	foreign_zone_reference.terminal_result.state_snapshot.players.player.deck[0] = foreign_zone_reference.terminal_result.state_snapshot.players.opponent.headquarters
+	for tampered in [mismatched_key, duplicate_identity, unknown_definition, stale_zone_reference, foreign_zone_reference]:
+		var replayed = ReplayLog.from_dict(tampered).replay(fixture.definitions)
+		t.assert_eq(replayed.invalid_diagnostics.code, "replay_invalid", "invalid snapshot tampering has stable diagnostic")
+		t.assert_eq(_event_type_count(replayed.event_history, "match_invalid"), 1, "invalid snapshot tampering emits one terminal event")
 
 
 static func _event_type_count(events: Array, event_type: String) -> int:
