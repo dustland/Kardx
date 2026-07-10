@@ -12,10 +12,12 @@ static func run(t) -> void:
 	_test_move_frontline_control_and_capacity(t)
 	_test_type_target_matrix(t)
 	_test_guard_and_smokescreen(t)
+	_test_smokescreen_reveals_after_accepted_operations(t)
 	_test_blitz_fury_and_pinned(t)
 	_test_tank_advance_chain(t)
 	_test_damage_counterattack_and_destruction(t)
 	_test_ambush_first_strike(t)
+	_test_headquarters_guard_and_locked_target(t)
 	_test_headquarters_victory(t)
 	_test_rejections_are_atomic(t)
 
@@ -171,6 +173,21 @@ static func _test_guard_and_smokescreen(t) -> void:
 			"%s ignores Guard" % unit_type
 		)
 
+	var support_controller := _controller(433)
+	var support_attacker := _card("support-guard-attacker", "player", "Infantry")
+	var support_guard := _card("support-guard", "opponent", "Infantry", 1, 4, 0, 0, ["Guard"])
+	var support_protected := _card("support-protected", "opponent")
+	var support_unprotected := _card("support-unprotected", "opponent")
+	_place_frontline(support_controller, support_attacker, 0)
+	_place_support(support_controller, support_guard, 1)
+	_place_support(support_controller, support_protected, 2)
+	_place_support(support_controller, support_unprotected, 3)
+	_ready(support_controller, support_attacker)
+	var support_targets := CombatRules.legal_targets(support_controller.state, support_attacker.instance_id)
+	t.assert_true(support_targets.has(support_guard.instance_id), "Support Line Guard can be targeted directly")
+	t.assert_true(not support_targets.has(support_protected.instance_id), "Support Line Guard protects its adjacent unit")
+	t.assert_true(support_targets.has(support_unprotected.instance_id), "Support Line Guard does not protect non-adjacent units")
+
 	for unit_type in ["Infantry", "Tank", "Artillery", "Fighter", "Bomber"]:
 		var smoke_controller := _controller(432)
 		var attacker := _card("smoke-attacker-%s" % unit_type, "player", unit_type)
@@ -182,12 +199,28 @@ static func _test_guard_and_smokescreen(t) -> void:
 			not CombatRules.legal_targets(smoke_controller.state, attacker.instance_id).has(smoke.instance_id),
 			"Smokescreen blocks %s before operating" % unit_type
 		)
-		smoke.smokescreen_revealed = true
-		smoke.reset_operation_state()
-		t.assert_true(
-			CombatRules.legal_targets(smoke_controller.state, attacker.instance_id).has(smoke.instance_id),
-			"Smokescreen remains lost after later operation reset for %s" % unit_type
-		)
+
+
+static func _test_smokescreen_reveals_after_accepted_operations(t) -> void:
+	var move_controller := _controller(434)
+	var moving_smoke := _card("moving-smoke", "player", "Infantry", 2, 4, 0, 1, ["Smokescreen"])
+	_place_support(move_controller, moving_smoke, 0)
+	_ready(move_controller, moving_smoke)
+	var move = move_controller.submit_action(GameAction.create(
+		"move_unit", "player", moving_smoke.instance_id, [], {"zone": "frontline", "slot": 0}, move_controller.state.sequence
+	))
+	t.assert_true(move.accepted, "Smokescreen unit can move to the Frontline")
+	t.assert_true(move.snapshot.frontline[0].smokescreen_revealed, "accepted move reveals Smokescreen in its snapshot")
+
+	var attack_controller := _controller(435)
+	var attacking_smoke := _card("attacking-smoke", "player", "Artillery", 2, 4, 0, 1, ["Smokescreen"])
+	var target := _card("smokescreen-attack-target", "opponent")
+	_place_support(attack_controller, attacking_smoke, 0)
+	_place_support(attack_controller, target, 0)
+	_ready(attack_controller, attacking_smoke)
+	var attack = _attack(attack_controller, attacking_smoke, target)
+	t.assert_true(attack.accepted, "Smokescreen unit can attack")
+	t.assert_true(attack.snapshot.players.player.support_line[0].smokescreen_revealed, "accepted attack reveals Smokescreen in its snapshot")
 
 
 static func _test_blitz_fury_and_pinned(t) -> void:
@@ -248,6 +281,7 @@ static func _test_tank_advance_chain(t) -> void:
 	t.assert_true(move.accepted, "Tank advances to Frontline")
 	t.assert_eq(tank.operations_used, 1, "Tank advance reserves one operation")
 	t.assert_eq(tank.operation_chain, CardInstance.OperationChain.TANK_ADVANCE, "Tank advance opens typed chain state")
+	t.assert_eq(move.snapshot.frontline[0].operation_chain, CardInstance.OperationChain.TANK_ADVANCE, "Tank chain is serialized by accepted move")
 	t.assert_eq(controller.state.players.player.credit, initial_credit - 3, "Tank advance pays once")
 	var invalid_chain_before := _digest(controller)
 	var invalid_chain = _attack(controller, tank, tank)
@@ -285,6 +319,24 @@ static func _test_tank_advance_chain(t) -> void:
 	t.assert_eq(fury_controller.state.players.player.credit, fury_credit - 4, "Fury Tank pays once per operation, not action")
 	t.assert_eq(fury_excess.reason_code, "operation_limit", "Fury Tank rejects operation beyond chain plus one")
 	t.assert_eq(_digest(fury_controller), before_excess, "Fury Tank excess rejection is atomic")
+
+	var reset_controller := _controller(452)
+	var reset_tank := _card("reset-tank", "player", "Tank", 2, 6, 0, 1)
+	_place_support(reset_controller, reset_tank, 0)
+	_ready(reset_controller, reset_tank)
+	var reset_move = reset_controller.submit_action(GameAction.create(
+		"move_unit", "player", reset_tank.instance_id, [], {"zone": "frontline", "slot": 0}, reset_controller.state.sequence
+	))
+	t.assert_true(reset_move.accepted, "Tank move opens a chain before turn reset")
+	var opponent_turn = reset_controller.submit_action(GameAction.create(
+		"end_turn", "player", "", [], {}, reset_controller.state.sequence
+	))
+	var reset_turn = reset_controller.submit_action(GameAction.create(
+		"end_turn", "opponent", "", [], {}, reset_controller.state.sequence
+	))
+	t.assert_true(opponent_turn.accepted and reset_turn.accepted, "turns advance through Tank reset")
+	t.assert_eq(reset_turn.snapshot.frontline[0].operation_chain, CardInstance.OperationChain.NONE, "turn reset serializes a closed Tank chain")
+	t.assert_eq(reset_turn.snapshot.frontline[0].operations_used, 0, "turn reset serializes restored Tank operations")
 
 
 static func _test_damage_counterattack_and_destruction(t) -> void:
@@ -366,6 +418,92 @@ static func _test_ambush_first_strike(t) -> void:
 		t.assert_true(ranged_result.accepted, "%s attack into Ambush resolves" % unit_type)
 		t.assert_eq(ranged.current_defense, 4, "%s receives no Ambush counterattack" % unit_type)
 		t.assert_eq(ranged_ambush.current_defense, 3, "%s still deals normal attack damage" % unit_type)
+
+
+static func _test_headquarters_guard_and_locked_target(t) -> void:
+	for unit_type in ["Infantry", "Tank", "Fighter"]:
+		var guarded_controller := _controller(475)
+		var attacker := _card("guarded-hq-attacker-%s" % unit_type, "player", unit_type, 2, 5)
+		var guard := _card("guarded-hq-guard-%s" % unit_type, "opponent", "Infantry", 1, 4, 0, 0, ["Guard"])
+		_place_frontline(guarded_controller, attacker, 0)
+		_place_support(guarded_controller, guard, 0)
+		_ready(guarded_controller, attacker)
+		var hq_id: String = guarded_controller.state.players.opponent.headquarters.instance_id
+		t.assert_true(
+			not CombatRules.legal_targets(guarded_controller.state, attacker.instance_id).has(hq_id),
+			"%s cannot select Headquarters protected by adjacent Guard" % unit_type
+		)
+		var before := _digest(guarded_controller)
+		var rejected = guarded_controller.submit_action(GameAction.create(
+			"attack_hq", "player", attacker.instance_id, [hq_id], {}, guarded_controller.state.sequence
+		))
+		t.assert_eq(rejected.reason_code, "guard_protected", "%s Headquarters Guard rejection is stable" % unit_type)
+		t.assert_eq(_digest(guarded_controller), before, "%s guarded Headquarters rejection is atomic" % unit_type)
+
+	for unit_type in ["Artillery", "Bomber"]:
+		var bypass_controller := _controller(476)
+		var attacker := _card("bypass-hq-attacker-%s" % unit_type, "player", unit_type, 2, 5)
+		var guard := _card("bypass-hq-guard-%s" % unit_type, "opponent", "Infantry", 1, 4, 0, 0, ["Guard"])
+		_place_support(bypass_controller, attacker, 1)
+		_place_support(bypass_controller, guard, 0)
+		_ready(bypass_controller, attacker)
+		var hq_id: String = bypass_controller.state.players.opponent.headquarters.instance_id
+		var result = bypass_controller.submit_action(GameAction.create(
+			"attack_hq", "player", attacker.instance_id, [hq_id], {}, bypass_controller.state.sequence
+		))
+		t.assert_true(result.accepted, "%s bypasses Headquarters Guard" % unit_type)
+		t.assert_eq(bypass_controller.state.players.opponent.headquarters.current_defense, 18, "%s damages guarded Headquarters" % unit_type)
+
+	var direct_controller := _controller(477)
+	var direct_attacker := _card("direct-hq-attacker", "player", "Artillery", 2, 5)
+	_place_support(direct_controller, direct_attacker, 0)
+	_ready(direct_controller, direct_attacker)
+	var direct_hq_id: String = direct_controller.state.players.opponent.headquarters.instance_id
+	var direct = direct_controller.submit_action(GameAction.create(
+		"attack_hq", "player", direct_attacker.instance_id, [direct_hq_id], {}, direct_controller.state.sequence
+	))
+	t.assert_true(direct.accepted, "Headquarters instance ID targets Headquarters directly")
+
+	var conflicting_controller := _controller(478)
+	var conflicting_attacker := _card("conflicting-hq-attacker", "player", "Artillery", 2, 5)
+	_place_support(conflicting_controller, conflicting_attacker, 0)
+	_ready(conflicting_controller, conflicting_attacker)
+	var conflicting_before := _digest(conflicting_controller)
+	var conflicting = conflicting_controller.submit_action(GameAction.create(
+		"attack_hq",
+		"player",
+		conflicting_attacker.instance_id,
+		[conflicting_controller.state.players.player.headquarters.instance_id],
+		{"target_player_id": "opponent"},
+		conflicting_controller.state.sequence
+	))
+	t.assert_eq(conflicting.reason_code, "invalid_target", "payload cannot override a locked Headquarters target")
+	t.assert_eq(_digest(conflicting_controller), conflicting_before, "conflicting Headquarters target is atomic")
+
+	var multi_controller := _controller(479)
+	var multi_attacker := _card("multi-hq-attacker", "player", "Artillery", 2, 5)
+	_place_support(multi_controller, multi_attacker, 0)
+	_ready(multi_controller, multi_attacker)
+	var multi_before := _digest(multi_controller)
+	var multi = multi_controller.submit_action(GameAction.create(
+		"attack_hq",
+		"player",
+		multi_attacker.instance_id,
+		[multi_controller.state.players.opponent.headquarters.instance_id, multi_controller.state.players.player.headquarters.instance_id],
+		{},
+		multi_controller.state.sequence
+	))
+	t.assert_eq(multi.reason_code, "invalid_target", "Headquarters attack rejects multiple targets")
+	t.assert_eq(_digest(multi_controller), multi_before, "multiple Headquarters targets are atomic")
+
+	var fallback_controller := _controller(4791)
+	var fallback_attacker := _card("fallback-hq-attacker", "player", "Artillery", 2, 5)
+	_place_support(fallback_controller, fallback_attacker, 0)
+	_ready(fallback_controller, fallback_attacker)
+	var fallback = fallback_controller.submit_action(GameAction.create(
+		"attack_hq", "player", fallback_attacker.instance_id, [], {"target_player_id": "opponent"}, fallback_controller.state.sequence
+	))
+	t.assert_true(fallback.accepted, "payload target player remains a fallback without target IDs")
 
 
 static func _test_headquarters_victory(t) -> void:

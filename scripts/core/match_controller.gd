@@ -296,11 +296,19 @@ func _attack_hq(action: GameAction) -> ActionResult:
 		return _reject(action, "card_not_found", "Attacker was not found")
 	if attacker.owner_id != action.actor_id:
 		return _reject(action, "not_owner", "Attacker belongs to another player")
-	var defender_player_id := str(action.payload.get("target_player_id", ""))
-	if defender_player_id.is_empty() and action.target_ids.size() == 1:
+	if action.target_ids.size() > 1:
+		return _reject(action, "invalid_target", "Attack requires at most one Headquarters target")
+	var defender_player_id := ""
+	if action.target_ids.size() == 1:
 		var headquarters: CardInstance = CombatRules.find_card(state, str(action.target_ids[0]))
-		if headquarters != null and headquarters.category == "Headquarters":
-			defender_player_id = headquarters.owner_id
+		if headquarters == null or headquarters.category != "Headquarters":
+			return _reject(action, "invalid_target", "Attack target must be a Headquarters")
+		defender_player_id = headquarters.owner_id
+		var payload_player_id := str(action.payload.get("target_player_id", ""))
+		if not payload_player_id.is_empty() and payload_player_id != defender_player_id:
+			return _reject(action, "invalid_target", "Headquarters target conflicts with payload")
+	else:
+		defender_player_id = str(action.payload.get("target_player_id", ""))
 	var validation := CombatRules.validate_hq_attack(state, attacker.instance_id, defender_player_id)
 	if not validation.valid:
 		return _reject_rule(action, validation)

@@ -121,7 +121,10 @@ static func validate_hq_attack(state, attacker_id: String, defender_player_id: S
 	if not bool(rules.long_range):
 		if attacker.zone != "frontline" or state.frontline_controller_id != attacker.owner_id:
 			return _invalid("invalid_target")
-	if state.players[defender_player_id].headquarters.current_defense <= 0:
+	var headquarters: CardInstance = state.players[defender_player_id].headquarters
+	if not _passes_guard_adjacency(state, attacker, headquarters):
+		return _invalid("guard_protected")
+	if headquarters.current_defense <= 0:
 		return _invalid("invalid_target")
 	return _valid()
 
