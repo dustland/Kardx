@@ -138,7 +138,7 @@ func _render_cards(source: Array) -> void:
 		if ResourceLoader.exists(image_path):
 			button.icon = load(image_path)
 			button.expand_icon = true
-		button.icon_max_width = 62
+		button.add_theme_constant_override("icon_max_width", 62)
 		button.icon_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		button.pressed.connect(_show_card.bind(card))
 		card_grid.add_child(button)
