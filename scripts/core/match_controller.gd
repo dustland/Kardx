@@ -3,6 +3,7 @@ extends RefCounted
 
 const ActionResult = preload("res://scripts/core/action_result.gd")
 const CardInstance = preload("res://scripts/core/card_instance.gd")
+const CombatRules = preload("res://scripts/core/combat_rules.gd")
 const GameAction = preload("res://scripts/core/game_action.gd")
 const GameConstants = preload("res://scripts/core/game_constants.gd")
 const MatchState = preload("res://scripts/core/match_state.gd")
@@ -42,6 +43,14 @@ func submit_action(action: GameAction) -> ActionResult:
 			return _confirm_mulligan(action)
 		"end_turn":
 			return _end_turn(action)
+		"deploy_unit":
+			return _deploy_unit(action)
+		"move_unit":
+			return _move_unit(action)
+		"attack_unit":
+			return _attack_unit(action)
+		"attack_hq":
+			return _attack_hq(action)
 		_:
 			return _reject(action, "unknown_action", "Unknown action")
 
@@ -153,6 +162,166 @@ func _end_turn(action: GameAction) -> ActionResult:
 	_start_turn(next_player, events)
 	return _accept(action, events)
 
+func _deploy_unit(action: GameAction) -> ActionResult:
+	var context := _validate_turn_action(action)
+	if not context.valid:
+		return _reject_rule(action, context)
+	var player: PlayerState = state.players[action.actor_id]
+	var card: CardInstance = _card_in_hand(player, action.source_id)
+	if card == null:
+		return _reject(action, "source_not_in_hand", "Unit is not in hand")
+	if card.category != "Unit":
+		return _reject(action, "invalid_card_type", "Only Units deploy to the Support Line")
+	if _occupied_count(player.support_line) >= GameConstants.SUPPORT_UNIT_SLOTS:
+		return _reject(action, "support_line_full", "Support Line is full")
+	if not action.payload.has("support_slot") or typeof(action.payload.support_slot) != TYPE_INT:
+		return _reject(action, "invalid_slot", "Support slot is invalid")
+	var slot: int = action.payload.support_slot
+	if slot < 0 or slot >= GameConstants.SUPPORT_UNIT_SLOTS:
+		return _reject(action, "invalid_slot", "Support slot is invalid")
+	if player.support_line[slot] != null:
+		return _reject(action, "slot_occupied", "Support slot is occupied")
+	if player.credit < card.deployment_cost:
+		return _reject(action, "insufficient_credit", "Not enough Credit")
+
+	var events: Array = []
+	_spend_credit(player, card.deployment_cost, "deployment", card.instance_id, events)
+	player.hand.erase(card)
+	player.support_line[slot] = card
+	card.zone = "support_line"
+	card.slot = slot
+	card.deployed_turn = state.turn
+	card.reset_operation_state()
+	_emit(events, "card_deployed", {
+		"player_id": player.id,
+		"instance_id": card.instance_id,
+		"zone": "support_line",
+		"slot": slot,
+	})
+	return _accept(action, events)
+
+func _move_unit(action: GameAction) -> ActionResult:
+	var context := _validate_turn_action(action)
+	if not context.valid:
+		return _reject_rule(action, context)
+	var unit: CardInstance = CombatRules.find_card(state, action.source_id)
+	if unit == null:
+		return _reject(action, "card_not_found", "Unit was not found")
+	if unit.owner_id != action.actor_id:
+		return _reject(action, "not_owner", "Unit belongs to another player")
+	if str(action.payload.get("zone", "")) != "frontline":
+		return _reject(action, "invalid_destination", "Units only move to the Frontline")
+	if not action.payload.has("slot") or typeof(action.payload.slot) != TYPE_INT:
+		return _reject(action, "invalid_slot", "Frontline slot is invalid")
+	var slot: int = action.payload.slot
+	var validation := CombatRules.validate_move_to_frontline(state, unit.instance_id, slot)
+	if not validation.valid:
+		return _reject_rule(action, validation)
+
+	var events: Array = []
+	var player: PlayerState = state.players[action.actor_id]
+	_spend_credit(player, unit.operation_cost, "operation", unit.instance_id, events)
+	unit.operations_used += 1
+	unit.smokescreen_revealed = true
+	unit.operation_chain = CardInstance.OperationChain.TANK_ADVANCE \
+		if CombatRules.opens_tank_advance(unit) else CardInstance.OperationChain.NONE
+	var from_slot := unit.slot
+	player.support_line[from_slot] = null
+	state.frontline[slot] = unit
+	unit.zone = "frontline"
+	unit.slot = slot
+	_emit(events, "unit_moved", {
+		"player_id": player.id,
+		"instance_id": unit.instance_id,
+		"from_zone": "support_line",
+		"from_slot": from_slot,
+		"to_zone": "frontline",
+		"to_slot": slot,
+	})
+	if state.frontline_controller_id != player.id:
+		var previous_controller := state.frontline_controller_id
+		state.frontline_controller_id = player.id
+		_emit(events, "frontline_changed", {
+			"previous_controller_id": previous_controller,
+			"controller_id": player.id,
+		})
+	return _accept(action, events)
+
+func _attack_unit(action: GameAction) -> ActionResult:
+	var context := _validate_turn_action(action)
+	if not context.valid:
+		return _reject_rule(action, context)
+	if action.target_ids.size() != 1:
+		return _reject(action, "invalid_target", "Attack requires one unit target")
+	var attacker: CardInstance = CombatRules.find_card(state, action.source_id)
+	if attacker == null:
+		return _reject(action, "card_not_found", "Attacker was not found")
+	if attacker.owner_id != action.actor_id:
+		return _reject(action, "not_owner", "Attacker belongs to another player")
+	var defender_id := str(action.target_ids[0])
+	var validation := CombatRules.validate_unit_attack(state, attacker.instance_id, defender_id)
+	if not validation.valid:
+		return _reject_rule(action, validation)
+	var defender: CardInstance = CombatRules.find_card(state, defender_id)
+
+	var events: Array = []
+	_reserve_attack_operation(attacker, events)
+	_emit(events, "attack_started", {
+		"attacker_id": attacker.instance_id,
+		"defender_id": defender.instance_id,
+		"target_type": "unit",
+	})
+	var ambush := CombatRules.receives_counterattack(attacker) and CombatRules.is_ambush(defender)
+	if ambush:
+		_deal_combat_damage(defender, attacker, defender.current_attack, "ambush", events)
+		_destroy_if_dead(attacker, events)
+		if attacker.current_defense <= 0:
+			_update_frontline_control(events)
+			return _accept(action, events)
+
+	_deal_combat_damage(attacker, defender, attacker.current_attack, "attack", events)
+	_destroy_if_dead(defender, events)
+	if defender.current_defense > 0 and not ambush and CombatRules.receives_counterattack(attacker):
+		_deal_combat_damage(defender, attacker, defender.current_attack, "counterattack", events)
+		_destroy_if_dead(attacker, events)
+	_update_frontline_control(events)
+	return _accept(action, events)
+
+func _attack_hq(action: GameAction) -> ActionResult:
+	var context := _validate_turn_action(action)
+	if not context.valid:
+		return _reject_rule(action, context)
+	var attacker: CardInstance = CombatRules.find_card(state, action.source_id)
+	if attacker == null:
+		return _reject(action, "card_not_found", "Attacker was not found")
+	if attacker.owner_id != action.actor_id:
+		return _reject(action, "not_owner", "Attacker belongs to another player")
+	var defender_player_id := str(action.payload.get("target_player_id", ""))
+	if defender_player_id.is_empty() and action.target_ids.size() == 1:
+		var headquarters: CardInstance = CombatRules.find_card(state, str(action.target_ids[0]))
+		if headquarters != null and headquarters.category == "Headquarters":
+			defender_player_id = headquarters.owner_id
+	var validation := CombatRules.validate_hq_attack(state, attacker.instance_id, defender_player_id)
+	if not validation.valid:
+		return _reject_rule(action, validation)
+	var defender: PlayerState = state.players[defender_player_id]
+
+	var events: Array = []
+	_reserve_attack_operation(attacker, events)
+	_emit(events, "attack_started", {
+		"attacker_id": attacker.instance_id,
+		"defender_id": defender.headquarters.instance_id,
+		"target_type": "headquarters",
+	})
+	_deal_combat_damage(attacker, defender.headquarters, attacker.current_attack, "attack", events)
+	_check_headquarters_death(defender)
+	if _is_terminal():
+		_emit(events, "match_ended", {
+			"winner_id": state.winner_id,
+			"loser_id": defender.id,
+		})
+	return _accept(action, events)
+
 func _draw_opening_cards(player: PlayerState, count: int, events: Array) -> void:
 	for index in range(count):
 		_draw_card(player, events)
@@ -191,6 +360,12 @@ func _start_turn(player: PlayerState, events: Array) -> void:
 		_emit(events, "credit_slots_changed", {"player_id": player.id, "credit_slots": player.credit_slots})
 	player.credit = player.credit_slots
 	player.reset_operations()
+	for card in player.support_line:
+		if card != null:
+			card.reset_operation_state()
+	for card in state.frontline:
+		if card != null and card.owner_id == player.id:
+			card.reset_operation_state()
 	_emit(events, "credit_refilled", {"player_id": player.id, "credit": player.credit})
 	_draw_card(player, events)
 	if _is_terminal():
@@ -209,6 +384,107 @@ func debug_set_trigger_hook(hook: Callable) -> void:
 
 func debug_set_modifier_expiry_hook(hook: Callable) -> void:
 	_debug_modifier_expiry_hook = hook
+
+func _validate_turn_action(action: GameAction) -> Dictionary:
+	if _is_terminal():
+		return {"valid": false, "code": "match_complete"}
+	if state.phase != "action":
+		return {"valid": false, "code": "invalid_phase"}
+	if not state.players.has(action.actor_id):
+		return {"valid": false, "code": "invalid_actor"}
+	if action.actor_id != state.active_player_id:
+		return {"valid": false, "code": "not_active_player"}
+	return {"valid": true}
+
+func _reserve_attack_operation(attacker: CardInstance, events: Array) -> void:
+	attacker.smokescreen_revealed = true
+	if CombatRules.attack_uses_tank_chain(attacker):
+		attacker.operation_chain = CardInstance.OperationChain.NONE
+		return
+	_spend_credit(
+		state.players[attacker.owner_id],
+		attacker.operation_cost,
+		"operation",
+		attacker.instance_id,
+		events
+	)
+	attacker.operations_used += 1
+	attacker.operation_chain = CardInstance.OperationChain.NONE
+
+func _spend_credit(player: PlayerState, amount: int, reason: String, source_id: String, events: Array) -> void:
+	player.credit -= amount
+	if amount <= 0:
+		return
+	_emit(events, "credit_spent", {
+		"player_id": player.id,
+		"source_id": source_id,
+		"amount": amount,
+		"reason": reason,
+		"credit": player.credit,
+	})
+
+func _deal_combat_damage(
+	source: CardInstance,
+	target: CardInstance,
+	base_damage: int,
+	damage_type: String,
+	events: Array
+) -> void:
+	var reduction := 1 if CombatRules.reduces_damage(target) else 0
+	var damage := maxi(0, base_damage - reduction)
+	target.current_defense = maxi(0, target.current_defense - damage)
+	_emit(events, "damage_dealt", {
+		"source_id": source.instance_id,
+		"target_id": target.instance_id,
+		"damage": damage,
+		"damage_type": damage_type,
+		"remaining_defense": target.current_defense,
+	})
+
+func _destroy_if_dead(card: CardInstance, events: Array) -> void:
+	if card.current_defense > 0 or card.zone == "discard" or card.category != "Unit":
+		return
+	var player: PlayerState = state.players[card.owner_id]
+	if card.zone == "support_line":
+		if card.slot >= 0 and card.slot < player.support_line.size() and player.support_line[card.slot] == card:
+			player.support_line[card.slot] = null
+	elif card.zone == "frontline":
+		if card.slot >= 0 and card.slot < state.frontline.size() and state.frontline[card.slot] == card:
+			state.frontline[card.slot] = null
+	card.zone = "discard"
+	card.slot = -1
+	card.operation_chain = CardInstance.OperationChain.NONE
+	player.discard.append(card)
+	_emit(events, "card_destroyed", {
+		"player_id": player.id,
+		"instance_id": card.instance_id,
+	})
+
+func _update_frontline_control(events: Array) -> void:
+	var controller_id := ""
+	for card in state.frontline:
+		if card != null:
+			controller_id = card.owner_id
+			break
+	if controller_id == state.frontline_controller_id:
+		return
+	var previous_controller := state.frontline_controller_id
+	state.frontline_controller_id = controller_id
+	_emit(events, "frontline_changed", {
+		"previous_controller_id": previous_controller,
+		"controller_id": controller_id,
+	})
+
+func _occupied_count(cards: Array) -> int:
+	var count := 0
+	for card in cards:
+		if card != null:
+			count += 1
+	return count
+
+func _reject_rule(action: GameAction, validation: Dictionary) -> ActionResult:
+	var code := str(validation.get("code", "invalid_action"))
+	return _reject(action, code, code.replace("_", " ").capitalize())
 
 func _resolve_trigger(trigger: String, context: Dictionary, events: Array) -> void:
 	if _is_terminal():

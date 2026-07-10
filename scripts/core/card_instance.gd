@@ -3,6 +3,11 @@ extends RefCounted
 
 const GameConstants = preload("res://scripts/core/game_constants.gd")
 
+enum OperationChain {
+	NONE,
+	TANK_ADVANCE,
+}
+
 var definition_id: String
 var instance_id: String
 var owner_id: String
@@ -20,6 +25,8 @@ var abilities: Array
 var zone: String = "deck"
 var slot: int = -1
 var operations_used: int = 0
+var operation_chain: OperationChain = OperationChain.NONE
+var smokescreen_revealed: bool = false
 var deployed_turn: int = -1
 var modifiers: Array = []
 var statuses: Dictionary = {}
@@ -63,6 +70,19 @@ static func headquarters(definition_id_value: String, card_owner_id: String, car
 	card.zone = "headquarters"
 	return card
 
+func operation_limit() -> int:
+	return 2 if has_keyword_or_status("Fury") else 1
+
+func reset_operation_state() -> void:
+	operations_used = 0
+	operation_chain = OperationChain.NONE
+
+func has_keyword_or_status(keyword_name: String) -> bool:
+	for keyword in keywords:
+		if str(keyword) == keyword_name:
+			return true
+	return bool(statuses.get(keyword_name, false))
+
 func to_public_dict(reveal: bool) -> Dictionary:
 	if not reveal:
 		return {"instance_id": instance_id, "hidden": true, "zone": zone}
@@ -75,6 +95,10 @@ func to_public_dict(reveal: bool) -> Dictionary:
 		"attack": current_attack,
 		"defense": current_defense,
 		"operation_cost": operation_cost,
+		"operations_used": operations_used,
+		"operation_chain": operation_chain,
+		"smokescreen_revealed": smokescreen_revealed,
+		"deployed_turn": deployed_turn,
 		"keywords": keywords.duplicate(true),
 		"statuses": statuses.duplicate(true),
 		"zone": zone,
