@@ -175,7 +175,7 @@ func _show_card(card: Dictionary) -> void:
 	for ability in abilities:
 		ability_map[ability.get("id", "")] = ability
 	for ability_id in card.get("abilities", []):
-		var ability := ability_map.get(ability_id, {})
+		var ability: Dictionary = ability_map.get(ability_id, {})
 		var ability_label := Label.new()
 		ability_label.text = "- %s: %s" % [ability.get("name", ability_id), ability.get("description", "")]
 		ability_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
