@@ -1,6 +1,7 @@
 .godot/
 *.import
 *.translation
+*.uid
 
 # Godot editor metadata is generated locally.
 export_presets.cfg
