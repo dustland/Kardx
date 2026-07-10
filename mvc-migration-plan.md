@@ -1,4 +1,4 @@
-# MVC Migration Plan for Kardx
+# MVC Migration Plan for OpenKards
 
 > **Status: Completed.** The codebase now follows the structure below. This document is kept as a historical reference and onboarding map.
 
@@ -28,12 +28,12 @@
 
 | Legacy | Current |
 | --- | --- |
-| `Kardx.Core` | `Kardx.Models` |
-| `Kardx.UI` | `Kardx.Views` |
-| UI drag handlers | `Kardx.Controllers.DragHandlers` |
-| ViewManager / ViewRegistry | `Kardx.Managers` |
+| `OpenKards.Core` | `OpenKards.Models` |
+| `OpenKards.UI` | `OpenKards.Views` |
+| UI drag handlers | `OpenKards.Controllers.DragHandlers` |
+| ViewManager / ViewRegistry | `OpenKards.Managers` |
 
-Sub-namespaces follow folder layout, for example `Kardx.Models.Cards`, `Kardx.Views.Match`.
+Sub-namespaces follow folder layout, for example `OpenKards.Models.Cards`, `OpenKards.Views.Match`.
 
 ## Migration Notes
 

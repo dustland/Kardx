@@ -1,10 +1,10 @@
-# Kardx Game Data Architecture
+# OpenKards Game Data Architecture
 
 [查看简体中文版本](./Data-CN.md)
 
 ## Introduction
 
-This document presents the data architecture for Kardx, a card game inspired by [Kards](https://kards.com). The architecture emphasizes modularity, data-driven abilities, and extensibility, structured across three primary layers:
+This document presents the data architecture for OpenKards, a card game inspired by [Kards](https://kards.com). The architecture emphasizes modularity, data-driven abilities, and extensibility, structured across three primary layers:
 
 - **Data Layer**: Manages static definitions, zones, and baseline attributes.
 - **Logic Layer**: Implements game rules, turn phases, and the dynamic application of abilities and effects.
@@ -500,7 +500,7 @@ public class CardView : MonoBehaviour
 
 ## Conclusion
 
-This document provides a comprehensive overview of the data architecture for Kardx, a card game inspired by Kards. By delineating the architecture into distinct layers—the Data, Logic, and UI Layers—we ensure a modular, extensible, and maintainable codebase. The separation between static definitions and runtime state enables efficient memory usage and supports dynamic gameplay features while maintaining consistency across game elements.
+This document provides a comprehensive overview of the data architecture for OpenKards, a card game inspired by Kards. By delineating the architecture into distinct layers—the Data, Logic, and UI Layers—we ensure a modular, extensible, and maintainable codebase. The separation between static definitions and runtime state enables efficient memory usage and supports dynamic gameplay features while maintaining consistency across game elements.
 
 Key benefits of this design include:
 

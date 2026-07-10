@@ -1,8 +1,8 @@
-; Kardx Godot project
+; OpenKards Godot project
 config_version=5
 
 [application]
-config/name="Kardx"
+config/name="OpenKards"
 run/main_scene="res://scenes/main.tscn"
 
 [display]
