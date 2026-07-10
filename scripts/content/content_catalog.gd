@@ -20,9 +20,9 @@ static func load_from_paths(cards_path: String, abilities_path: String, decks_pa
 	return catalog
 
 func rebuild_indexes() -> void:
-	cards_by_id = _index_by_id(cards)
 	abilities_by_id = _index_by_id(abilities)
 	decks_by_id = _index_by_id(decks)
+	cards_by_id = _engine_cards_by_id()
 
 func _load_array(path: String, label: String) -> Array:
 	var value: Variant = _load_json(path, label)
@@ -64,10 +64,31 @@ func _index_by_id(entries: Array) -> Dictionary:
 		if not entry_value is Dictionary:
 			continue
 		var entry: Dictionary = entry_value
-		var id := str(entry.get("id", ""))
-		if id.is_empty() or indexed.has(id):
+		var id_value = entry.get("id", null)
+		if not id_value is String or id_value.strip_edges().is_empty() or indexed.has(id_value):
 			continue
-		indexed[id] = entry
+		indexed[id_value] = entry.duplicate(true)
+	return indexed
+
+func _engine_cards_by_id() -> Dictionary:
+	var indexed := {}
+	for card_value in cards:
+		if not card_value is Dictionary:
+			continue
+		var card: Dictionary = card_value
+		var id_value = card.get("id", null)
+		if not id_value is String or id_value.strip_edges().is_empty() or indexed.has(id_value):
+			continue
+		var definition: Dictionary = card.duplicate(true)
+		definition.erase("abilities")
+		var resolved_abilities: Array = []
+		var ability_ids_value = definition.get("ability_ids", [])
+		if ability_ids_value is Array:
+			for ability_id_value in ability_ids_value:
+				if ability_id_value is String and abilities_by_id.has(ability_id_value):
+					resolved_abilities.append((abilities_by_id[ability_id_value] as Dictionary).duplicate(true))
+		definition["abilities"] = resolved_abilities
+		indexed[id_value] = definition
 	return indexed
 
 func _add_load_error(code: String, path: String, message: String) -> void:
