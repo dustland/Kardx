@@ -4,4 +4,8 @@
 *.uid
 
 # Godot editor metadata is generated locally.
-export_presets.cfg
+builds/
+.worktrees/
+
+# Keep non-secret export preset defaults in source control.
+!export_presets.cfg
