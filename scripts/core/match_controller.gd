@@ -17,6 +17,8 @@ var card_definitions: Dictionary
 var replay_log: ReplayLog
 var event_history: Array = []
 var invalid_diagnostics: Dictionary = {}
+var _debug_terminal_override: bool = false
+var _terminal_frontline_control_unresolved: bool = false
 var _definitions: Dictionary
 var _rng := RandomNumberGenerator.new()
 var _effect_engine: EffectEngine
@@ -39,6 +41,7 @@ static func create(card_definitions: Dictionary, player_deck: Array, opponent_de
 	controller._shuffle_deck(player.deck)
 	controller._shuffle_deck(opponent.deck)
 	controller.replay_log = ReplayLog.create(seed, player_deck, opponent_deck)
+	controller.replay_log.terminal_result = controller._replay_terminal_result()
 	return controller
 
 func submit_action(action: GameAction) -> ActionResult:
@@ -59,6 +62,8 @@ func submit_action(action: GameAction) -> ActionResult:
 		if not resolution.valid:
 			return _reject_rule(action, resolution)
 		return _reject(action, result.reason_code, result.message)
+	if _is_terminal() and not _frontline_controller_is_consistent():
+		_terminal_frontline_control_unresolved = true
 	var invariants := _validate_invariants()
 	if not invariants.valid:
 		return _abort_invalid("state_invariant", invariants)
@@ -73,6 +78,7 @@ func state_hash() -> String:
 
 func _replay_terminal_result() -> Dictionary:
 	return {
+		"type": "state",
 		"phase": state.phase,
 		"winner_id": state.winner_id,
 		"sequence": state.sequence,
@@ -113,6 +119,8 @@ func _authoritative_state() -> Dictionary:
 		"sequence": state.sequence,
 		"phase": state.phase,
 		"invalid_diagnostics": invalid_diagnostics.duplicate(true),
+		"debug_terminal_override": _debug_terminal_override,
+		"terminal_frontline_control_unresolved": _terminal_frontline_control_unresolved,
 	}
 
 func _abort_invalid(code: String, details: Dictionary = {}) -> ActionResult:
@@ -120,6 +128,7 @@ func _abort_invalid(code: String, details: Dictionary = {}) -> ActionResult:
 		return ActionResult.reject("match_invalid", "Match is invalid")
 	if state.phase == "invalid":
 		return _reject(GameAction.create("", ""), "match_invalid", "Match is invalid")
+	var pre_abort_sequence := state.sequence
 	invalid_diagnostics = {
 		"code": code,
 		"details": details.duplicate(true),
@@ -128,6 +137,8 @@ func _abort_invalid(code: String, details: Dictionary = {}) -> ActionResult:
 	var events: Array = []
 	_emit(events, "match_invalid", invalid_diagnostics.duplicate(true))
 	event_history.append_array(events.duplicate(true))
+	if replay_log != null:
+		replay_log.record_invalid_terminal(code, details, pre_abort_sequence, state.sequence, state_hash())
 	var result := ActionResult.reject("match_invalid", "Match is invalid", state.snapshot_for("system"))
 	result.events = events
 	return result
@@ -135,7 +146,7 @@ func _abort_invalid(code: String, details: Dictionary = {}) -> ActionResult:
 func _validate_invariants() -> Dictionary:
 	if state == null:
 		return {"valid": false, "code": "state_missing"}
-	if state.phase == "invalid":
+	if state.phase == "invalid" and not invalid_diagnostics.is_empty():
 		return {"valid": true}
 	if not state.players.has("player") or not state.players.has("opponent") or state.players.size() != 2:
 		return {"valid": false, "code": "invalid_players"}
@@ -171,6 +182,9 @@ func _validate_invariants() -> Dictionary:
 			)
 			if not collection_result.valid:
 				return collection_result
+		var countermeasure_result := _validate_active_countermeasures(player)
+		if not countermeasure_result.valid:
+			return countermeasure_result
 	var frontline_owner_id := ""
 	for slot in range(state.frontline.size()):
 		var frontline_card = state.frontline[slot]
@@ -193,7 +207,7 @@ func _validate_invariants() -> Dictionary:
 			frontline_owner_id = frontline_card.owner_id
 		elif frontline_owner_id != frontline_card.owner_id:
 			return {"valid": false, "code": "mixed_frontline_owners"}
-	if not _is_terminal() and frontline_owner_id != state.frontline_controller_id:
+	if not _frontline_validation_is_exempt() and frontline_owner_id != state.frontline_controller_id:
 		return {
 			"valid": false,
 			"code": "invalid_frontline_controller",
@@ -201,6 +215,18 @@ func _validate_invariants() -> Dictionary:
 			"actual_controller_id": state.frontline_controller_id,
 		}
 	return _validate_terminal_invariants()
+
+func _frontline_validation_is_exempt() -> bool:
+	return _debug_terminal_override or _terminal_frontline_control_unresolved \
+		or (state.phase == "invalid" and not invalid_diagnostics.is_empty())
+
+func _frontline_controller_is_consistent() -> bool:
+	var controller_id := ""
+	for card in state.frontline:
+		if card != null:
+			controller_id = card.owner_id
+			break
+	return controller_id == state.frontline_controller_id
 
 func _validate_card_collection(
 	cards: Array,
@@ -247,6 +273,24 @@ func _validate_card_membership(
 		return {"valid": false, "code": "headquarters_in_card_zone", "instance_id": card.instance_id}
 	return {"valid": true}
 
+func _validate_active_countermeasures(player: PlayerState) -> Dictionary:
+	var seen_references := {}
+	for countermeasure in player.active_countermeasures:
+		if countermeasure == null or seen_references.has(countermeasure):
+			return {"valid": false, "code": "duplicate_active_countermeasure", "player_id": player.id}
+		seen_references[countermeasure] = true
+		if countermeasure.category != "Countermeasure" \
+			or countermeasure.owner_id != player.id \
+			or countermeasure.zone != "hand" \
+			or not countermeasure.countermeasure_active \
+			or not countermeasure.face_down \
+			or player.hand.count(countermeasure) != 1:
+			return {"valid": false, "code": "invalid_active_countermeasure", "instance_id": countermeasure.instance_id}
+	for card in player.hand:
+		if card.category == "Countermeasure" and card.countermeasure_active and not seen_references.has(card):
+			return {"valid": false, "code": "untracked_active_countermeasure", "instance_id": card.instance_id}
+	return {"valid": true}
+
 func _validate_terminal_invariants() -> Dictionary:
 	var player: PlayerState = state.players.player
 	var opponent: PlayerState = state.players.opponent
@@ -255,6 +299,9 @@ func _validate_terminal_invariants() -> Dictionary:
 			return {"valid": false, "code": "terminal_winner_missing"}
 		if state.players[state.winner_id].headquarters.current_defense <= 0:
 			return {"valid": false, "code": "terminal_headquarters_contradiction"}
+		var loser_id := _other_player_id(state.winner_id)
+		if not _debug_terminal_override and state.players[loser_id].headquarters.current_defense != 0:
+			return {"valid": false, "code": "terminal_loser_headquarters_not_zero"}
 		return {"valid": true}
 	if not state.winner_id.is_empty():
 		return {"valid": false, "code": "winner_without_complete_phase"}
@@ -301,20 +348,33 @@ func _card_state(card) -> Variant:
 
 func _canonicalize(value: Variant) -> Variant:
 	if value is Dictionary:
-		var keys: Array = []
+		var entries: Array = []
 		for key in value:
-			keys.append(str(key))
-		keys.sort()
-		var canonical := {}
-		for key in keys:
-			canonical[key] = _canonicalize(value[key])
-		return canonical
+			var key_record := _canonical_key_record(key)
+			entries.append({
+				"sort_key": JSON.stringify(key_record),
+				"key": key_record,
+				"value": _canonicalize(value[key]),
+			})
+		entries.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
+			return str(left.sort_key) < str(right.sort_key)
+		)
+		var canonical_entries: Array = []
+		for entry in entries:
+			canonical_entries.append({"key": entry.key, "value": entry.value})
+		return {"dictionary_entries": canonical_entries}
 	if value is Array:
 		var canonical_array: Array = []
 		for entry in value:
 			canonical_array.append(_canonicalize(entry))
 		return canonical_array
 	return value
+
+func _canonical_key_record(key: Variant) -> Dictionary:
+	var key_value: Variant = key
+	if not (key is bool or key is int or key is float or key is String or key == null):
+		key_value = str(key)
+	return {"type": typeof(key), "value": key_value}
 
 func _dispatch_action(action: GameAction) -> ActionResult:
 	match action.type:
@@ -378,6 +438,8 @@ func _capture_transaction() -> Dictionary:
 		"rng_internal_state": _rng.state,
 		"sequence": state.sequence,
 		"phase": state.phase,
+		"debug_terminal_override": _debug_terminal_override,
+		"terminal_frontline_control_unresolved": _terminal_frontline_control_unresolved,
 		"players": player_snapshots,
 		"cards": card_snapshots,
 	}
@@ -413,6 +475,8 @@ func _restore_transaction(transaction: Dictionary) -> void:
 	state.rng_state = transaction.rng_state
 	state.sequence = transaction.sequence
 	state.phase = transaction.phase
+	_debug_terminal_override = transaction.debug_terminal_override
+	_terminal_frontline_control_unresolved = transaction.terminal_frontline_control_unresolved
 	_rng.state = transaction.rng_internal_state
 	for player_id in transaction.players:
 		var player: PlayerState = state.players[player_id]
@@ -646,6 +710,8 @@ func _move_unit(action: GameAction) -> ActionResult:
 		"target_ids": [],
 	}, events)
 	if _is_terminal() or not _is_current_frontline_unit(unit, slot):
+		if _is_terminal():
+			_terminal_frontline_control_unresolved = true
 		return _accept(action, events)
 	_update_frontline_control(events, unit, player.id)
 	return _accept(action, events)
@@ -1132,7 +1198,10 @@ func _resolve_trigger(trigger: String, context: Dictionary, events: Array) -> vo
 	if _is_terminal():
 		return
 	if _debug_trigger_hook.is_valid():
+		var phase_before_hook := state.phase
 		_debug_trigger_hook.call(trigger, context, events)
+		if phase_before_hook != "complete" and state.phase == "complete":
+			_debug_terminal_override = true
 	if _effect_engine != null:
 		events.append_array(_effect_engine.resolve_trigger(trigger, context))
 
@@ -1140,7 +1209,10 @@ func _expire_temporary_modifiers(player: PlayerState, events: Array = []) -> voi
 	if _is_terminal():
 		return
 	if _debug_modifier_expiry_hook.is_valid():
+		var phase_before_hook := state.phase
 		_debug_modifier_expiry_hook.call(player.id)
+		if phase_before_hook != "complete" and state.phase == "complete":
+			_debug_terminal_override = true
 	if _is_terminal():
 		return
 	var frontline_source: CardInstance = null
