@@ -10,6 +10,8 @@ static func run(t) -> void:
 	_test_replay_reproduces_setup_and_sequence_guard(t)
 	_test_replay_rejects_zero_tampered_expected_sequence(t)
 	_test_invalid_terminal_record_replays_deterministically(t)
+	_test_injected_zone_invalid_replays_authoritative_state(t)
+	_test_tampered_invalid_terminal_metadata_aborts(t)
 	_test_replay_schema_rejects_untrusted_logs(t)
 	_test_replay_aborts_on_tampered_sequence(t)
 	_test_replay_aborts_on_tampered_action(t)
@@ -20,6 +22,7 @@ static func run(t) -> void:
 	_test_broken_zone_invariant_aborts_match_once(t)
 	_test_owner_slot_frontline_and_terminal_invariants_abort(t)
 	_test_complete_and_invalid_terminal_invariants(t)
+	_test_incoherent_debug_terminal_aborts(t)
 	_test_active_countermeasure_invariants(t)
 	_test_terminal_action_does_not_mutate_state(t)
 	_test_seeded_matches_are_identical_and_diverge_for_other_seeds(t)
@@ -73,6 +76,47 @@ static func _test_invalid_terminal_record_replays_deterministically(t) -> void:
 	t.assert_eq(replayed.event_history, controller.event_history, "invalid terminal replay emits the same event")
 	t.assert_eq(replayed.replay_log.to_dict().terminal_result, log.terminal_result, "invalid terminal record survives replay export")
 	t.assert_eq(replayed.replay_log.actions.size(), 0, "invalid terminal replay does not log a fake action")
+
+
+static func _test_injected_zone_invalid_replays_authoritative_state(t) -> void:
+	var fixture := CoreCards.build_valid_fixture()
+	var controller := MatchController.create(fixture.definitions, fixture.player_deck, fixture.enemy_deck, 90230)
+	controller.submit_action(GameAction.create("start_match", "system", "", [], {}, controller.state.sequence))
+	controller.state.players.player.deck.append(controller.state.players.player.hand[0])
+	controller.submit_action(GameAction.create("mulligan", "player", "", [], {}, controller.state.sequence))
+	var source_log: Dictionary = controller.replay_log.to_dict()
+
+	var replayed = ReplayLog.from_dict(source_log).replay(fixture.definitions)
+	t.assert_eq(replayed.state_hash(), controller.state_hash(), "injected invalid replay restores authoritative state hash")
+	t.assert_eq(replayed.event_history, controller.event_history, "injected invalid replay emits identical events")
+	t.assert_eq(replayed.state.sequence, controller.state.sequence, "injected invalid replay preserves sequence")
+	t.assert_eq(replayed.invalid_diagnostics, controller.invalid_diagnostics, "injected invalid replay preserves diagnostic details")
+	t.assert_eq(replayed.replay_log.actions, controller.replay_log.actions, "injected invalid replay logs no rejected action")
+
+
+static func _test_tampered_invalid_terminal_metadata_aborts(t) -> void:
+	var fixture := CoreCards.build_valid_fixture()
+	var controller := MatchController.create(fixture.definitions, fixture.player_deck, fixture.enemy_deck, 90232)
+	controller._abort_invalid("forced_invalid", {"source": "test"})
+	var source: Dictionary = controller.replay_log.to_dict()
+	var bad_result_sequence: Dictionary = source.duplicate(true)
+	bad_result_sequence.terminal_result.result_sequence += 1
+	var bad_hash: Dictionary = source.duplicate(true)
+	bad_hash.terminal_result.state_hash = "tampered"
+	var bad_details: Dictionary = source.duplicate(true)
+	bad_details.terminal_result.diagnostic.details = {"source": "tampered"}
+	for tampered in [bad_result_sequence, bad_hash, bad_details]:
+		var replayed = ReplayLog.from_dict(tampered).replay(fixture.definitions)
+		t.assert_eq(replayed.invalid_diagnostics.code, "replay_invalid", "tampered invalid metadata has stable diagnostic")
+		t.assert_eq(_event_type_count(replayed.event_history, "match_invalid"), 1, "tampered invalid metadata emits one terminal event")
+
+
+static func _event_type_count(events: Array, event_type: String) -> int:
+	var count := 0
+	for event in events:
+		if str(event.type) == event_type:
+			count += 1
+	return count
 
 
 static func _test_replay_schema_rejects_untrusted_logs(t) -> void:
@@ -231,6 +275,18 @@ static func _test_complete_and_invalid_terminal_invariants(t) -> void:
 	t.assert_true(complete._validate_invariants().valid, "invalid diagnostic state does not recursively fail invariants")
 
 
+static func _test_incoherent_debug_terminal_aborts(t) -> void:
+	var controller := _started_replay_controller(90231)
+	controller.debug_set_trigger_hook(func(trigger: String, _context: Dictionary, _events: Array) -> void:
+		if trigger == "turn_end":
+			controller.state.phase = "complete"
+			controller.state.winner_id = "player"
+	)
+	controller.submit_action(GameAction.create("end_turn", controller.state.active_player_id, "", [], {}, controller.state.sequence))
+	t.assert_eq(controller.state.phase, "invalid", "debug terminal without defeated loser invalidates")
+	controller.debug_set_trigger_hook(Callable())
+
+
 static func _test_active_countermeasure_invariants(t) -> void:
 	var valid_controller := _countermeasure_invariant_controller(90224)
 	var valid_counter = valid_controller.state.players.player.hand[0]
@@ -275,6 +331,17 @@ static func _countermeasure_invariant_controller(seed: int) -> MatchController:
 	var fixture := CoreCards.build_valid_fixture()
 	var controller := MatchController.create(fixture.definitions, fixture.player_deck, fixture.enemy_deck, seed)
 	controller.submit_action(GameAction.create("start_match", "system", "", [], {}, controller.state.sequence))
+	return controller
+
+
+static func _started_replay_controller(seed: int) -> MatchController:
+	var fixture := CoreCards.build_valid_fixture()
+	var controller := MatchController.create(fixture.definitions, fixture.player_deck, fixture.enemy_deck, seed)
+	controller.submit_action(GameAction.create("start_match", "system", "", [], {}, controller.state.sequence))
+	controller.submit_action(GameAction.create("mulligan", "player", "", [], {}, controller.state.sequence))
+	controller.submit_action(GameAction.create("mulligan", "opponent", "", [], {}, controller.state.sequence))
+	controller.submit_action(GameAction.create("confirm_mulligan", "player", "", [], {}, controller.state.sequence))
+	controller.submit_action(GameAction.create("confirm_mulligan", "opponent", "", [], {}, controller.state.sequence))
 	return controller
 
 

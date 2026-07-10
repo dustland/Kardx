@@ -17,8 +17,6 @@ var card_definitions: Dictionary
 var replay_log: ReplayLog
 var event_history: Array = []
 var invalid_diagnostics: Dictionary = {}
-var _debug_terminal_override: bool = false
-var _terminal_frontline_control_unresolved: bool = false
 var _definitions: Dictionary
 var _rng := RandomNumberGenerator.new()
 var _effect_engine: EffectEngine
@@ -62,8 +60,8 @@ func submit_action(action: GameAction) -> ActionResult:
 		if not resolution.valid:
 			return _reject_rule(action, resolution)
 		return _reject(action, result.reason_code, result.message)
-	if _is_terminal() and not _frontline_controller_is_consistent():
-		_terminal_frontline_control_unresolved = true
+	if _is_terminal():
+		_synchronize_frontline_controller()
 	var invariants := _validate_invariants()
 	if not invariants.valid:
 		return _abort_invalid("state_invariant", invariants)
@@ -119,8 +117,6 @@ func _authoritative_state() -> Dictionary:
 		"sequence": state.sequence,
 		"phase": state.phase,
 		"invalid_diagnostics": invalid_diagnostics.duplicate(true),
-		"debug_terminal_override": _debug_terminal_override,
-		"terminal_frontline_control_unresolved": _terminal_frontline_control_unresolved,
 	}
 
 func _abort_invalid(code: String, details: Dictionary = {}) -> ActionResult:
@@ -129,6 +125,8 @@ func _abort_invalid(code: String, details: Dictionary = {}) -> ActionResult:
 	if state.phase == "invalid":
 		return _reject(GameAction.create("", ""), "match_invalid", "Match is invalid")
 	var pre_abort_sequence := state.sequence
+	var pre_abort_state_hash := state_hash()
+	var pre_abort_snapshot := _invalid_replay_snapshot()
 	invalid_diagnostics = {
 		"code": code,
 		"details": details.duplicate(true),
@@ -138,10 +136,225 @@ func _abort_invalid(code: String, details: Dictionary = {}) -> ActionResult:
 	_emit(events, "match_invalid", invalid_diagnostics.duplicate(true))
 	event_history.append_array(events.duplicate(true))
 	if replay_log != null:
-		replay_log.record_invalid_terminal(code, details, pre_abort_sequence, state.sequence, state_hash())
+		replay_log.record_invalid_terminal(
+			code,
+			details,
+			pre_abort_sequence,
+			state.sequence,
+			state_hash(),
+			pre_abort_state_hash,
+			pre_abort_snapshot
+		)
 	var result := ActionResult.reject("match_invalid", "Match is invalid", state.snapshot_for("system"))
 	result.events = events
 	return result
+
+func _predicted_invalid_terminal_hash(code: String, details: Dictionary) -> String:
+	var transaction := _capture_transaction()
+	var diagnostics_before := invalid_diagnostics.duplicate(true)
+	invalid_diagnostics = {"code": code, "details": details.duplicate(true)}
+	state.phase = "invalid"
+	state.sequence += 1
+	var predicted_hash := state_hash()
+	_restore_transaction(transaction)
+	invalid_diagnostics = diagnostics_before
+	return predicted_hash
+
+func _invalid_replay_snapshot() -> Dictionary:
+	var cards := {}
+	var players := {}
+	for player_id in state.players:
+		var player: PlayerState = state.players[player_id]
+		players[player_id] = {
+			"id": player.id,
+			"nation": player.nation,
+			"headquarters": _snapshot_card_id(player.headquarters, cards),
+			"deck": _snapshot_card_ids(player.deck, cards),
+			"hand": _snapshot_card_ids(player.hand, cards),
+			"support_line": _snapshot_card_ids(player.support_line, cards),
+			"discard": _snapshot_card_ids(player.discard, cards),
+			"active_countermeasures": _snapshot_card_ids(player.active_countermeasures, cards),
+			"credit_slots": player.credit_slots,
+			"credit": player.credit,
+			"fatigue": player.fatigue,
+			"turns_started": player.turns_started,
+			"mulligan_used": player.mulligan_used,
+			"mulligan_confirmed": player.mulligan_confirmed,
+			"max_hand_size": player.max_hand_size,
+		}
+	return {
+		"players": players,
+		"cards": cards,
+		"active_player_id": state.active_player_id,
+		"starting_player_id": state.starting_player_id,
+		"turn": state.turn,
+		"frontline": _snapshot_card_ids(state.frontline, cards),
+		"frontline_controller_id": state.frontline_controller_id,
+		"winner_id": state.winner_id,
+		"seed": state.seed,
+		"rng_state": state.rng_state,
+		"rng_internal_state": _rng.state,
+		"sequence": state.sequence,
+		"phase": state.phase,
+		"invalid_diagnostics": invalid_diagnostics.duplicate(true),
+	}
+
+func _snapshot_card_id(card, cards: Dictionary) -> Variant:
+	if card == null:
+		return null
+	if not cards.has(card.instance_id):
+		cards[card.instance_id] = _card_state(card)
+	return card.instance_id
+
+func _snapshot_card_ids(collection: Array, cards: Dictionary) -> Array:
+	var ids: Array = []
+	for card in collection:
+		ids.append(_snapshot_card_id(card, cards))
+	return ids
+
+func _restore_invalid_replay_snapshot(snapshot: Dictionary) -> Dictionary:
+	var validation := _validate_invalid_replay_snapshot(snapshot)
+	if not validation.valid:
+		return validation
+	var cards := {}
+	for card_id in snapshot.cards:
+		var data: Dictionary = snapshot.cards[card_id]
+		var card: CardInstance = CardInstance.headquarters(data.definition_id, data.owner_id, data.instance_id) \
+			if data.category == "Headquarters" else CardInstance.from_definition(_definitions.get(data.definition_id, {}), data.owner_id, data.instance_id)
+		_apply_card_snapshot(card, data)
+		cards[card_id] = card
+	for player_id in state.players:
+		var player: PlayerState = state.players[player_id]
+		var player_snapshot: Dictionary = snapshot.players[player_id]
+		player.id = player_snapshot.id
+		player.nation = player_snapshot.nation
+		player.headquarters = cards[player_snapshot.headquarters]
+		player.deck = _cards_from_snapshot_ids(player_snapshot.deck, cards)
+		player.hand = _cards_from_snapshot_ids(player_snapshot.hand, cards)
+		player.support_line = _cards_from_snapshot_ids(player_snapshot.support_line, cards)
+		player.discard = _cards_from_snapshot_ids(player_snapshot.discard, cards)
+		player.active_countermeasures = _cards_from_snapshot_ids(player_snapshot.active_countermeasures, cards)
+		player.credit_slots = player_snapshot.credit_slots
+		player.credit = player_snapshot.credit
+		player.fatigue = player_snapshot.fatigue
+		player.turns_started = player_snapshot.turns_started
+		player.mulligan_used = player_snapshot.mulligan_used
+		player.mulligan_confirmed = player_snapshot.mulligan_confirmed
+		player.max_hand_size = player_snapshot.max_hand_size
+	state.active_player_id = snapshot.active_player_id
+	state.starting_player_id = snapshot.starting_player_id
+	state.turn = snapshot.turn
+	state.frontline = _cards_from_snapshot_ids(snapshot.frontline, cards)
+	state.frontline_controller_id = snapshot.frontline_controller_id
+	state.winner_id = snapshot.winner_id
+	state.seed = snapshot.seed
+	state.rng_state = snapshot.rng_state
+	_rng.state = snapshot.rng_internal_state
+	state.sequence = snapshot.sequence
+	state.phase = snapshot.phase
+	invalid_diagnostics = snapshot.invalid_diagnostics.duplicate(true)
+	_effect_engine.reset_after_rollback()
+	return {"valid": true}
+
+func _cards_from_snapshot_ids(ids: Array, cards: Dictionary) -> Array:
+	var restored: Array = []
+	for card_id in ids:
+		restored.append(cards[card_id] if card_id != null else null)
+	return restored
+
+func _apply_card_snapshot(card: CardInstance, data: Dictionary) -> void:
+	card.definition_id = data.definition_id
+	card.instance_id = data.instance_id
+	card.owner_id = data.owner_id
+	card.title = data.title
+	card.category = data.category
+	card.unit_type = data.unit_type
+	card.base_attack = data.base_attack
+	card.current_attack = data.current_attack
+	card.base_defense = data.base_defense
+	card.current_defense = data.current_defense
+	card.deployment_cost = data.deployment_cost
+	card.operation_cost = data.operation_cost
+	card.keywords = data.keywords.duplicate(true)
+	card.abilities = data.abilities.duplicate(true)
+	card.zone = data.zone
+	card.slot = data.slot
+	card.operations_used = data.operations_used
+	card.operation_chain = data.operation_chain
+	card.smokescreen_revealed = data.smokescreen_revealed
+	card.deployed_turn = data.deployed_turn
+	card.modifiers = data.modifiers.duplicate(true)
+	card.statuses = data.statuses.duplicate(true)
+	card.face_down = data.face_down
+	card.countermeasure_active = data.countermeasure_active
+	card.countermeasure_activation_cost = data.countermeasure_activation_cost
+
+func _validate_invalid_replay_snapshot(snapshot: Dictionary) -> Dictionary:
+	if not (snapshot is Dictionary) or not (snapshot.get("players", null) is Dictionary) or not (snapshot.get("cards", null) is Dictionary):
+		return {"valid": false, "code": "invalid_snapshot_shape"}
+	for field in ["active_player_id", "starting_player_id", "frontline_controller_id", "winner_id", "phase"]:
+		if typeof(snapshot.get(field, null)) != TYPE_STRING:
+			return {"valid": false, "code": "invalid_snapshot_string"}
+	for field in ["turn", "seed", "rng_state", "rng_internal_state", "sequence"]:
+		if typeof(snapshot.get(field, null)) != TYPE_INT:
+			return {"valid": false, "code": "invalid_snapshot_number"}
+	for field in ["frontline", "invalid_diagnostics"]:
+		if not (snapshot.get(field, null) is Array) and field == "frontline":
+			return {"valid": false, "code": "invalid_snapshot_frontline"}
+		if not (snapshot.get(field, null) is Dictionary) and field == "invalid_diagnostics":
+			return {"valid": false, "code": "invalid_snapshot_diagnostics"}
+	for player_id in ["player", "opponent"]:
+		if not snapshot.players.has(player_id) or not _valid_player_snapshot(snapshot.players[player_id], snapshot.cards):
+			return {"valid": false, "code": "invalid_snapshot_player"}
+	if not _valid_card_id_array(snapshot.frontline, snapshot.cards):
+		return {"valid": false, "code": "invalid_snapshot_frontline"}
+	for card_id in snapshot.cards:
+		if typeof(card_id) != TYPE_STRING or not _valid_card_snapshot(snapshot.cards[card_id]):
+			return {"valid": false, "code": "invalid_snapshot_card"}
+	return {"valid": true}
+
+func _valid_player_snapshot(data, cards: Dictionary) -> bool:
+	if not (data is Dictionary):
+		return false
+	for field in ["id", "nation", "headquarters"]:
+		if typeof(data.get(field, null)) != TYPE_STRING:
+			return false
+	if not cards.has(data.headquarters):
+		return false
+	for field in ["deck", "hand", "support_line", "discard", "active_countermeasures"]:
+		if not _valid_card_id_array(data.get(field, null), cards):
+			return false
+	for field in ["credit_slots", "credit", "fatigue", "turns_started", "max_hand_size"]:
+		if typeof(data.get(field, null)) != TYPE_INT:
+			return false
+	return typeof(data.get("mulligan_used", null)) == TYPE_BOOL and typeof(data.get("mulligan_confirmed", null)) == TYPE_BOOL
+
+func _valid_card_id_array(value, cards: Dictionary) -> bool:
+	if not (value is Array):
+		return false
+	for card_id in value:
+		if card_id != null and (typeof(card_id) != TYPE_STRING or not cards.has(card_id)):
+			return false
+	return true
+
+func _valid_card_snapshot(data) -> bool:
+	if not (data is Dictionary):
+		return false
+	for field in ["definition_id", "instance_id", "owner_id", "title", "category", "unit_type", "zone"]:
+		if typeof(data.get(field, null)) != TYPE_STRING:
+			return false
+	for field in ["base_attack", "current_attack", "base_defense", "current_defense", "deployment_cost", "operation_cost", "slot", "operations_used", "operation_chain", "deployed_turn", "countermeasure_activation_cost"]:
+		if typeof(data.get(field, null)) != TYPE_INT:
+			return false
+	for field in ["keywords", "abilities", "modifiers"]:
+		if not (data.get(field, null) is Array):
+			return false
+	if not (data.get("statuses", null) is Dictionary):
+		return false
+	for field in ["smokescreen_revealed", "face_down", "countermeasure_active"]:
+		if typeof(data.get(field, null)) != TYPE_BOOL:
+			return false
+	return true
 
 func _validate_invariants() -> Dictionary:
 	if state == null:
@@ -207,7 +420,7 @@ func _validate_invariants() -> Dictionary:
 			frontline_owner_id = frontline_card.owner_id
 		elif frontline_owner_id != frontline_card.owner_id:
 			return {"valid": false, "code": "mixed_frontline_owners"}
-	if not _frontline_validation_is_exempt() and frontline_owner_id != state.frontline_controller_id:
+	if frontline_owner_id != state.frontline_controller_id:
 		return {
 			"valid": false,
 			"code": "invalid_frontline_controller",
@@ -216,17 +429,13 @@ func _validate_invariants() -> Dictionary:
 		}
 	return _validate_terminal_invariants()
 
-func _frontline_validation_is_exempt() -> bool:
-	return _debug_terminal_override or _terminal_frontline_control_unresolved \
-		or (state.phase == "invalid" and not invalid_diagnostics.is_empty())
-
-func _frontline_controller_is_consistent() -> bool:
+func _synchronize_frontline_controller() -> void:
 	var controller_id := ""
 	for card in state.frontline:
 		if card != null:
 			controller_id = card.owner_id
 			break
-	return controller_id == state.frontline_controller_id
+	state.frontline_controller_id = controller_id
 
 func _validate_card_collection(
 	cards: Array,
@@ -300,7 +509,7 @@ func _validate_terminal_invariants() -> Dictionary:
 		if state.players[state.winner_id].headquarters.current_defense <= 0:
 			return {"valid": false, "code": "terminal_headquarters_contradiction"}
 		var loser_id := _other_player_id(state.winner_id)
-		if not _debug_terminal_override and state.players[loser_id].headquarters.current_defense != 0:
+		if state.players[loser_id].headquarters.current_defense != 0:
 			return {"valid": false, "code": "terminal_loser_headquarters_not_zero"}
 		return {"valid": true}
 	if not state.winner_id.is_empty():
@@ -438,8 +647,6 @@ func _capture_transaction() -> Dictionary:
 		"rng_internal_state": _rng.state,
 		"sequence": state.sequence,
 		"phase": state.phase,
-		"debug_terminal_override": _debug_terminal_override,
-		"terminal_frontline_control_unresolved": _terminal_frontline_control_unresolved,
 		"players": player_snapshots,
 		"cards": card_snapshots,
 	}
@@ -475,8 +682,6 @@ func _restore_transaction(transaction: Dictionary) -> void:
 	state.rng_state = transaction.rng_state
 	state.sequence = transaction.sequence
 	state.phase = transaction.phase
-	_debug_terminal_override = transaction.debug_terminal_override
-	_terminal_frontline_control_unresolved = transaction.terminal_frontline_control_unresolved
 	_rng.state = transaction.rng_internal_state
 	for player_id in transaction.players:
 		var player: PlayerState = state.players[player_id]
@@ -710,8 +915,6 @@ func _move_unit(action: GameAction) -> ActionResult:
 		"target_ids": [],
 	}, events)
 	if _is_terminal() or not _is_current_frontline_unit(unit, slot):
-		if _is_terminal():
-			_terminal_frontline_control_unresolved = true
 		return _accept(action, events)
 	_update_frontline_control(events, unit, player.id)
 	return _accept(action, events)
@@ -1198,10 +1401,7 @@ func _resolve_trigger(trigger: String, context: Dictionary, events: Array) -> vo
 	if _is_terminal():
 		return
 	if _debug_trigger_hook.is_valid():
-		var phase_before_hook := state.phase
 		_debug_trigger_hook.call(trigger, context, events)
-		if phase_before_hook != "complete" and state.phase == "complete":
-			_debug_terminal_override = true
 	if _effect_engine != null:
 		events.append_array(_effect_engine.resolve_trigger(trigger, context))
 
@@ -1209,10 +1409,7 @@ func _expire_temporary_modifiers(player: PlayerState, events: Array = []) -> voi
 	if _is_terminal():
 		return
 	if _debug_modifier_expiry_hook.is_valid():
-		var phase_before_hook := state.phase
 		_debug_modifier_expiry_hook.call(player.id)
-		if phase_before_hook != "complete" and state.phase == "complete":
-			_debug_terminal_override = true
 	if _is_terminal():
 		return
 	var frontline_source: CardInstance = null

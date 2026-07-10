@@ -1153,7 +1153,7 @@ static func _test_combat_and_move_reactions_stop_stale_continuations(t) -> void:
 		"move_unit", "player", mover.instance_id, [], {"zone": "frontline", "slot": 0}, move_controller.state.sequence
 	))
 	t.assert_true(moved.accepted, "terminal move reaction accepts the movement action")
-	t.assert_eq(move_controller.state.frontline_controller_id, "", "terminal move skips Frontline control recalculation")
+	t.assert_eq(move_controller.state.frontline_controller_id, "player", "terminal move preserves Frontline controller consistency")
 	t.assert_true(not _event_types(moved.events).has("frontline_changed"), "terminal move emits no post-match Frontline event")
 
 

@@ -27,7 +27,15 @@ func record(action: GameAction, result_sequence: int) -> void:
 	})
 
 
-func record_invalid_terminal(code: String, details: Dictionary, pre_abort_sequence: int, result_sequence: int, state_hash: String) -> void:
+func record_invalid_terminal(
+	code: String,
+	details: Dictionary,
+	pre_abort_sequence: int,
+	result_sequence: int,
+	state_hash: String,
+	pre_abort_state_hash: String,
+	state_snapshot: Dictionary
+) -> void:
 	terminal_result = {
 		"type": "invalid",
 		"pre_abort_sequence": pre_abort_sequence,
@@ -37,6 +45,8 @@ func record_invalid_terminal(code: String, details: Dictionary, pre_abort_sequen
 			"details": details.duplicate(true),
 		},
 		"state_hash": state_hash,
+		"pre_abort_state_hash": pre_abort_state_hash,
+		"state_snapshot": state_snapshot.duplicate(true),
 	}
 
 
@@ -120,13 +130,22 @@ func replay(card_definitions: Dictionary):
 
 
 func _replay_invalid_terminal(controller):
-	if controller.state.sequence != terminal_result.pre_abort_sequence:
+	var restored: Dictionary = controller._restore_invalid_replay_snapshot(terminal_result.state_snapshot)
+	if not restored.valid:
+		controller._abort_invalid("replay_invalid", {"reason": "invalid_terminal_snapshot"})
+		return controller
+	if controller.state.sequence != terminal_result.pre_abort_sequence \
+		or controller.state_hash() != terminal_result.pre_abort_state_hash:
 		controller._abort_invalid("replay_invalid_terminal_sequence_diverged", {
 			"expected_sequence": terminal_result.pre_abort_sequence,
 			"actual_sequence": controller.state.sequence,
 		})
 		return controller
 	var diagnostic: Dictionary = terminal_result.diagnostic
+	if terminal_result.result_sequence != terminal_result.pre_abort_sequence + 1 \
+		or controller._predicted_invalid_terminal_hash(diagnostic.code, diagnostic.details) != terminal_result.state_hash:
+		controller._abort_invalid("replay_invalid", {"reason": "invalid_terminal_metadata"})
+		return controller
 	controller._abort_invalid(diagnostic.code, diagnostic.details)
 	return controller
 
@@ -188,11 +207,12 @@ static func _validate_terminal_result(data) -> Dictionary:
 			return {"valid": false, "code": "invalid_terminal_state"}
 		return {"valid": true}
 	if data.type == "invalid":
-		for field in ["pre_abort_sequence", "result_sequence", "diagnostic", "state_hash"]:
+		for field in ["pre_abort_sequence", "result_sequence", "diagnostic", "state_hash", "pre_abort_state_hash", "state_snapshot"]:
 			if not data.has(field):
 				return {"valid": false, "code": "missing_invalid_terminal_%s" % field}
 		if typeof(data.pre_abort_sequence) != TYPE_INT or typeof(data.result_sequence) != TYPE_INT \
-			or typeof(data.state_hash) != TYPE_STRING or not (data.diagnostic is Dictionary):
+			or typeof(data.state_hash) != TYPE_STRING or typeof(data.pre_abort_state_hash) != TYPE_STRING \
+			or not (data.diagnostic is Dictionary) or not (data.state_snapshot is Dictionary):
 			return {"valid": false, "code": "invalid_invalid_terminal"}
 		if not data.diagnostic.has("code") or not data.diagnostic.has("details") \
 			or typeof(data.diagnostic.code) != TYPE_STRING or not (data.diagnostic.details is Dictionary):

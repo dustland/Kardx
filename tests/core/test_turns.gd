@@ -192,6 +192,7 @@ static func _test_terminal_end_trigger_stops_turn_transition(t) -> void:
 	controller.debug_set_trigger_hook(func(trigger: String, context: Dictionary, _events: Array) -> void:
 		if trigger == "turn_end":
 			controller.state.winner_id = "opponent" if str(context.player_id) == "player" else "player"
+			controller.state.players[str(context.player_id)].headquarters.current_defense = 0
 			controller.state.phase = "complete"
 	)
 	var result = controller.submit_action(GameAction.create("end_turn", ending_player_id, "", [], {}, controller.state.sequence))
@@ -211,6 +212,7 @@ static func _test_terminal_modifier_expiry_stops_turn_transition(t) -> void:
 		return
 	controller.debug_set_modifier_expiry_hook(func(_player_id: String) -> void:
 		controller.state.winner_id = "opponent" if ending_player_id == "player" else "player"
+		controller.state.players[ending_player_id].headquarters.current_defense = 0
 		controller.state.phase = "complete"
 	)
 	var result = controller.submit_action(GameAction.create("end_turn", ending_player_id, "", [], {}, controller.state.sequence))
