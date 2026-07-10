@@ -7,6 +7,7 @@ const SUITES := [
 	preload("res://tests/core/test_setup.gd"),
 	preload("res://tests/core/test_turns.gd"),
 	preload("res://tests/core/test_combat.gd"),
+	preload("res://tests/core/test_effects.gd"),
 ]
 
 func _init() -> void:
@@ -14,5 +15,5 @@ func _init() -> void:
 	for suite in SUITES:
 		suite.run(test_case)
 	if test_case.finish() == 0:
-		print("PASS contracts, state, setup, turns, and combat")
+		print("PASS contracts, state, setup, turns, combat, and effects")
 	quit(test_case.finish())

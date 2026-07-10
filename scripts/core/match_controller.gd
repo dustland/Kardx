@@ -4,6 +4,7 @@ extends RefCounted
 const ActionResult = preload("res://scripts/core/action_result.gd")
 const CardInstance = preload("res://scripts/core/card_instance.gd")
 const CombatRules = preload("res://scripts/core/combat_rules.gd")
+const EffectEngine = preload("res://scripts/core/effect_engine.gd")
 const GameAction = preload("res://scripts/core/game_action.gd")
 const GameConstants = preload("res://scripts/core/game_constants.gd")
 const MatchState = preload("res://scripts/core/match_state.gd")
@@ -13,6 +14,7 @@ var state: MatchState
 var initial_deck_ids: Dictionary
 var _definitions: Dictionary
 var _rng := RandomNumberGenerator.new()
+var _effect_engine: EffectEngine
 var _debug_trigger_hook: Callable
 var _debug_modifier_expiry_hook: Callable
 
@@ -27,6 +29,7 @@ static func create(card_definitions: Dictionary, player_deck: Array, opponent_de
 	var player := controller._create_player("player", "p", player_deck)
 	var opponent := controller._create_player("opponent", "o", opponent_deck)
 	controller.state = MatchState.create(player, opponent, seed)
+	controller._effect_engine = EffectEngine.create(controller.state, controller._definitions, controller._rng)
 	controller._shuffle_deck(player.deck)
 	controller._shuffle_deck(opponent.deck)
 	return controller
@@ -51,6 +54,12 @@ func submit_action(action: GameAction) -> ActionResult:
 			return _attack_unit(action)
 		"attack_hq":
 			return _attack_hq(action)
+		"play_order":
+			return _play_order(action)
+		"toggle_countermeasure":
+			return _toggle_countermeasure(action)
+		"activate_ability":
+			return _activate_ability(action)
 		_:
 			return _reject(action, "unknown_action", "Unknown action")
 
@@ -198,6 +207,7 @@ func _deploy_unit(action: GameAction) -> ActionResult:
 		"zone": "support_line",
 		"slot": slot,
 	})
+	_resolve_trigger("deploy", {"source_id": card.instance_id, "actor_id": player.id, "target_ids": []}, events)
 	return _accept(action, events)
 
 func _move_unit(action: GameAction) -> ActionResult:
@@ -245,6 +255,125 @@ func _move_unit(action: GameAction) -> ActionResult:
 			"previous_controller_id": previous_controller,
 			"controller_id": player.id,
 		})
+	return _accept(action, events)
+
+func _play_order(action: GameAction) -> ActionResult:
+	var validation := _validate_turn_action(action)
+	if not validation.valid:
+		return _reject_rule(action, validation)
+	var player: PlayerState = state.players[action.actor_id]
+	var order: CardInstance = _card_in_hand(player, action.source_id)
+	if order == null:
+		return _reject(action, "source_not_in_hand", "Order is not in hand")
+	if order.category != "Order":
+		return _reject(action, "invalid_card_type", "Only Orders can be played")
+	if player.credit < order.deployment_cost:
+		return _reject(action, "insufficient_credit", "Not enough Credit")
+	var context := {
+		"source_id": order.instance_id,
+		"actor_id": player.id,
+		"target_ids": action.target_ids.duplicate(),
+	}
+	var effect_validation := _effect_engine.validate_trigger("play_order", context)
+	if not effect_validation.valid:
+		return _reject_rule(action, effect_validation)
+
+	var events: Array = []
+	_spend_credit(player, order.deployment_cost, "order", order.instance_id, events)
+	var pending_event := {
+		"type": "order_played",
+		"order_id": order.instance_id,
+		"actor_id": player.id,
+		"target_ids": action.target_ids.duplicate(),
+		"cancelled": false,
+	}
+	_emit(events, "order_played", pending_event)
+	var counter_events := _effect_engine.resolve_trigger("order_played", {
+		"source_id": order.instance_id,
+		"actor_id": player.id,
+		"target_ids": action.target_ids.duplicate(),
+		"event": pending_event,
+	})
+	events.append_array(counter_events)
+	if not bool(pending_event.get("cancelled", false)):
+		events.append_array(_effect_engine.resolve_trigger("play_order", context))
+	player.hand.erase(order)
+	order.zone = "discard"
+	order.slot = -1
+	player.discard.append(order)
+	_emit(events, "card_discarded", {"player_id": player.id, "instance_id": order.instance_id})
+	return _accept(action, events)
+
+
+func _toggle_countermeasure(action: GameAction) -> ActionResult:
+	var validation := _validate_turn_action(action)
+	if not validation.valid:
+		return _reject_rule(action, validation)
+	var player: PlayerState = state.players[action.actor_id]
+	var countermeasure: CardInstance = _card_in_hand(player, action.source_id)
+	if countermeasure == null:
+		return _reject(action, "source_not_in_hand", "Countermeasure is not in hand")
+	if countermeasure.category != "Countermeasure":
+		return _reject(action, "invalid_card_type", "Only Countermeasures can be activated")
+	var events: Array = []
+	if countermeasure.countermeasure_active:
+		countermeasure.countermeasure_active = false
+		player.active_countermeasures.erase(countermeasure)
+		player.credit += countermeasure.countermeasure_activation_cost
+		_emit(events, "credit_refunded", {
+			"player_id": player.id,
+			"source_id": countermeasure.instance_id,
+			"amount": countermeasure.countermeasure_activation_cost,
+			"credit": player.credit,
+		})
+		countermeasure.countermeasure_activation_cost = 0
+		_emit(events, "countermeasure_deactivated", {"player_id": player.id, "instance_id": countermeasure.instance_id})
+		return _accept(action, events)
+	if player.credit < countermeasure.deployment_cost:
+		return _reject(action, "insufficient_credit", "Not enough Credit")
+	countermeasure.countermeasure_activation_cost = countermeasure.deployment_cost
+	_spend_credit(player, countermeasure.countermeasure_activation_cost, "countermeasure", countermeasure.instance_id, events)
+	countermeasure.countermeasure_active = true
+	countermeasure.face_down = true
+	player.active_countermeasures.append(countermeasure)
+	_emit(events, "countermeasure_activated", {"player_id": player.id, "instance_id": countermeasure.instance_id})
+	return _accept(action, events)
+
+
+func _activate_ability(action: GameAction) -> ActionResult:
+	var validation := _validate_turn_action(action)
+	if not validation.valid:
+		return _reject_rule(action, validation)
+	var source: CardInstance = CombatRules.find_card(state, action.source_id)
+	if source == null:
+		return _reject(action, "card_not_found", "Ability source was not found")
+	if source.owner_id != action.actor_id:
+		return _reject(action, "not_owner", "Ability source belongs to another player")
+	var ability_id := str(action.payload.get("ability_id", ""))
+	var ability: Dictionary = {}
+	for candidate_value in source.abilities:
+		var candidate: Dictionary = candidate_value
+		if str(candidate.get("id", "")) == ability_id and str(candidate.get("trigger", "")) == "manual":
+			ability = candidate
+			break
+	if ability.is_empty():
+		return _reject(action, "ability_not_found", "Manual ability was not found")
+	var player: PlayerState = state.players[action.actor_id]
+	var credit_cost := int(ability.get("credit_cost", 0))
+	if player.credit < credit_cost:
+		return _reject(action, "insufficient_credit", "Not enough Credit")
+	var context := {
+		"source_id": source.instance_id,
+		"actor_id": player.id,
+		"target_ids": action.target_ids.duplicate(),
+		"ability_id": ability_id,
+	}
+	var effect_validation := _effect_engine.validate_trigger("manual", context)
+	if not effect_validation.valid:
+		return _reject_rule(action, effect_validation)
+	var events: Array = []
+	_spend_credit(player, credit_cost, "ability", source.instance_id, events)
+	events.append_array(_effect_engine.resolve_trigger("manual", context))
 	return _accept(action, events)
 
 func _attack_unit(action: GameAction) -> ActionResult:
@@ -469,6 +598,7 @@ func _destroy_if_dead(card: CardInstance, events: Array) -> void:
 		"player_id": player.id,
 		"instance_id": card.instance_id,
 	})
+	_resolve_trigger("death", {"source_id": card.instance_id, "actor_id": card.owner_id, "target_ids": []}, events)
 
 func _update_frontline_control(events: Array) -> void:
 	var controller_id := ""
@@ -501,6 +631,8 @@ func _resolve_trigger(trigger: String, context: Dictionary, events: Array) -> vo
 		return
 	if _debug_trigger_hook.is_valid():
 		_debug_trigger_hook.call(trigger, context, events)
+	if _effect_engine != null:
+		events.append_array(_effect_engine.resolve_trigger(trigger, context))
 
 func _expire_temporary_modifiers(player: PlayerState) -> void:
 	if _is_terminal():

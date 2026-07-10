@@ -32,6 +32,7 @@ var modifiers: Array = []
 var statuses: Dictionary = {}
 var face_down: bool = false
 var countermeasure_active: bool = false
+var countermeasure_activation_cost: int = 0
 
 static func from_definition(definition: Dictionary, card_owner_id: String, card_instance_id: String) -> CardInstance:
 	var card: CardInstance = load("res://scripts/core/card_instance.gd").new()
