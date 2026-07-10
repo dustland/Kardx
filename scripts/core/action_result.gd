@@ -7,7 +7,7 @@ var message: String
 var events: Array
 var snapshot: Dictionary
 
-static func accept(result_events: Array = [], state_snapshot: Dictionary = {}):
+static func accept(result_events: Array = [], state_snapshot: Dictionary = {}) -> ActionResult:
 	var result = load("res://scripts/core/action_result.gd").new()
 	result.accepted = true
 	result.reason_code = ""
@@ -16,7 +16,7 @@ static func accept(result_events: Array = [], state_snapshot: Dictionary = {}):
 	result.snapshot = state_snapshot.duplicate(true)
 	return result
 
-static func reject(code: String, rejection_message: String, state_snapshot: Dictionary = {}):
+static func reject(code: String, rejection_message: String, state_snapshot: Dictionary = {}) -> ActionResult:
 	var result = load("res://scripts/core/action_result.gd").new()
 	result.accepted = false
 	result.reason_code = code

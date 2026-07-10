@@ -8,7 +8,7 @@ var target_ids: Array[String]
 var payload: Dictionary
 var expected_sequence: int
 
-static func create(action_type: String, actor: String, source: String = "", targets: Array[String] = [], data: Dictionary = {}, sequence: int = 0):
+static func create(action_type: String, actor: String, source: String = "", targets: Array[String] = [], data: Dictionary = {}, sequence: int = 0) -> GameAction:
 	var action = load("res://scripts/core/game_action.gd").new()
 	action.type = action_type
 	action.actor_id = actor
