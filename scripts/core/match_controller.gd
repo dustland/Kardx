@@ -37,6 +37,18 @@ static func create(card_definitions: Dictionary, player_deck: Array, opponent_de
 func submit_action(action: GameAction) -> ActionResult:
 	if action.expected_sequence > 0 and action.expected_sequence != state.sequence:
 		return _reject(action, "stale_action", "State changed")
+	var transaction := _capture_transaction()
+	_effect_engine.begin_action()
+	var result := _dispatch_action(action)
+	var resolution := _effect_engine.finish_action()
+	if not result.accepted or not resolution.valid:
+		_restore_transaction(transaction)
+		if not resolution.valid:
+			return _reject_rule(action, resolution)
+		return _reject(action, result.reason_code, result.message)
+	return result
+
+func _dispatch_action(action: GameAction) -> ActionResult:
 	match action.type:
 		"start_match":
 			return _start_match(action)
@@ -62,6 +74,109 @@ func submit_action(action: GameAction) -> ActionResult:
 			return _activate_ability(action)
 		_:
 			return _reject(action, "unknown_action", "Unknown action")
+
+func _capture_transaction() -> Dictionary:
+	var player_snapshots := {}
+	var card_snapshots: Array[Dictionary] = []
+	var seen_cards := {}
+	for player_id in state.players:
+		var player: PlayerState = state.players[player_id]
+		player_snapshots[player_id] = {
+			"deck": player.deck.duplicate(),
+			"hand": player.hand.duplicate(),
+			"support_line": player.support_line.duplicate(),
+			"discard": player.discard.duplicate(),
+			"active_countermeasures": player.active_countermeasures.duplicate(),
+			"credit_slots": player.credit_slots,
+			"credit": player.credit,
+			"fatigue": player.fatigue,
+			"turns_started": player.turns_started,
+			"mulligan_used": player.mulligan_used,
+			"mulligan_confirmed": player.mulligan_confirmed,
+			"max_hand_size": player.max_hand_size,
+		}
+		_capture_card(player.headquarters, card_snapshots, seen_cards)
+		for collection in [player.deck, player.hand, player.support_line, player.discard, state.frontline]:
+			for card in collection:
+				_capture_card(card, card_snapshots, seen_cards)
+	return {
+		"active_player_id": state.active_player_id,
+		"starting_player_id": state.starting_player_id,
+		"turn": state.turn,
+		"frontline": state.frontline.duplicate(),
+		"frontline_controller_id": state.frontline_controller_id,
+		"winner_id": state.winner_id,
+		"rng_state": state.rng_state,
+		"rng_internal_state": _rng.state,
+		"sequence": state.sequence,
+		"phase": state.phase,
+		"players": player_snapshots,
+		"cards": card_snapshots,
+	}
+
+func _capture_card(card, snapshots: Array[Dictionary], seen: Dictionary) -> void:
+	if card == null or seen.has(card):
+		return
+	seen[card] = true
+	snapshots.append({
+		"card": card,
+		"current_attack": card.current_attack,
+		"current_defense": card.current_defense,
+		"zone": card.zone,
+		"slot": card.slot,
+		"operations_used": card.operations_used,
+		"operation_chain": card.operation_chain,
+		"smokescreen_revealed": card.smokescreen_revealed,
+		"deployed_turn": card.deployed_turn,
+		"modifiers": card.modifiers.duplicate(true),
+		"statuses": card.statuses.duplicate(true),
+		"face_down": card.face_down,
+		"countermeasure_active": card.countermeasure_active,
+		"countermeasure_activation_cost": card.countermeasure_activation_cost,
+	})
+
+func _restore_transaction(transaction: Dictionary) -> void:
+	state.active_player_id = transaction.active_player_id
+	state.starting_player_id = transaction.starting_player_id
+	state.turn = transaction.turn
+	state.frontline = transaction.frontline.duplicate()
+	state.frontline_controller_id = transaction.frontline_controller_id
+	state.winner_id = transaction.winner_id
+	state.rng_state = transaction.rng_state
+	state.sequence = transaction.sequence
+	state.phase = transaction.phase
+	_rng.state = transaction.rng_internal_state
+	for player_id in transaction.players:
+		var player: PlayerState = state.players[player_id]
+		var snapshot: Dictionary = transaction.players[player_id]
+		player.deck = snapshot.deck.duplicate()
+		player.hand = snapshot.hand.duplicate()
+		player.support_line = snapshot.support_line.duplicate()
+		player.discard = snapshot.discard.duplicate()
+		player.active_countermeasures = snapshot.active_countermeasures.duplicate()
+		player.credit_slots = snapshot.credit_slots
+		player.credit = snapshot.credit
+		player.fatigue = snapshot.fatigue
+		player.turns_started = snapshot.turns_started
+		player.mulligan_used = snapshot.mulligan_used
+		player.mulligan_confirmed = snapshot.mulligan_confirmed
+		player.max_hand_size = snapshot.max_hand_size
+	for snapshot in transaction.cards:
+		var card = snapshot.card
+		card.current_attack = snapshot.current_attack
+		card.current_defense = snapshot.current_defense
+		card.zone = snapshot.zone
+		card.slot = snapshot.slot
+		card.operations_used = snapshot.operations_used
+		card.operation_chain = snapshot.operation_chain
+		card.smokescreen_revealed = snapshot.smokescreen_revealed
+		card.deployed_turn = snapshot.deployed_turn
+		card.modifiers = snapshot.modifiers.duplicate(true)
+		card.statuses = snapshot.statuses.duplicate(true)
+		card.face_down = snapshot.face_down
+		card.countermeasure_active = snapshot.countermeasure_active
+		card.countermeasure_activation_cost = snapshot.countermeasure_activation_cost
+	_effect_engine.reset_after_rollback()
 
 func _create_player(player_id: String, instance_prefix: String, deck_ids: Array) -> PlayerState:
 	var cards: Array = []
@@ -215,6 +330,8 @@ func _deploy_unit(action: GameAction) -> ActionResult:
 		"slot": slot,
 	})
 	_resolve_trigger("deploy", {"source_id": card.instance_id, "actor_id": player.id, "target_ids": []}, events)
+	if not _effect_engine.last_resolution.valid:
+		return _reject_rule(action, _effect_engine.last_resolution)
 	return _accept(action, events)
 
 func _move_unit(action: GameAction) -> ActionResult:
@@ -392,6 +509,8 @@ func _activate_ability(action: GameAction) -> ActionResult:
 	var events: Array = []
 	_spend_credit(player, credit_cost, "ability", source.instance_id, events)
 	events.append_array(_effect_engine.resolve_trigger("manual", context))
+	if not _effect_engine.last_resolution.valid:
+		return _reject_rule(action, _effect_engine.last_resolution)
 	return _accept(action, events)
 
 func _attack_unit(action: GameAction) -> ActionResult:
@@ -472,6 +591,21 @@ func _attack_hq(action: GameAction) -> ActionResult:
 	if not validation.valid:
 		return _reject_rule(action, validation)
 	var defender: PlayerState = state.players[defender_player_id]
+	var pending_event := {
+		"type": "attack",
+		"actor_id": action.actor_id,
+		"target_ids": [defender.headquarters.instance_id],
+		"cancelled": false,
+	}
+	var reaction_context := {
+		"source_id": attacker.instance_id,
+		"actor_id": action.actor_id,
+		"target_ids": [defender.headquarters.instance_id],
+		"event": pending_event,
+	}
+	var reaction_validation := _effect_engine.validate_trigger("attack", reaction_context)
+	if not reaction_validation.valid:
+		return _reject_rule(action, reaction_validation)
 
 	var events: Array = []
 	_reserve_attack_operation(attacker, events)
@@ -480,7 +614,20 @@ func _attack_hq(action: GameAction) -> ActionResult:
 		"defender_id": defender.headquarters.instance_id,
 		"target_type": "headquarters",
 	})
+	_resolve_trigger("attack", reaction_context, events)
+	if not _effect_engine.last_resolution.valid:
+		return _reject_rule(action, _effect_engine.last_resolution)
+	if bool(pending_event.get("cancelled", false)):
+		return _accept(action, events)
 	_deal_combat_damage(attacker, defender.headquarters, attacker.current_attack, "attack", events)
+	if defender.headquarters.current_defense <= 0:
+		_resolve_trigger("hq_lethal", {
+			"source_id": defender.headquarters.instance_id,
+			"actor_id": action.actor_id,
+			"target_ids": [defender.headquarters.instance_id],
+		}, events)
+		if not _effect_engine.last_resolution.valid:
+			return _reject_rule(action, _effect_engine.last_resolution)
 	_check_headquarters_death(defender)
 	if _is_terminal():
 		_emit(events, "match_ended", {

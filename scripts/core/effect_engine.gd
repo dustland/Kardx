@@ -10,6 +10,9 @@ var rng: RandomNumberGenerator
 var queue: Array[Dictionary] = []
 var last_resolution: Dictionary = {"valid": true, "events": []}
 var _resolving_actor_id: String = ""
+var _action_active: bool = false
+var _effect_events_used: int = 0
+var _action_failure: Dictionary = {"valid": true}
 
 
 static func create(match_state, card_definitions: Dictionary, match_rng: RandomNumberGenerator) -> EffectEngine:
@@ -21,41 +24,90 @@ static func create(match_state, card_definitions: Dictionary, match_rng: RandomN
 
 
 func validate_trigger(trigger: String, context: Dictionary) -> Dictionary:
-	var prepared := _prepare_trigger(trigger, context)
+	if not _action_failure.valid:
+		return _action_failure
+	var prepared := _prepare_trigger(trigger, context, false)
 	if not prepared.valid:
 		return prepared
-	if prepared.queue.size() > GameConstants.MAX_EFFECT_EVENTS:
+	if _effect_events_used + prepared.queue.size() > GameConstants.MAX_EFFECT_EVENTS:
 		return {"valid": false, "code": "effect_limit"}
 	return {"valid": true}
 
 
 func resolve_trigger(trigger: String, context: Dictionary) -> Array[Dictionary]:
+	var owns_action := not _action_active
+	if owns_action:
+		begin_action()
+	if not _action_failure.valid:
+		last_resolution = _action_failure
+		return []
 	queue.clear()
-	var prepared := _prepare_trigger(trigger, context)
+	var prepared := _prepare_trigger(trigger, context, true)
 	if not prepared.valid:
-		last_resolution = {"valid": false, "code": prepared.code, "events": []}
+		_fail_action(str(prepared.get("code", "invalid_effect")))
+		last_resolution = _action_failure
+		if owns_action:
+			finish_action()
 		return []
 	queue = prepared.queue
 	var drained := drain_queue()
 	last_resolution = drained
-	if not drained.valid:
+	if owns_action and not drained.valid:
 		state.phase = "invalid"
+	if owns_action:
+		finish_action()
 	return drained.events
+
+
+func begin_action() -> void:
+	_action_active = true
+	_effect_events_used = 0
+	_action_failure = {"valid": true}
+	last_resolution = {"valid": true, "events": []}
+	queue.clear()
+
+
+func finish_action() -> Dictionary:
+	var result := _action_failure.duplicate(true)
+	_action_active = false
+	queue.clear()
+	return result
+
+
+func reset_after_rollback() -> void:
+	_action_active = false
+	_effect_events_used = 0
+	_action_failure = {"valid": true}
+	last_resolution = {"valid": true, "events": []}
+	queue.clear()
 
 
 func drain_queue() -> Dictionary:
 	var emitted: Array[Dictionary] = []
 	while not queue.is_empty():
-		if emitted.size() >= GameConstants.MAX_EFFECT_EVENTS:
+		if _effect_events_used >= GameConstants.MAX_EFFECT_EVENTS:
+			_fail_action("effect_limit")
 			return {"valid": false, "code": "effect_limit", "events": emitted}
 		var effect: Dictionary = queue.pop_front()
+		var validation := _validate_effect(effect, true)
+		if not validation.valid:
+			_fail_action(str(validation.get("code", "invalid_effect")))
+			return {"valid": false, "code": _action_failure.code, "events": emitted}
 		var event := _apply_effect(effect)
+		if not _action_failure.valid:
+			return {"valid": false, "code": _action_failure.code, "events": emitted}
 		if not event.is_empty():
 			emitted.append(event)
+			_effect_events_used += 1
 	return {"valid": true, "events": emitted}
 
 
-func _prepare_trigger(trigger: String, context: Dictionary) -> Dictionary:
+func _fail_action(code: String) -> void:
+	if _action_failure.valid:
+		_action_failure = {"valid": false, "code": code}
+
+
+func _prepare_trigger(trigger: String, context: Dictionary, resolve_random: bool = false) -> Dictionary:
 	var queued: Array[Dictionary] = []
 	for source in _trigger_sources(trigger, context):
 		var counter_triggered := false
@@ -67,8 +119,14 @@ func _prepare_trigger(trigger: String, context: Dictionary) -> Dictionary:
 				continue
 			if not _matches_conditions(source, ability.get("conditions", {}), context):
 				continue
-			var targets := _select_targets(source, ability.get("target", {}), context)
+			var target_spec: Dictionary = ability.get("target", {})
+			var targets := _select_targets(source, target_spec, context)
 			var effects: Array = ability.get("effects", [])
+			if str(target_spec.get("selector", "action_targets")) == "random_enemy_unit":
+				var random_preparation := _prepare_random_targets(source, target_spec, effects, context, resolve_random)
+				if not random_preparation.valid:
+					return random_preparation
+				targets = _string_ids(random_preparation.target_ids)
 			for effect_value in effects:
 				var effect: Dictionary = effect_value.duplicate(true)
 				effect["source_id"] = source.instance_id
@@ -76,6 +134,7 @@ func _prepare_trigger(trigger: String, context: Dictionary) -> Dictionary:
 				effect["target_ids"] = targets.duplicate()
 				effect["target_selector"] = ability.get("target", {}).get("selector", "action_targets")
 				effect["target_count"] = int(ability.get("target", {}).get("count", 0 if str(ability.get("target", {}).get("selector", "")) == "none" else 1))
+				effect["random_resolved"] = str(target_spec.get("selector", "")) == "random_enemy_unit" and resolve_random
 				effect["context"] = context
 				var validation := _validate_effect(effect)
 				if not validation.valid:
@@ -137,18 +196,24 @@ func _select_targets(source: CardInstance, target: Dictionary, context: Dictiona
 	return []
 
 
-func _validate_effect(effect: Dictionary) -> Dictionary:
+func _validate_effect(effect: Dictionary, applying: bool = false) -> Dictionary:
 	var effect_type := str(effect.get("type", ""))
-	var target_ids: Array[String] = effect.get("target_ids", [])
+	var target_ids := _string_ids(effect.get("target_ids", []))
 	var selector := str(effect.get("target_selector", ""))
 	var target_count := int(effect.get("target_count", 0))
-	var caller_targets: Array = effect.context.get("target_ids", [])
+	var effect_context: Dictionary = effect.get("context", {})
+	var caller_targets: Array = effect_context.get("target_ids", [])
 	if selector == "random_enemy_unit":
-		if not caller_targets.is_empty() or _public_enemy_units(_find_card(str(effect.get("source_id", ""))).owner_id).size() < target_count:
+		if not caller_targets.is_empty():
+			return {"valid": false, "code": "invalid_target"}
+		if bool(effect.get("random_resolved", false)) and target_ids.size() != target_count:
 			return {"valid": false, "code": "invalid_target"}
 	elif target_ids.size() != target_count:
 		return {"valid": false, "code": "invalid_target"}
-	if selector != "random_enemy_unit" and not ["credit", "credit_slots", "draw", "create", "replace_event", "trigger_countermeasure"].has(effect_type) and target_ids.is_empty():
+	if selector != "random_enemy_unit" and not [
+		"credit", "credit_slots", "draw", "create", "replace_event",
+		"trigger_countermeasure", "frontline_changed", "match_ended", "finalize_hq_lethal",
+	].has(effect_type) and target_ids.is_empty():
 		return {"valid": false, "code": "missing_target"}
 	var seen := {}
 	for target_id in target_ids:
@@ -159,9 +224,13 @@ func _validate_effect(effect: Dictionary) -> Dictionary:
 		if target == null:
 			return {"valid": false, "code": "invalid_target"}
 		var source := _find_card(str(effect.get("source_id", "")))
-		var owner_can_select_hand := effect_type == "discard" and target.zone == "hand" and target.owner_id == str(effect.context.get("actor_id", ""))
+		if source == null:
+			return {"valid": false, "code": "invalid_source"}
+		var owner_can_select_hand := effect_type == "discard" and target.zone == "hand" and target.owner_id == str(effect_context.get("actor_id", ""))
 		if not _is_public_target(target) and not owner_can_select_hand:
-			return {"valid": false, "code": "invalid_target"}
+			return {"valid": false, "code": "invalid_origin" if applying else "invalid_target"}
+		if applying and effect_type == "retreat" and target.zone != "frontline":
+			return {"valid": false, "code": "invalid_origin"}
 		if selector == "enemy_unit" and (target.owner_id == source.owner_id or target.category != "Unit" or target.zone == "headquarters"):
 			return {"valid": false, "code": "invalid_target"}
 		if selector == "enemy_unit_or_hq" and (target.owner_id == source.owner_id or not ["Unit", "Headquarters"].has(target.category)):
@@ -185,9 +254,20 @@ func _apply_effect(effect: Dictionary) -> Dictionary:
 			"winner_id": str(effect.get("winner_id", "")),
 			"loser_id": str(effect.get("loser_id", "")),
 		})
+	if effect_type == "finalize_hq_lethal":
+		var headquarters := _find_card(str(effect.get("target_id", "")))
+		if headquarters == null or headquarters.current_defense > 0 or not state.winner_id.is_empty():
+			return {}
+		state.winner_id = _other_player_id(headquarters.owner_id)
+		state.phase = "complete"
+		queue.clear()
+		return _event("match_ended", {
+			"winner_id": state.winner_id,
+			"loser_id": headquarters.owner_id,
+		})
 	_resolving_actor_id = str(effect.get("actor_id", ""))
 	var source := _find_card(str(effect.get("source_id", "")))
-	var targets := _cards_for_ids(_resolved_target_ids(effect))
+	var targets := _cards_for_ids(effect.get("target_ids", []))
 	match effect_type:
 		"damage":
 			for target in targets:
@@ -297,9 +377,9 @@ func _destroy(card: CardInstance) -> void:
 	card.zone = "discard"
 	card.slot = -1
 	_player_for(card.owner_id, true).discard.append(card)
-	var death := _prepare_trigger("death", {"source_id": card.instance_id, "actor_id": card.owner_id, "target_ids": []})
+	var death := _prepare_trigger("death", {"source_id": card.instance_id, "actor_id": card.owner_id, "target_ids": []}, true)
 	if not death.valid:
-		state.phase = "invalid"
+		_fail_action(str(death.get("code", "invalid_effect")))
 		return
 	for index in range(death.queue.size() - 1, -1, -1):
 		queue.push_front(death.queue[index])
@@ -454,9 +534,7 @@ func _check_lethal(card: CardInstance) -> void:
 	if card.category == "Unit":
 		_destroy(card)
 	elif card.category == "Headquarters" and state.winner_id.is_empty():
-		state.winner_id = _other_player_id(card.owner_id)
-		state.phase = "complete"
-		queue.push_front({"type": "match_ended", "winner_id": state.winner_id, "loser_id": card.owner_id})
+		queue.push_front({"type": "finalize_hq_lethal", "target_id": card.instance_id})
 		_enqueue_trigger("hq_lethal", {
 			"source_id": card.instance_id,
 			"actor_id": _resolving_actor_id,
@@ -465,9 +543,9 @@ func _check_lethal(card: CardInstance) -> void:
 
 
 func _enqueue_trigger(trigger: String, context: Dictionary) -> void:
-	var prepared := _prepare_trigger(trigger, context)
+	var prepared := _prepare_trigger(trigger, context, true)
 	if not prepared.valid:
-		state.phase = "invalid"
+		_fail_action(str(prepared.get("code", "invalid_effect")))
 		return
 	for index in range(prepared.queue.size() - 1, -1, -1):
 		queue.push_front(prepared.queue[index])
@@ -491,17 +569,50 @@ func _validate_retreat_reservations(effects: Array[Dictionary]) -> Dictionary:
 	return {"valid": true}
 
 
-func _resolved_target_ids(effect: Dictionary) -> Array:
-	if str(effect.get("target_selector", "")) != "random_enemy_unit":
-		return effect.get("target_ids", [])
-	var candidates := _public_enemy_units(_find_card(str(effect.get("source_id", ""))).owner_id)
+func _prepare_random_targets(
+	source: CardInstance,
+	target_spec: Dictionary,
+	effects: Array,
+	context: Dictionary,
+	resolve_random: bool
+) -> Dictionary:
+	if not (context.get("target_ids", []) as Array).is_empty():
+		return {"valid": false, "code": "invalid_target"}
+	var count := int(target_spec.get("count", 1))
+	var candidates := _random_candidates(source.owner_id, effects)
+	if candidates.size() < count:
+		return {"valid": false, "code": "invalid_target"}
+	var retreat_effects := 0
+	for effect in effects:
+		if str(effect.get("type", "")) == "retreat":
+			retreat_effects += 1
+	if retreat_effects > 0:
+		var target_owner := _other_player_id(source.owner_id)
+		if retreat_effects * count > _open_support_slots(_player_for(target_owner, true)):
+			return {"valid": false, "code": "support_line_full"}
+	if not resolve_random:
+		return {"valid": true, "target_ids": []}
 	var selected: Array[String] = []
-	for ignored in range(int(effect.get("target_count", 1))):
+	for ignored in range(count):
 		var index := rng.randi_range(0, candidates.size() - 1)
 		selected.append(candidates[index])
 		candidates.remove_at(index)
 	state.rng_state = rng.state
-	return selected
+	return {"valid": true, "target_ids": selected}
+
+
+func _random_candidates(owner_id: String, effects: Array) -> Array[String]:
+	var candidates: Array[String] = []
+	for candidate_id in _public_enemy_units(owner_id):
+		var card := _find_card(candidate_id)
+		var valid := true
+		for effect in effects:
+			if str(effect.get("type", "")) == "retreat" and card.zone != "frontline":
+				valid = false
+				break
+		if valid:
+			candidates.append(candidate_id)
+	return candidates
 
 
 func _public_enemy_units(owner_id: String) -> Array[String]:

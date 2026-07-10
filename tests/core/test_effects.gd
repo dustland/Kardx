@@ -26,6 +26,12 @@ static func run(t) -> void:
 	_test_effect_frontline_removals_emit_change(t)
 	_test_countermeasure_trigger_matching_and_order(t)
 	_test_manual_source_zone_and_random_preflight(t)
+	_test_nested_effect_limit_is_action_atomic(t)
+	_test_nested_trigger_rejection_is_action_atomic(t)
+	_test_queued_targets_revalidate_atomically(t)
+	_test_random_target_context_is_sampled_once(t)
+	_test_hq_lethal_is_a_prevention_checkpoint(t)
+	_test_hq_terminal_stops_trailing_effects(t)
 
 
 static func _test_stat_and_status_effects(t) -> void:
@@ -557,6 +563,288 @@ static func _test_manual_source_zone_and_random_preflight(t) -> void:
 	))
 	t.assert_true(first_result.accepted and second_result.accepted, "random manual ability resolves after valid preflight: %s/%s" % [first_result.reason_code, second_result.reason_code])
 	t.assert_eq(_unit_defenses(first.controller, "opponent"), _unit_defenses(second.controller, "opponent"), "rejected random action leaves the seeded outcome unchanged")
+	t.assert_eq(first.controller.state.rng_state, second.controller.state.rng_state, "accepted random action advances RNG deterministically once")
+
+
+static func _test_nested_effect_limit_is_action_atomic(t) -> void:
+	var counter_controller := _controller(528)
+	var order := _card("nested-overflow-order", "player", "Order", 0, 0, 3)
+	var counter := _card("nested-overflow-counter", "opponent", "Countermeasure")
+	var counter_victim := _card("nested-overflow-counter-victim", "player", "Unit", 2, 5)
+	counter_victim.abilities = [_overflow_death_ability("counter-overflow-death")]
+	counter.abilities = [_ability(
+		"counter-destroy",
+		"order_played",
+		{"selector": "enemy_unit", "count": 1},
+		[{"type": "destroy"}],
+		{"enemy": true}
+	)]
+	_put_hand(counter_controller, order)
+	_put_hand(counter_controller, counter)
+	_place_support(counter_controller, counter_victim, 0)
+	counter.countermeasure_active = true
+	counter.face_down = true
+	counter_controller.state.players.opponent.active_countermeasures.append(counter)
+	var counter_before := _controller_digest(counter_controller)
+	var counter_result = counter_controller.submit_action(GameAction.create(
+		"play_order", "player", order.instance_id, [counter_victim.instance_id], {}, counter_controller.state.sequence
+	))
+	_assert_atomic_effect_limit(t, counter_controller, counter_result, counter_before, "nested Countermeasure overflow")
+
+	var order_controller := _controller(529)
+	var destroy_order := _card("nested-death-order", "player", "Order", 0, 0, 3)
+	var order_victim := _card("nested-death-order-victim", "opponent", "Unit", 2, 5)
+	order_victim.abilities = [_overflow_death_ability("order-overflow-death")]
+	destroy_order.abilities = [_ability(
+		"destroy-for-overflow", "play_order", {"selector": "enemy_unit", "count": 1}, [{"type": "destroy"}]
+	)]
+	_put_hand(order_controller, destroy_order)
+	_place_support(order_controller, order_victim, 0)
+	var order_before := _controller_digest(order_controller)
+	var order_result = order_controller.submit_action(GameAction.create(
+		"play_order", "player", destroy_order.instance_id, [order_victim.instance_id], {}, order_controller.state.sequence
+	))
+	_assert_atomic_effect_limit(t, order_controller, order_result, order_before, "nested Order death overflow")
+
+	var deploy_controller := _controller(530)
+	var deployer := _card("nested-overflow-deployer", "player", "Unit", 2, 5, 2)
+	var deploy_victim := _card("nested-overflow-deploy-victim", "opponent", "Unit", 2, 2)
+	deploy_victim.abilities = [_overflow_death_ability("deploy-overflow-death")]
+	deployer.abilities = [_ability(
+		"deploy-random-lethal", "deploy", {"selector": "random_enemy_unit", "count": 1}, [{"type": "damage", "amount": 2}]
+	)]
+	_put_hand(deploy_controller, deployer)
+	_place_support(deploy_controller, deploy_victim, 0)
+	var deploy_before := _controller_digest(deploy_controller)
+	var deploy_result = deploy_controller.submit_action(GameAction.create(
+		"deploy_unit", "player", deployer.instance_id, [], {"support_slot": 0}, deploy_controller.state.sequence
+	))
+	_assert_atomic_effect_limit(t, deploy_controller, deploy_result, deploy_before, "nested deploy death overflow")
+
+	var manual_controller := _controller(531)
+	var manual_source := _card("nested-overflow-manual", "player")
+	var manual_victim := _card("nested-overflow-manual-victim", "opponent", "Unit", 2, 2)
+	manual_victim.abilities = [_overflow_death_ability("manual-overflow-death")]
+	manual_source.abilities = [_ability(
+		"manual-random-lethal", "manual", {"selector": "random_enemy_unit", "count": 1}, [{"type": "damage", "amount": 2}], {}, 2
+	)]
+	_place_support(manual_controller, manual_source, 0)
+	_place_support(manual_controller, manual_victim, 0)
+	var manual_before := _controller_digest(manual_controller)
+	var manual_result = manual_controller.submit_action(GameAction.create(
+		"activate_ability", "player", manual_source.instance_id, [], {"ability_id": "manual-random-lethal"}, manual_controller.state.sequence
+	))
+	_assert_atomic_effect_limit(t, manual_controller, manual_result, manual_before, "nested manual death overflow")
+
+
+static func _assert_atomic_effect_limit(t, controller: MatchController, result, before: Dictionary, label: String) -> void:
+	t.assert_true(not result.accepted, "%s is rejected" % label)
+	t.assert_eq(result.reason_code, "effect_limit", "%s has a stable reason" % label)
+	t.assert_eq(result.events, [], "%s exposes no partial events" % label)
+	t.assert_eq(_controller_digest(controller), before, "%s restores match and RNG state" % label)
+
+
+static func _overflow_death_ability(id: String) -> Dictionary:
+	var effects: Array = []
+	for index in range(GameConstants.MAX_EFFECT_EVENTS):
+		effects.append({"type": "credit", "amount": 0, "player": "owner"})
+	return _ability(id, "death", {"selector": "none"}, effects)
+
+
+static func _test_nested_trigger_rejection_is_action_atomic(t) -> void:
+	var controller := _controller(539)
+	var order := _card("nested-invalid-death-order", "player", "Order", 0, 0, 2)
+	var victim := _card("nested-invalid-death-victim", "opponent", "Unit", 2, 5)
+	victim.abilities = [_ability(
+		"missing-death-target",
+		"death",
+		{"selector": "random_enemy_unit", "count": 1},
+		[{"type": "damage", "amount": 1}]
+	)]
+	order.abilities = [_ability(
+		"destroy-invalid-death-source",
+		"play_order",
+		{"selector": "enemy_unit", "count": 1},
+		[{"type": "destroy"}]
+	)]
+	_put_hand(controller, order)
+	_place_support(controller, victim, 0)
+	var before := _controller_digest(controller)
+	var result = controller.submit_action(GameAction.create(
+		"play_order", "player", order.instance_id, [victim.instance_id], {}, controller.state.sequence
+	))
+	t.assert_true(not result.accepted, "nested trigger preparation failure rejects the parent action")
+	t.assert_eq(result.reason_code, "invalid_target", "nested trigger preparation reports its validation error")
+	t.assert_eq(_controller_digest(controller), before, "nested trigger preparation failure restores the whole action")
+
+
+static func _test_queued_targets_revalidate_atomically(t) -> void:
+	var return_controller := _controller(532)
+	var return_order := _card("return-then-damage", "player", "Order", 0, 0, 2)
+	var return_target := _card("return-then-damage-target", "opponent", "Unit", 2, 5)
+	return_order.abilities = [_ability(
+		"return-then-damage-effect",
+		"play_order",
+		{"selector": "enemy_unit", "count": 1},
+		[{"type": "return"}, {"type": "damage", "amount": 2}]
+	)]
+	_put_hand(return_controller, return_order)
+	_place_support(return_controller, return_target, 0)
+	var return_before := _controller_digest(return_controller)
+	var return_result = return_controller.submit_action(GameAction.create(
+		"play_order", "player", return_order.instance_id, [return_target.instance_id], {}, return_controller.state.sequence
+	))
+	t.assert_true(not return_result.accepted, "return then damage rejects when the queued damage target leaves play")
+	t.assert_eq(return_result.reason_code, "invalid_origin", "return then damage has a stable queued-target reason")
+	t.assert_eq(_controller_digest(return_controller), return_before, "return then damage rolls back the entire Order")
+
+	var retreat_controller := _controller(533)
+	var repeated_retreat := _card("repeated-retreat", "player", "Order", 0, 0, 2)
+	var retreat_target := _card("repeated-retreat-target", "opponent")
+	repeated_retreat.abilities = [_ability(
+		"retreat-twice",
+		"play_order",
+		{"selector": "enemy_unit", "count": 1},
+		[{"type": "retreat"}, {"type": "retreat"}]
+	)]
+	_put_hand(retreat_controller, repeated_retreat)
+	_place_frontline(retreat_controller, retreat_target, 0)
+	var retreat_before := _controller_digest(retreat_controller)
+	var retreat_result = retreat_controller.submit_action(GameAction.create(
+		"play_order", "player", repeated_retreat.instance_id, [retreat_target.instance_id], {}, retreat_controller.state.sequence
+	))
+	t.assert_true(not retreat_result.accepted, "repeated Retreat rejects after the first queued move changes origin")
+	t.assert_eq(retreat_result.reason_code, "invalid_origin", "repeated Retreat reports invalid origin")
+	t.assert_eq(_controller_digest(retreat_controller), retreat_before, "repeated Retreat cannot duplicate a unit")
+
+	var capacity_controller := _controller(534)
+	var random_retreat := _card("random-retreat-source", "player")
+	var first_frontline := _card("random-retreat-first", "opponent")
+	var second_frontline := _card("random-retreat-second", "opponent")
+	random_retreat.abilities = [_ability(
+		"random-retreat-two",
+		"manual",
+		{"selector": "random_enemy_unit", "count": 2},
+		[{"type": "retreat"}]
+	)]
+	_place_support(capacity_controller, random_retreat, 0)
+	_place_frontline(capacity_controller, first_frontline, 0)
+	_place_frontline(capacity_controller, second_frontline, 1)
+	for slot in range(1, GameConstants.SUPPORT_UNIT_SLOTS):
+		_place_support(capacity_controller, _card("random-retreat-blocker-%d" % slot, "opponent"), slot)
+	var capacity_before := _controller_digest(capacity_controller)
+	var capacity_result = capacity_controller.submit_action(GameAction.create(
+		"activate_ability", "player", random_retreat.instance_id, [], {"ability_id": "random-retreat-two"}, capacity_controller.state.sequence
+	))
+	t.assert_eq(capacity_result.reason_code, "support_line_full", "random Retreat reserves Support capacity before sampling")
+	t.assert_eq(_controller_digest(capacity_controller), capacity_before, "rejected random Retreat preserves state and RNG")
+
+
+static func _test_random_target_context_is_sampled_once(t) -> void:
+	var controller := _controller(535)
+	var source := _card("shared-random-source", "player")
+	source.abilities = [_ability(
+		"shared-random-target",
+		"manual",
+		{"selector": "random_enemy_unit", "count": 1},
+		[{"type": "damage", "amount": 1}, {"type": "damage", "amount": 2}]
+	)]
+	_place_support(controller, source, 0)
+	for slot in range(3):
+		_place_support(controller, _card("shared-random-target-%d" % slot, "opponent", "Unit", 1, 5), slot)
+	var result = controller.submit_action(GameAction.create(
+		"activate_ability", "player", source.instance_id, [], {"ability_id": "shared-random-target"}, controller.state.sequence
+	))
+	t.assert_true(result.accepted, "multi-effect random ability resolves")
+	var defenses: Array = _unit_defenses(controller, "opponent").values()
+	defenses.sort()
+	t.assert_eq(defenses, [2, 5, 5], "all effects in one ability reuse the sampled random target set")
+
+
+static func _test_hq_lethal_is_a_prevention_checkpoint(t) -> void:
+	var controller := _controller(536)
+	var order := _damage_order("preventable-hq-lethal", "player", 20, 2)
+	var repair_counter := _card("hq-repair-counter", "opponent", "Countermeasure")
+	repair_counter.abilities = [_ability(
+		"repair-lethal-hq",
+		"hq_lethal",
+		{"selector": "friendly_hq", "count": 1},
+		[{"type": "repair", "amount": 4}],
+		{"enemy": true}
+	)]
+	_put_hand(controller, order)
+	_put_hand(controller, repair_counter)
+	repair_counter.countermeasure_active = true
+	repair_counter.face_down = true
+	controller.state.players.opponent.active_countermeasures.append(repair_counter)
+	var result = controller.submit_action(GameAction.create(
+		"play_order", "player", order.instance_id, [controller.state.players.opponent.headquarters.instance_id], {}, controller.state.sequence
+	))
+	t.assert_true(result.accepted, "repair reaction accepts the lethal Order")
+	t.assert_eq(controller.state.players.opponent.headquarters.current_defense, 4, "HQ lethal repair restores defense before finalization")
+	t.assert_eq(controller.state.winner_id, "", "prevented HQ lethal chooses no winner")
+	t.assert_eq(controller.state.phase, "action", "prevented HQ lethal keeps the match active")
+	t.assert_true(controller.state.players.opponent.discard.has(repair_counter), "HQ lethal Countermeasure reveals after its repair")
+	t.assert_true(not _event_types(result.events).has("match_ended"), "prevented HQ lethal emits no terminal event")
+	t.assert_eq(_event_types(result.events), [
+		"credit_spent", "order_played", "damage_dealt", "damage_repaired", "countermeasure_triggered", "card_discarded",
+	], "HQ repair resolves before terminal finalization")
+
+	var attack_controller := _controller(537)
+	var attacker := _card("preventable-hq-attacker", "player", "Unit", 20, 5)
+	attacker.operation_cost = 2
+	attacker.deployed_turn = attack_controller.state.turn - 1
+	var attack_counter := _card("hq-attack-repair-counter", "opponent", "Countermeasure")
+	attack_counter.abilities = [_ability(
+		"repair-attacked-hq", "hq_lethal", {"selector": "friendly_hq", "count": 1}, [{"type": "repair", "amount": 3}], {"enemy": true}
+	)]
+	_place_frontline(attack_controller, attacker, 0)
+	_put_hand(attack_controller, attack_counter)
+	attack_counter.countermeasure_active = true
+	attack_counter.face_down = true
+	attack_controller.state.players.opponent.active_countermeasures.append(attack_counter)
+	var before_credit: int = attack_controller.state.players.player.credit
+	var attack_result = attack_controller.submit_action(GameAction.create(
+		"attack_hq",
+		"player",
+		attacker.instance_id,
+		[attack_controller.state.players.opponent.headquarters.instance_id],
+		{},
+		attack_controller.state.sequence
+	))
+	t.assert_true(attack_result.accepted, "HQ attack can be saved by an HQ lethal reaction")
+	t.assert_eq(attack_controller.state.players.player.credit, before_credit - 2, "prevented HQ attack still pays its operation")
+	t.assert_eq(attacker.operations_used, 1, "prevented HQ attack still consumes its operation")
+	t.assert_eq(attack_controller.state.players.opponent.headquarters.current_defense, 3, "HQ attack lethal repair restores defense")
+	t.assert_eq(attack_controller.state.winner_id, "", "repaired HQ attack does not end the match")
+	t.assert_eq(_event_types(attack_result.events), [
+		"credit_spent", "attack_started", "damage_dealt", "damage_repaired", "countermeasure_triggered",
+	], "HQ attack repair resolves before a terminal event")
+
+
+static func _test_hq_terminal_stops_trailing_effects(t) -> void:
+	var controller := _controller(538)
+	var order := _card("terminal-trailing-order", "player", "Order", 0, 0, 2)
+	order.abilities = [_ability(
+		"terminal-then-credit",
+		"play_order",
+		{"selector": "enemy_unit_or_hq", "count": 1},
+		[{"type": "damage", "amount": 20}, {"type": "credit", "amount": 5, "player": "owner"}]
+	)]
+	_put_hand(controller, order)
+	var before_credit: int = controller.state.players.player.credit
+	var result = controller.submit_action(GameAction.create(
+		"play_order", "player", order.instance_id, [controller.state.players.opponent.headquarters.instance_id], {}, controller.state.sequence
+	))
+	var event_types := _event_types(result.events)
+	t.assert_true(result.accepted, "unprevented lethal Headquarters Order resolves")
+	t.assert_eq(controller.state.players.opponent.headquarters.current_defense, 0, "unprevented lethal HQ remains at zero defense")
+	t.assert_eq(controller.state.winner_id, "player", "unprevented lethal HQ finalizes the winner")
+	t.assert_eq(controller.state.phase, "complete", "unprevented lethal HQ completes the match")
+	t.assert_eq(event_types.count("match_ended"), 1, "HQ lethal emits exactly one match-ended event")
+	t.assert_true(not event_types.has("credit_changed"), "post-terminal queued Credit effect is discarded")
+	t.assert_eq(controller.state.players.player.credit, before_credit - order.deployment_cost, "post-terminal queued Credit does not mutate state")
+	t.assert_eq(event_types, ["credit_spent", "order_played", "damage_dealt", "match_ended", "card_discarded"], "terminal finalization precedes only Order cleanup")
 
 
 static func _resolve(
@@ -774,17 +1062,47 @@ static func _controller_digest(controller: MatchController) -> Dictionary:
 		var player = controller.state.players[player_id]
 		players[player_id] = {
 			"credit": player.credit,
+			"credit_slots": player.credit_slots,
+			"fatigue": player.fatigue,
 			"hand": _card_ids(player.hand),
 			"support": _slot_ids(player.support_line),
 			"discard": _card_ids(player.discard),
 			"active_countermeasures": _card_ids(player.active_countermeasures),
+			"cards": _card_states(controller, player_id),
 		}
 	return {
 		"sequence": controller.state.sequence,
+		"phase": controller.state.phase,
+		"winner_id": controller.state.winner_id,
+		"rng_state": controller.state.rng_state,
 		"frontline": _slot_ids(controller.state.frontline),
 		"frontline_controller_id": controller.state.frontline_controller_id,
 		"players": players,
 	}
+
+
+static func _card_states(controller: MatchController, owner_id: String) -> Dictionary:
+	var cards := {}
+	var player = controller.state.players[owner_id]
+	var collections: Array = [player.deck, player.hand, player.support_line, player.discard, controller.state.frontline]
+	for collection in collections:
+		for card in collection:
+			if card == null or card.owner_id != owner_id or cards.has(card.instance_id):
+				continue
+			cards[card.instance_id] = {
+				"zone": card.zone,
+				"slot": card.slot,
+				"attack": card.current_attack,
+				"defense": card.current_defense,
+				"operations_used": card.operations_used,
+				"operation_chain": card.operation_chain,
+				"modifiers": card.modifiers.duplicate(true),
+				"statuses": card.statuses.duplicate(true),
+				"countermeasure_active": card.countermeasure_active,
+				"countermeasure_activation_cost": card.countermeasure_activation_cost,
+				"face_down": card.face_down,
+			}
+	return cards
 
 
 static func _card_ids(cards: Array) -> Array[String]:
