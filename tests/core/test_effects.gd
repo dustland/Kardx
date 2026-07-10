@@ -19,6 +19,13 @@ static func run(t) -> void:
 	_test_countermeasure_refund_and_expiry(t)
 	_test_order_targets_and_manual_ability(t)
 	_test_retreat_order_rejects_atomically(t)
+	_test_effect_lethal_lifecycle(t)
+	_test_action_target_validation_is_atomic(t)
+	_test_effect_limit_order_rejects_atomically(t)
+	_test_multi_retreat_reserves_capacity(t)
+	_test_effect_frontline_removals_emit_change(t)
+	_test_countermeasure_trigger_matching_and_order(t)
+	_test_manual_source_zone_and_random_preflight(t)
 
 
 static func _test_stat_and_status_effects(t) -> void:
@@ -56,7 +63,7 @@ static func _test_zone_and_resource_effects(t) -> void:
 	var controller := _controller(502, definitions)
 	var source := _card("source", "player")
 	var draw_card := _card("draw-card", "player")
-	var discard_card := _card("discard-card", "opponent")
+	var discard_card := _card("discard-card", "player")
 	var copy_target := _card("copy-target", "opponent", "Unit", 4, 5)
 	var return_target := _card("return-target", "opponent")
 	var retreat_target := _card("retreat-target", "opponent")
@@ -72,7 +79,7 @@ static func _test_zone_and_resource_effects(t) -> void:
 	t.assert_true(controller.state.players.player.hand.has(draw_card), "draw moves the top card into hand")
 
 	_resolve(engine, source, [discard_card.instance_id], [{"type": "discard"}])
-	t.assert_true(controller.state.players.opponent.discard.has(discard_card), "discard moves the selected hand card")
+	t.assert_true(controller.state.players.player.discard.has(discard_card), "discard moves the selected hand card")
 
 	_resolve(engine, source, [], [{"type": "create", "definition_id": "created-unit", "destination": "hand", "player": "owner"}], {"selector": "none"})
 	var created = controller.state.players.player.hand.back()
@@ -342,6 +349,216 @@ static func _test_retreat_order_rejects_atomically(t) -> void:
 	t.assert_eq(_controller_digest(controller), before, "failed Retreat Order changes no state")
 
 
+static func _test_effect_lethal_lifecycle(t) -> void:
+	var controller := _controller(517)
+	var order := _damage_order("lethal-order", "player", 4, 2)
+	var victim := _card("lethal-effect-victim", "opponent", "Unit", 1, 3)
+	victim.abilities = [_ability("death-ping", "death", {"selector": "enemy_hq"}, [{"type": "damage", "amount": 2}])]
+	_put_hand(controller, order)
+	_place_frontline(controller, victim, 0)
+	var result = controller.submit_action(GameAction.create(
+		"play_order", "player", order.instance_id, [victim.instance_id], {}, controller.state.sequence
+	))
+	t.assert_true(result.accepted, "lethal Order resolves")
+	t.assert_eq(victim.zone, "discard", "lethal effect destroys the unit")
+	t.assert_eq(controller.state.players.player.headquarters.current_defense, 18, "lethal effect resolves death trigger")
+	t.assert_eq(controller.state.frontline_controller_id, "", "lethal Frontline removal clears control")
+	t.assert_true(_event_types(result.events).has("frontline_changed"), "lethal effect emits Frontline change")
+
+	var hq_order := _damage_order("hq-lethal-order", "player", 20, 2)
+	_put_hand(controller, hq_order)
+	var hq_result = controller.submit_action(GameAction.create(
+		"play_order", "player", hq_order.instance_id, [controller.state.players.opponent.headquarters.instance_id], {}, controller.state.sequence
+	))
+	t.assert_true(hq_result.accepted, "lethal Headquarters Order resolves")
+	t.assert_eq(controller.state.players.opponent.headquarters.current_defense, 0, "Headquarters damage clamps at zero")
+	t.assert_eq(controller.state.winner_id, "player", "lethal Headquarters effect chooses a winner")
+	t.assert_eq(controller.state.phase, "complete", "lethal Headquarters effect ends the match")
+
+
+static func _test_action_target_validation_is_atomic(t) -> void:
+	var controller := _controller(518)
+	var order := _damage_order("targeted-order", "player", 2, 2)
+	var visible := _card("visible-enemy", "opponent")
+	var hidden := _card("hidden-enemy", "opponent")
+	_put_hand(controller, order)
+	_place_support(controller, visible, 0)
+	_put_hand(controller, hidden)
+	var before := _controller_digest(controller)
+	var duplicate = controller.submit_action(GameAction.create(
+		"play_order", "player", order.instance_id, [visible.instance_id, visible.instance_id], {}, controller.state.sequence
+	))
+	t.assert_eq(duplicate.reason_code, "invalid_target", "duplicate effect targets are rejected")
+	t.assert_eq(_controller_digest(controller), before, "duplicate targets are atomic")
+	var hidden_target = controller.submit_action(GameAction.create(
+		"play_order", "player", order.instance_id, [hidden.instance_id], {}, controller.state.sequence
+	))
+	t.assert_eq(hidden_target.reason_code, "invalid_target", "hidden hand target cannot be probed")
+	t.assert_eq(_controller_digest(controller), before, "hidden target rejection is atomic")
+
+
+static func _test_effect_limit_order_rejects_atomically(t) -> void:
+	var controller := _controller(519)
+	var order := _card("overflow-order", "player", "Order", 0, 0, 3)
+	var effects: Array = []
+	for index in range(GameConstants.MAX_EFFECT_EVENTS + 1):
+		effects.append({"type": "credit", "amount": 0, "player": "owner"})
+	order.abilities = [_ability("overflow", "play_order", {"selector": "none"}, effects)]
+	_put_hand(controller, order)
+	var before := _controller_digest(controller)
+	var result = controller.submit_action(GameAction.create(
+		"play_order", "player", order.instance_id, [], {}, controller.state.sequence
+	))
+	t.assert_true(not result.accepted, "effect-limit Order is rejected")
+	t.assert_eq(result.reason_code, "effect_limit", "effect limit has a stable action rejection")
+	t.assert_eq(_controller_digest(controller), before, "effect-limit Order leaves no partial payment or discard")
+
+	var deploy_controller := _controller(527)
+	var unit := _card("overflow-deploy-unit", "player")
+	unit.abilities = [_ability("overflow-deploy", "deploy", {"selector": "none"}, effects)]
+	_put_hand(deploy_controller, unit)
+	var deploy_before := _controller_digest(deploy_controller)
+	var deploy_result = deploy_controller.submit_action(GameAction.create(
+		"deploy_unit", "player", unit.instance_id, [], {"support_slot": 0}, deploy_controller.state.sequence
+	))
+	t.assert_eq(deploy_result.reason_code, "effect_limit", "effect-limit deploy trigger is rejected before deployment")
+	t.assert_eq(_controller_digest(deploy_controller), deploy_before, "effect-limit deploy leaves no partial payment or zone mutation")
+
+
+static func _test_multi_retreat_reserves_capacity(t) -> void:
+	var controller := _controller(520)
+	var order := _card("multi-retreat-order", "player", "Order", 0, 0, 3)
+	order.abilities = [_ability(
+		"multi-retreat", "play_order", {"selector": "enemy_unit", "count": 2}, [{"type": "retreat"}]
+	)]
+	var first := _card("retreat-first", "opponent")
+	var second := _card("retreat-second", "opponent")
+	_put_hand(controller, order)
+	_place_frontline(controller, first, 0)
+	_place_frontline(controller, second, 1)
+	for slot in range(1, GameConstants.SUPPORT_UNIT_SLOTS):
+		_place_support(controller, _card("retreat-fill-%d" % slot, "opponent"), slot)
+	var before := _controller_digest(controller)
+	var result = controller.submit_action(GameAction.create(
+		"play_order", "player", order.instance_id, [first.instance_id, second.instance_id], {}, controller.state.sequence
+	))
+	t.assert_eq(result.reason_code, "support_line_full", "multi-Retreat reserves owner capacity before mutation")
+	t.assert_eq(_controller_digest(controller), before, "multi-Retreat rejection leaves both targets in the Frontline")
+
+
+static func _test_effect_frontline_removals_emit_change(t) -> void:
+	var controller := _controller(521)
+	var order := _card("return-order", "player", "Order", 0, 0, 2)
+	order.abilities = [_ability("return-frontline", "play_order", {"selector": "enemy_unit", "count": 1}, [{"type": "return"}])]
+	var target := _card("return-frontline-target", "opponent")
+	_put_hand(controller, order)
+	_place_frontline(controller, target, 0)
+	var result = controller.submit_action(GameAction.create(
+		"play_order", "player", order.instance_id, [target.instance_id], {}, controller.state.sequence
+	))
+	t.assert_true(result.accepted, "return Order resolves")
+	t.assert_eq(target.zone, "hand", "return removes the Frontline unit")
+	t.assert_eq(controller.state.frontline_controller_id, "", "return recalculates Frontline control")
+	t.assert_true(_event_types(result.events).has("frontline_changed"), "return emits Frontline control change")
+
+
+static func _test_countermeasure_trigger_matching_and_order(t) -> void:
+	var controller := _controller(522)
+	var first := _countermeasure("first-counter", "player", 1)
+	var second := _countermeasure("second-counter", "player", 1)
+	var attacker := _card("counter-attack-source", "opponent", "Unit", 2, 4)
+	attacker.unit_type = "Artillery"
+	var defender := _card("counter-attack-target", "player", "Unit", 1, 4)
+	defender.unit_type = "Infantry"
+	first.abilities = [_ability("first-attack", "attack", {"selector": "none"}, [{"type": "replace_event", "changes": {"first": true}}], {"enemy": true})]
+	second.abilities = [_ability("second-attack", "attack", {"selector": "none"}, [{"type": "replace_event", "changes": {"second": true}}], {"enemy": true})]
+	_put_hand(controller, first)
+	_put_hand(controller, second)
+	_place_support(controller, attacker, 0)
+	_place_frontline(controller, defender, 0)
+	controller.submit_action(GameAction.create("toggle_countermeasure", "player", first.instance_id, [], {}, controller.state.sequence))
+	controller.submit_action(GameAction.create("toggle_countermeasure", "player", second.instance_id, [], {}, controller.state.sequence))
+	controller.submit_action(GameAction.create("end_turn", "player", "", [], {}, controller.state.sequence))
+	var attack = controller.submit_action(GameAction.create(
+		"attack_unit", "opponent", attacker.instance_id, [defender.instance_id], {}, controller.state.sequence
+	))
+	t.assert_true(attack.accepted, "enemy attack action resolves through Countermeasure checks: %s" % attack.reason_code)
+	t.assert_true(controller.state.players.player.discard.has(first) and controller.state.players.player.discard.has(second), "attack-triggered Countermeasures reveal after reacting")
+	var reaction_types := _event_types(attack.events).filter(func(event_type): return event_type in ["event_replaced", "countermeasure_triggered"])
+	t.assert_eq(reaction_types, ["event_replaced", "countermeasure_triggered", "event_replaced", "countermeasure_triggered"], "Countermeasures resolve and reveal in declaration order: %s" % [reaction_types])
+
+	var untargeted := _countermeasure("target-owner-counter", "player", 1)
+	var untargeted_order := _card("untargeted-order", "opponent", "Order", 0, 0, 1)
+	untargeted.abilities = [_ability("target-owner-only", "order_played", {"selector": "none"}, [{"type": "replace_event", "changes": {"cancelled": true}}], {"enemy": true, "target_owner": "owner"})]
+	untargeted_order.abilities = [_ability("untargeted", "play_order", {"selector": "none"}, [{"type": "credit", "amount": 0, "player": "owner"}])]
+	_put_hand(controller, untargeted)
+	_put_hand(controller, untargeted_order)
+	controller.submit_action(GameAction.create("end_turn", "opponent", "", [], {}, controller.state.sequence))
+	controller.submit_action(GameAction.create("toggle_countermeasure", "player", untargeted.instance_id, [], {}, controller.state.sequence))
+	controller.submit_action(GameAction.create("end_turn", "player", "", [], {}, controller.state.sequence))
+	var order_result = controller.submit_action(GameAction.create(
+		"play_order", "opponent", untargeted_order.instance_id, [], {}, controller.state.sequence
+	))
+	t.assert_true(order_result.accepted, "untargeted Order resolves")
+	t.assert_true(untargeted.countermeasure_active, "target-specific Countermeasure ignores untargeted Order")
+	t.assert_true(controller.state.players.player.hand.has(untargeted), "unmatched Countermeasure remains hidden in hand")
+
+	var hq_controller := _controller(525)
+	var hq_counter := _countermeasure("hq-lethal-counter", "player", 1)
+	hq_counter.abilities = [_ability("hq-lethal-reaction", "hq_lethal", {"selector": "none"}, [{"type": "credit", "amount": 1, "player": "owner"}], {"enemy": true})]
+	var hq_order := _damage_order("hq-lethal-enemy-order", "opponent", 20, 1)
+	_put_hand(hq_controller, hq_counter)
+	_put_hand(hq_controller, hq_order)
+	hq_controller.submit_action(GameAction.create("toggle_countermeasure", "player", hq_counter.instance_id, [], {}, hq_controller.state.sequence))
+	hq_controller.submit_action(GameAction.create("end_turn", "player", "", [], {}, hq_controller.state.sequence))
+	hq_controller.submit_action(GameAction.create("play_order", "opponent", hq_order.instance_id, [hq_controller.state.players.player.headquarters.instance_id], {}, hq_controller.state.sequence))
+	t.assert_true(hq_controller.state.players.player.discard.has(hq_counter), "HQ-lethal Countermeasure trigger resolves against enemy effect")
+
+	var frontline_controller := _controller(526)
+	var frontline_counter := _countermeasure("frontline-loss-counter", "player", 1)
+	frontline_counter.abilities = [_ability("frontline-loss-reaction", "frontline_lost", {"selector": "none"}, [{"type": "credit", "amount": 1, "player": "owner"}], {"enemy": true})]
+	var return_order := _card("frontline-loss-order", "opponent", "Order", 0, 0, 1)
+	return_order.abilities = [_ability("enemy-return", "play_order", {"selector": "enemy_unit", "count": 1}, [{"type": "return"}])]
+	var lost_unit := _card("lost-frontline-unit", "player")
+	_put_hand(frontline_controller, frontline_counter)
+	_put_hand(frontline_controller, return_order)
+	_place_frontline(frontline_controller, lost_unit, 0)
+	frontline_controller.submit_action(GameAction.create("toggle_countermeasure", "player", frontline_counter.instance_id, [], {}, frontline_controller.state.sequence))
+	frontline_controller.submit_action(GameAction.create("end_turn", "player", "", [], {}, frontline_controller.state.sequence))
+	frontline_controller.submit_action(GameAction.create("play_order", "opponent", return_order.instance_id, [lost_unit.instance_id], {}, frontline_controller.state.sequence))
+	t.assert_true(frontline_controller.state.players.player.discard.has(frontline_counter), "Frontline-loss Countermeasure trigger resolves against enemy effect")
+
+
+static func _test_manual_source_zone_and_random_preflight(t) -> void:
+	var controller := _controller(523)
+	var hidden_source := _card("hidden-manual", "player")
+	hidden_source.abilities = [_ability("random-manual", "manual", {"selector": "random_enemy_unit", "count": 1}, [{"type": "damage", "amount": 1}])]
+	var target := _card("random-public-target", "opponent")
+	_put_hand(controller, hidden_source)
+	_place_support(controller, target, 0)
+	var before := _controller_digest(controller)
+	var rejected = controller.submit_action(GameAction.create(
+		"activate_ability", "player", hidden_source.instance_id, [], {"ability_id": "random-manual"}, controller.state.sequence
+	))
+	t.assert_eq(rejected.reason_code, "invalid_origin", "manual abilities reject hidden source zones")
+	t.assert_eq(_controller_digest(controller), before, "hidden manual source rejection is atomic")
+
+	var first := _random_action_controller(524)
+	var invalid_random = first.controller.submit_action(GameAction.create(
+		"activate_ability", "player", first.source.instance_id, [first.targets[0].instance_id], {"ability_id": "random-manual"}, first.controller.state.sequence
+	))
+	t.assert_eq(invalid_random.reason_code, "invalid_target", "random selector rejects caller-supplied targets")
+	var first_result = first.controller.submit_action(GameAction.create(
+		"activate_ability", "player", first.source.instance_id, [], {"ability_id": "random-manual"}, first.controller.state.sequence
+	))
+	var second := _random_action_controller(524)
+	var second_result = second.controller.submit_action(GameAction.create(
+		"activate_ability", "player", second.source.instance_id, [], {"ability_id": "random-manual"}, second.controller.state.sequence
+	))
+	t.assert_true(first_result.accepted and second_result.accepted, "random manual ability resolves after valid preflight: %s/%s" % [first_result.reason_code, second_result.reason_code])
+	t.assert_eq(_unit_defenses(first.controller, "opponent"), _unit_defenses(second.controller, "opponent"), "rejected random action leaves the seeded outcome unchanged")
+
+
 static func _resolve(
 	engine,
 	source,
@@ -421,6 +638,18 @@ static func _random_target_fixture(seed: int) -> Dictionary:
 		"engine": _engine(controller, seed),
 		"context": {"source_id": source.instance_id, "actor_id": "player", "target_ids": []},
 	}
+
+
+static func _random_action_controller(seed: int) -> Dictionary:
+	var controller := _controller(seed)
+	var source := _card("random-action-source", "player")
+	var first := _card("random-action-a", "opponent")
+	var second := _card("random-action-b", "opponent")
+	source.abilities = [_ability("random-manual", "manual", {"selector": "random_enemy_unit", "count": 1}, [{"type": "damage", "amount": 1}])]
+	_place_support(controller, source, 0)
+	_place_support(controller, first, 0)
+	_place_support(controller, second, 1)
+	return {"controller": controller, "source": source, "targets": [first, second]}
 
 
 static func _controller(seed: int, extra_definitions: Dictionary = {}) -> MatchController:

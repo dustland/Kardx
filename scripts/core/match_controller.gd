@@ -192,6 +192,13 @@ func _deploy_unit(action: GameAction) -> ActionResult:
 		return _reject(action, "slot_occupied", "Support slot is occupied")
 	if player.credit < card.deployment_cost:
 		return _reject(action, "insufficient_credit", "Not enough Credit")
+	var deploy_validation := _effect_engine.validate_trigger("deploy", {
+		"source_id": card.instance_id,
+		"actor_id": player.id,
+		"target_ids": [],
+	})
+	if not deploy_validation.valid:
+		return _reject_rule(action, deploy_validation)
 
 	var events: Array = []
 	_spend_credit(player, card.deployment_cost, "deployment", card.instance_id, events)
@@ -277,9 +284,6 @@ func _play_order(action: GameAction) -> ActionResult:
 	var effect_validation := _effect_engine.validate_trigger("play_order", context)
 	if not effect_validation.valid:
 		return _reject_rule(action, effect_validation)
-
-	var events: Array = []
-	_spend_credit(player, order.deployment_cost, "order", order.instance_id, events)
 	var pending_event := {
 		"type": "order_played",
 		"order_id": order.instance_id,
@@ -287,16 +291,27 @@ func _play_order(action: GameAction) -> ActionResult:
 		"target_ids": action.target_ids.duplicate(),
 		"cancelled": false,
 	}
-	_emit(events, "order_played", pending_event)
-	var counter_events := _effect_engine.resolve_trigger("order_played", {
+	var counter_context := {
 		"source_id": order.instance_id,
 		"actor_id": player.id,
 		"target_ids": action.target_ids.duplicate(),
 		"event": pending_event,
-	})
+	}
+	var counter_validation := _effect_engine.validate_trigger("order_played", counter_context)
+	if not counter_validation.valid:
+		return _reject_rule(action, counter_validation)
+
+	var events: Array = []
+	_spend_credit(player, order.deployment_cost, "order", order.instance_id, events)
+	_emit(events, "order_played", pending_event)
+	var counter_events := _effect_engine.resolve_trigger("order_played", counter_context)
 	events.append_array(counter_events)
+	if not _effect_engine.last_resolution.valid:
+		return _reject_rule(action, _effect_engine.last_resolution)
 	if not bool(pending_event.get("cancelled", false)):
 		events.append_array(_effect_engine.resolve_trigger("play_order", context))
+		if not _effect_engine.last_resolution.valid:
+			return _reject_rule(action, _effect_engine.last_resolution)
 	player.hand.erase(order)
 	order.zone = "discard"
 	order.slot = -1
@@ -358,6 +373,9 @@ func _activate_ability(action: GameAction) -> ActionResult:
 			break
 	if ability.is_empty():
 		return _reject(action, "ability_not_found", "Manual ability was not found")
+	var allowed_zones: Array = ability.get("allowed_zones", ["support_line", "frontline"])
+	if not (source.zone in allowed_zones):
+		return _reject(action, "invalid_origin", "Ability source is not on the battlefield")
 	var player: PlayerState = state.players[action.actor_id]
 	var credit_cost := int(ability.get("credit_cost", 0))
 	if player.credit < credit_cost:
@@ -392,8 +410,18 @@ func _attack_unit(action: GameAction) -> ActionResult:
 	if not validation.valid:
 		return _reject_rule(action, validation)
 	var defender: CardInstance = CombatRules.find_card(state, defender_id)
+	var pending_event := {"type": "attack", "actor_id": action.actor_id, "target_ids": action.target_ids.duplicate(), "cancelled": false}
+	var reaction_context := {"source_id": attacker.instance_id, "actor_id": action.actor_id, "target_ids": action.target_ids.duplicate(), "event": pending_event}
+	var reaction_validation := _effect_engine.validate_trigger("attack", reaction_context)
+	if not reaction_validation.valid:
+		return _reject_rule(action, reaction_validation)
 
 	var events: Array = []
+	_resolve_trigger("attack", reaction_context, events)
+	if not _effect_engine.last_resolution.valid:
+		return _reject_rule(action, _effect_engine.last_resolution)
+	if bool(pending_event.get("cancelled", false)):
+		return _accept(action, events)
 	_reserve_attack_operation(attacker, events)
 	_emit(events, "attack_started", {
 		"attacker_id": attacker.instance_id,
