@@ -12,6 +12,8 @@ var state: MatchState
 var initial_deck_ids: Dictionary
 var _definitions: Dictionary
 var _rng := RandomNumberGenerator.new()
+var _debug_trigger_hook: Callable
+var _debug_modifier_expiry_hook: Callable
 
 static func create(card_definitions: Dictionary, player_deck: Array, opponent_deck: Array, seed: int) -> MatchController:
 	var controller: MatchController = load("res://scripts/core/match_controller.gd").new()
@@ -140,7 +142,11 @@ func _end_turn(action: GameAction) -> ActionResult:
 	var next_player_id := _other_player_id(player.id)
 	var next_player: PlayerState = state.players[next_player_id]
 	_resolve_trigger("turn_end", {"player_id": player.id}, events)
+	if _is_terminal():
+		return _accept(action, events)
 	_expire_temporary_modifiers(player)
+	if _is_terminal():
+		return _accept(action, events)
 	next_player.deactivate_countermeasures()
 	_emit(events, "turn_ended", {"player_id": player.id, "turn": state.turn})
 	state.active_player_id = next_player_id
@@ -150,8 +156,12 @@ func _end_turn(action: GameAction) -> ActionResult:
 func _draw_opening_cards(player: PlayerState, count: int, events: Array) -> void:
 	for index in range(count):
 		_draw_card(player, events)
+		if _is_terminal():
+			return
 
 func _draw_card(player: PlayerState, events: Array) -> void:
+	if _is_terminal():
+		return
 	if player.deck.is_empty():
 		var damage := player.fatigue
 		player.headquarters.current_defense = maxi(0, player.headquarters.current_defense - damage)
@@ -170,6 +180,8 @@ func _draw_card(player: PlayerState, events: Array) -> void:
 	_emit(events, "card_drawn", {"player_id": player.id, "instance_id": card.instance_id})
 
 func _start_turn(player: PlayerState, events: Array) -> void:
+	if _is_terminal():
+		return
 	state.turn += 1
 	player.turns_started += 1
 	_emit(events, "turn_started", {"player_id": player.id, "turn": state.turn})
@@ -181,6 +193,8 @@ func _start_turn(player: PlayerState, events: Array) -> void:
 	player.reset_operations()
 	_emit(events, "credit_refilled", {"player_id": player.id, "credit": player.credit})
 	_draw_card(player, events)
+	if _is_terminal():
+		return
 	_resolve_trigger("turn_start", {"player_id": player.id}, events)
 
 func debug_draw(player_id: String) -> Array:
@@ -190,17 +204,32 @@ func debug_draw(player_id: String) -> Array:
 	_draw_card(state.players[player_id], events)
 	return events
 
+func debug_set_trigger_hook(hook: Callable) -> void:
+	_debug_trigger_hook = hook
+
+func debug_set_modifier_expiry_hook(hook: Callable) -> void:
+	_debug_modifier_expiry_hook = hook
+
 func _resolve_trigger(trigger: String, context: Dictionary, events: Array) -> void:
-	pass
+	if _is_terminal():
+		return
+	if _debug_trigger_hook.is_valid():
+		_debug_trigger_hook.call(trigger, context, events)
 
 func _expire_temporary_modifiers(player: PlayerState) -> void:
-	pass
+	if _is_terminal():
+		return
+	if _debug_modifier_expiry_hook.is_valid():
+		_debug_modifier_expiry_hook.call(player.id)
 
 func _check_headquarters_death(player: PlayerState) -> void:
-	if player.headquarters.current_defense > 0:
+	if player.headquarters.current_defense > 0 or _is_terminal():
 		return
 	state.winner_id = _other_player_id(player.id)
 	state.phase = "complete"
+
+func _is_terminal() -> bool:
+	return state.phase == "complete" or not state.winner_id.is_empty()
 
 func _shuffle_deck(deck: Array) -> void:
 	for index in range(deck.size() - 1, 0, -1):
