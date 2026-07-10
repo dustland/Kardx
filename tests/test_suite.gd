@@ -4,6 +4,7 @@ const TestCase = preload("res://tests/support/test_case.gd")
 const SUITES := [
 	preload("res://tests/core/test_contracts.gd"),
 	preload("res://tests/core/test_state.gd"),
+	preload("res://tests/core/test_setup.gd"),
 ]
 
 func _init() -> void:
@@ -11,5 +12,5 @@ func _init() -> void:
 	for suite in SUITES:
 		suite.run(test_case)
 	if test_case.finish() == 0:
-		print("PASS contracts and state")
+		print("PASS contracts, state, and setup")
 	quit(test_case.finish())
