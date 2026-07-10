@@ -15,6 +15,7 @@ var active_countermeasures: Array = []
 var credit_slots: int = 0
 var credit: int = 0
 var fatigue: int = 1
+var turns_started: int = 0
 var mulligan_used: bool = false
 var mulligan_confirmed: bool = false
 var max_hand_size: int = GameConstants.MAX_HAND_SIZE
@@ -27,6 +28,17 @@ static func create(player_id: String, player_nation: String, hq: CardInstance, p
 	player.deck = player_deck.duplicate()
 	player.support_line.resize(GameConstants.SUPPORT_UNIT_SLOTS)
 	return player
+
+func reset_operations() -> void:
+	for card in support_line:
+		if card != null:
+			card.operations_used = 0
+
+func deactivate_countermeasures() -> void:
+	for card in active_countermeasures:
+		if card != null:
+			card.countermeasure_active = false
+	active_countermeasures.clear()
 
 func to_public_dict(reveal_hand: bool, reveal_deck_order: bool) -> Dictionary:
 	var public_hand: Array = []

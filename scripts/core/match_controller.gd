@@ -4,6 +4,7 @@ extends RefCounted
 const ActionResult = preload("res://scripts/core/action_result.gd")
 const CardInstance = preload("res://scripts/core/card_instance.gd")
 const GameAction = preload("res://scripts/core/game_action.gd")
+const GameConstants = preload("res://scripts/core/game_constants.gd")
 const MatchState = preload("res://scripts/core/match_state.gd")
 const PlayerState = preload("res://scripts/core/player_state.gd")
 
@@ -37,6 +38,8 @@ func submit_action(action: GameAction) -> ActionResult:
 			return _mulligan(action)
 		"confirm_mulligan":
 			return _confirm_mulligan(action)
+		"end_turn":
+			return _end_turn(action)
 		_:
 			return _reject(action, "unknown_action", "Unknown action")
 
@@ -120,10 +123,29 @@ func _confirm_mulligan(action: GameAction) -> ActionResult:
 	if player.mulligan_confirmed:
 		return _reject(action, "already_confirmed", "Mulligan already confirmed")
 	player.mulligan_confirmed = true
+	var events: Array = []
 	if _both_mulligans_confirmed():
 		state.phase = "action"
 		state.active_player_id = state.starting_player_id
-	return _accept(action)
+		_start_turn(state.players[state.active_player_id], events)
+	return _accept(action, events)
+
+func _end_turn(action: GameAction) -> ActionResult:
+	if state.phase != "action":
+		return _reject(action, "invalid_phase", "Turn actions are not available")
+	if action.actor_id != state.active_player_id:
+		return _reject(action, "not_active_player", "Only the active player can end the turn")
+	var events: Array = []
+	var player: PlayerState = state.players[action.actor_id]
+	var next_player_id := _other_player_id(player.id)
+	var next_player: PlayerState = state.players[next_player_id]
+	_resolve_trigger("turn_end", {"player_id": player.id}, events)
+	_expire_temporary_modifiers(player)
+	next_player.deactivate_countermeasures()
+	_emit(events, "turn_ended", {"player_id": player.id, "turn": state.turn})
+	state.active_player_id = next_player_id
+	_start_turn(next_player, events)
+	return _accept(action, events)
 
 func _draw_opening_cards(player: PlayerState, count: int, events: Array) -> void:
 	for index in range(count):
@@ -131,11 +153,54 @@ func _draw_opening_cards(player: PlayerState, count: int, events: Array) -> void
 
 func _draw_card(player: PlayerState, events: Array) -> void:
 	if player.deck.is_empty():
+		var damage := player.fatigue
+		player.headquarters.current_defense = maxi(0, player.headquarters.current_defense - damage)
+		player.fatigue += 1
+		_emit(events, "fatigue_damage", {"player_id": player.id, "damage": damage})
+		_check_headquarters_death(player)
 		return
 	var card: CardInstance = player.deck.pop_back()
+	if player.hand.size() >= GameConstants.MAX_HAND_SIZE:
+		card.zone = "discard"
+		player.discard.append(card)
+		_emit(events, "card_overdrawn", {"player_id": player.id, "instance_id": card.instance_id})
+		return
 	card.zone = "hand"
 	player.hand.append(card)
 	_emit(events, "card_drawn", {"player_id": player.id, "instance_id": card.instance_id})
+
+func _start_turn(player: PlayerState, events: Array) -> void:
+	state.turn += 1
+	player.turns_started += 1
+	_emit(events, "turn_started", {"player_id": player.id, "turn": state.turn})
+	var previous_credit_slots := player.credit_slots
+	player.credit_slots = mini(GameConstants.MAX_CREDITS, player.credit_slots + 1)
+	if player.credit_slots != previous_credit_slots:
+		_emit(events, "credit_slots_changed", {"player_id": player.id, "credit_slots": player.credit_slots})
+	player.credit = player.credit_slots
+	player.reset_operations()
+	_emit(events, "credit_refilled", {"player_id": player.id, "credit": player.credit})
+	_draw_card(player, events)
+	_resolve_trigger("turn_start", {"player_id": player.id}, events)
+
+func debug_draw(player_id: String) -> Array:
+	if not state.players.has(player_id):
+		return []
+	var events: Array = []
+	_draw_card(state.players[player_id], events)
+	return events
+
+func _resolve_trigger(trigger: String, context: Dictionary, events: Array) -> void:
+	pass
+
+func _expire_temporary_modifiers(player: PlayerState) -> void:
+	pass
+
+func _check_headquarters_death(player: PlayerState) -> void:
+	if player.headquarters.current_defense > 0:
+		return
+	state.winner_id = _other_player_id(player.id)
+	state.phase = "complete"
 
 func _shuffle_deck(deck: Array) -> void:
 	for index in range(deck.size() - 1, 0, -1):
