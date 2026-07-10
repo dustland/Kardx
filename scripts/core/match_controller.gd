@@ -347,8 +347,11 @@ func _validate_invalid_replay_snapshot(snapshot: Dictionary) -> Dictionary:
 	var frontline_controller := ""
 	for card_id in snapshot.frontline:
 		if card_id != null:
-			frontline_controller = snapshot.cards[card_id].owner_id
-			break
+			var card_owner_id: String = snapshot.cards[card_id].owner_id
+			if frontline_controller.is_empty():
+				frontline_controller = card_owner_id
+			elif frontline_controller != card_owner_id:
+				return {"valid": false, "code": "mixed_snapshot_frontline_owners"}
 	if frontline_controller != snapshot.frontline_controller_id:
 		return {"valid": false, "code": "invalid_snapshot_frontline_controller"}
 	for card_id in snapshot.cards:

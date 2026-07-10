@@ -14,6 +14,7 @@ static func run(t) -> void:
 	_test_tampered_invalid_terminal_metadata_aborts(t)
 	_test_invalid_snapshot_identity_and_reference_tampering_aborts(t)
 	_test_invalid_snapshot_primary_graph_tampering_aborts(t)
+	_test_invalid_snapshot_frontline_owner_graph(t)
 	_test_invalid_snapshot_active_countermeasure_must_reference_hand(t)
 	_test_replay_integrity_hash_rejects_shape_valid_tampering(t)
 	_test_replay_schema_rejects_untrusted_logs(t)
@@ -168,6 +169,35 @@ static func _test_invalid_snapshot_primary_graph_tampering_aborts(t) -> void:
 		var replayed = ReplayLog.from_dict(tampered).replay(fixture.definitions)
 		t.assert_eq(replayed.invalid_diagnostics.code, "replay_invalid", "invalid primary snapshot graph has stable diagnostic")
 		t.assert_eq(_event_type_count(replayed.event_history, "match_invalid"), 1, "invalid primary snapshot graph emits one terminal event")
+
+
+static func _test_invalid_snapshot_frontline_owner_graph(t) -> void:
+	var fixture := CoreCards.build_valid_fixture()
+	var controller := MatchController.create(fixture.definitions, fixture.player_deck, fixture.enemy_deck, 90237)
+	controller._abort_invalid("forced_invalid", {"source": "test"})
+	var empty_snapshot: Dictionary = controller.replay_log.to_dict().terminal_result.state_snapshot
+	t.assert_true(controller._validate_invalid_replay_snapshot(empty_snapshot).valid, "empty Frontline with empty controller is valid")
+
+	var single_owner: Dictionary = empty_snapshot.duplicate(true)
+	var player_card_id: String = str(single_owner.players.player.deck[0])
+	single_owner.players.player.deck.remove_at(0)
+	single_owner.frontline[0] = player_card_id
+	single_owner.cards[player_card_id].zone = "frontline"
+	single_owner.cards[player_card_id].slot = 0
+	single_owner.frontline_controller_id = "player"
+	t.assert_true(controller._validate_invalid_replay_snapshot(single_owner).valid, "single-owner Frontline with matching controller is valid")
+
+	var mixed_owner: Dictionary = single_owner.duplicate(true)
+	var opponent_card_id: String = str(mixed_owner.players.opponent.deck[0])
+	mixed_owner.players.opponent.deck.remove_at(0)
+	mixed_owner.frontline[1] = opponent_card_id
+	mixed_owner.cards[opponent_card_id].zone = "frontline"
+	mixed_owner.cards[opponent_card_id].slot = 1
+	t.assert_true(not controller._validate_invalid_replay_snapshot(mixed_owner).valid, "mixed-owner Frontline is invalid")
+
+	var controller_mismatch: Dictionary = single_owner.duplicate(true)
+	controller_mismatch.frontline_controller_id = "opponent"
+	t.assert_true(not controller._validate_invalid_replay_snapshot(controller_mismatch).valid, "mismatched Frontline controller is invalid")
 
 
 static func _test_invalid_snapshot_active_countermeasure_must_reference_hand(t) -> void:
