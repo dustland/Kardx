@@ -78,6 +78,8 @@ func _mulligan(action: GameAction) -> ActionResult:
 	if not state.players.has(action.actor_id):
 		return _reject(action, "invalid_actor", "Unknown player")
 	var player: PlayerState = state.players[action.actor_id]
+	if player.mulligan_confirmed:
+		return _reject(action, "mulligan_confirmed", "Mulligan already confirmed")
 	if player.mulligan_used:
 		return _reject(action, "mulligan_used", "Mulligan already used")
 	var selected_cards: Array = []
@@ -91,6 +93,10 @@ func _mulligan(action: GameAction) -> ActionResult:
 		if selected_card == null:
 			return _reject(action, "invalid_selection", "Mulligan card is not in hand")
 		selected_cards.append(selected_card)
+
+	if selected_cards.is_empty():
+		player.mulligan_used = true
+		return _accept(action)
 
 	var events: Array = []
 	for card in selected_cards:
@@ -140,7 +146,7 @@ func _shuffle_deck(deck: Array) -> void:
 	if state != null:
 		state.rng_state = _rng.state
 
-func _card_in_hand(player: PlayerState, instance_id: String):
+func _card_in_hand(player: PlayerState, instance_id: String) -> CardInstance:
 	for card in player.hand:
 		if card.instance_id == instance_id:
 			return card
