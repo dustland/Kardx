@@ -424,16 +424,14 @@ func _play_order(action: GameAction) -> ActionResult:
 	events.append_array(counter_events)
 	if not _effect_engine.last_resolution.valid:
 		return _reject_rule(action, _effect_engine.last_resolution)
+	if _is_terminal() or bool(pending_event.get("cancelled", false)) or not _can_continue_order(player, order, context):
+		_finalize_order(player, order, events)
+		return _accept(action, events)
 	if not bool(pending_event.get("cancelled", false)):
 		events.append_array(_effect_engine.resolve_trigger("play_order", context))
 		if not _effect_engine.last_resolution.valid:
 			return _reject_rule(action, _effect_engine.last_resolution)
-	player.hand.erase(order)
-	order.zone = "discard"
-	order.slot = -1
-	player.discard.append(order)
-	_emit(events, "card_discarded", {"player_id": player.id, "instance_id": order.instance_id})
-	_resolve_trigger("discard", {"source_id": order.instance_id, "actor_id": player.id, "target_ids": []}, events)
+	_finalize_order(player, order, events)
 	return _accept(action, events)
 
 
@@ -535,6 +533,7 @@ func _attack_unit(action: GameAction) -> ActionResult:
 	if not reaction_validation.valid:
 		return _reject_rule(action, reaction_validation)
 
+	var uses_tank_chain := CombatRules.attack_uses_tank_chain(attacker)
 	var events: Array = []
 	_reserve_attack_operation(attacker, events)
 	_emit(events, "attack_started", {
@@ -545,7 +544,8 @@ func _attack_unit(action: GameAction) -> ActionResult:
 	_resolve_trigger("attack", reaction_context, events)
 	if not _effect_engine.last_resolution.valid:
 		return _reject_rule(action, _effect_engine.last_resolution)
-	if bool(pending_event.get("cancelled", false)):
+	if _is_terminal() or bool(pending_event.get("cancelled", false)) \
+		or not _can_continue_unit_attack(attacker, defender, uses_tank_chain):
 		return _accept(action, events)
 	_resolve_trigger("defend", {
 		"source_id": defender.instance_id,
@@ -555,6 +555,9 @@ func _attack_unit(action: GameAction) -> ActionResult:
 	}, events)
 	if not _effect_engine.last_resolution.valid:
 		return _reject_rule(action, _effect_engine.last_resolution)
+	if _is_terminal() or bool(pending_event.get("cancelled", false)) \
+		or not _can_continue_unit_attack(attacker, defender, uses_tank_chain):
+		return _accept(action, events)
 	var ambush := CombatRules.receives_counterattack(attacker) and CombatRules.is_ambush(defender)
 	if ambush:
 		_deal_combat_damage(defender, attacker, defender.current_attack, "ambush", events)
@@ -616,6 +619,7 @@ func _attack_hq(action: GameAction) -> ActionResult:
 	if not reaction_validation.valid:
 		return _reject_rule(action, reaction_validation)
 
+	var uses_tank_chain := CombatRules.attack_uses_tank_chain(attacker)
 	var events: Array = []
 	_reserve_attack_operation(attacker, events)
 	_emit(events, "attack_started", {
@@ -626,7 +630,8 @@ func _attack_hq(action: GameAction) -> ActionResult:
 	_resolve_trigger("attack", reaction_context, events)
 	if not _effect_engine.last_resolution.valid:
 		return _reject_rule(action, _effect_engine.last_resolution)
-	if bool(pending_event.get("cancelled", false)):
+	if _is_terminal() or bool(pending_event.get("cancelled", false)) \
+		or not _can_continue_hq_attack(attacker, defender.id, uses_tank_chain):
 		return _accept(action, events)
 	_resolve_trigger("defend", {
 		"source_id": defender.headquarters.instance_id,
@@ -636,21 +641,14 @@ func _attack_hq(action: GameAction) -> ActionResult:
 	}, events)
 	if not _effect_engine.last_resolution.valid:
 		return _reject_rule(action, _effect_engine.last_resolution)
+	if _is_terminal() or bool(pending_event.get("cancelled", false)) \
+		or not _can_continue_hq_attack(attacker, defender.id, uses_tank_chain):
+		return _accept(action, events)
 	_deal_combat_damage(attacker, defender.headquarters, attacker.current_attack, "attack", events)
 	if defender.headquarters.current_defense <= 0:
-		_resolve_trigger("hq_lethal", {
-			"source_id": defender.headquarters.instance_id,
-			"actor_id": action.actor_id,
-			"target_ids": [defender.headquarters.instance_id],
-		}, events)
+		_resolve_headquarters_lethal(defender.headquarters, action.actor_id, events)
 		if not _effect_engine.last_resolution.valid:
 			return _reject_rule(action, _effect_engine.last_resolution)
-	_check_headquarters_death(defender)
-	if _is_terminal():
-		_emit(events, "match_ended", {
-			"winner_id": state.winner_id,
-			"loser_id": defender.id,
-		})
 	return _accept(action, events)
 
 func _draw_opening_cards(player: PlayerState, count: int, events: Array) -> void:
@@ -667,7 +665,13 @@ func _draw_card(player: PlayerState, events: Array) -> void:
 		player.headquarters.current_defense = maxi(0, player.headquarters.current_defense - damage)
 		player.fatigue += 1
 		_emit(events, "fatigue_damage", {"player_id": player.id, "damage": damage})
-		_check_headquarters_death(player)
+		_resolve_trigger("damage", {
+			"source_id": player.headquarters.instance_id,
+			"actor_id": player.id,
+			"target_ids": [player.headquarters.instance_id],
+		}, events)
+		if player.headquarters.current_defense <= 0:
+			_resolve_headquarters_lethal(player.headquarters, player.id, events)
 		return
 	var card: CardInstance = player.deck.pop_back()
 	if player.hand.size() >= GameConstants.MAX_HAND_SIZE:
@@ -866,12 +870,73 @@ func _expire_temporary_modifiers(player: PlayerState, events: Array = []) -> voi
 		var left_frontline := _destroy_if_dead(card, events)
 		if left_frontline:
 			frontline_source = card
-		if card.category == "Headquarters":
-			_check_headquarters_death(state.players[card.owner_id])
+		if card.category == "Headquarters" and card.current_defense <= 0:
+			_resolve_headquarters_lethal(card, player.id, events)
 		if _is_terminal():
-			_emit(events, "match_ended", {"winner_id": state.winner_id, "loser_id": card.owner_id})
 			return
 	_update_frontline_control(events, frontline_source, player.id)
+
+func _can_continue_order(player: PlayerState, order: CardInstance, context: Dictionary) -> bool:
+	if order.zone != "hand" or not player.hand.has(order):
+		return false
+	return _effect_engine.validate_trigger("play_order", context).valid
+
+func _finalize_order(player: PlayerState, order: CardInstance, events: Array) -> void:
+	if order.zone != "hand" or not player.hand.has(order):
+		return
+	player.hand.erase(order)
+	order.zone = "discard"
+	order.slot = -1
+	if not player.discard.has(order):
+		player.discard.append(order)
+	_emit(events, "card_discarded", {"player_id": player.id, "instance_id": order.instance_id})
+	_resolve_trigger("discard", {"source_id": order.instance_id, "actor_id": player.id, "target_ids": []}, events)
+
+func _can_continue_unit_attack(attacker: CardInstance, defender: CardInstance, uses_tank_chain: bool) -> bool:
+	if CombatRules.find_card(state, attacker.instance_id) != attacker \
+		or CombatRules.find_card(state, defender.instance_id) != defender:
+		return false
+	return _validate_reserved_attack(attacker, uses_tank_chain, func() -> Dictionary:
+		return CombatRules.validate_unit_attack(state, attacker.instance_id, defender.instance_id)
+	)
+
+func _can_continue_hq_attack(attacker: CardInstance, defender_player_id: String, uses_tank_chain: bool) -> bool:
+	if CombatRules.find_card(state, attacker.instance_id) != attacker:
+		return false
+	return _validate_reserved_attack(attacker, uses_tank_chain, func() -> Dictionary:
+		return CombatRules.validate_hq_attack(state, attacker.instance_id, defender_player_id)
+	)
+
+func _validate_reserved_attack(attacker: CardInstance, uses_tank_chain: bool, validator: Callable) -> bool:
+	var player: PlayerState = state.players[attacker.owner_id]
+	var operations_used := attacker.operations_used
+	var operation_chain := attacker.operation_chain
+	var credit := player.credit
+	if uses_tank_chain:
+		attacker.operation_chain = CardInstance.OperationChain.TANK_ADVANCE
+	else:
+		attacker.operations_used = maxi(0, attacker.operations_used - 1)
+		player.credit += attacker.operation_cost
+	var validation: Dictionary = validator.call()
+	attacker.operations_used = operations_used
+	attacker.operation_chain = operation_chain
+	player.credit = credit
+	return validation.valid
+
+func _resolve_headquarters_lethal(headquarters: CardInstance, actor_id: String, events: Array) -> void:
+	if headquarters.current_defense > 0 or _is_terminal():
+		return
+	_resolve_trigger("hq_lethal", {
+		"source_id": headquarters.instance_id,
+		"actor_id": actor_id,
+		"target_ids": [headquarters.instance_id],
+	}, events)
+	if not _effect_engine.last_resolution.valid or headquarters.current_defense > 0 or _is_terminal():
+		return
+	var defender: PlayerState = state.players[headquarters.owner_id]
+	_check_headquarters_death(defender)
+	if _is_terminal():
+		_emit(events, "match_ended", {"winner_id": state.winner_id, "loser_id": defender.id})
 
 func _all_cards() -> Array[CardInstance]:
 	var cards: Array[CardInstance] = []

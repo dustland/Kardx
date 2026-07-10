@@ -133,4 +133,7 @@ func to_public_dict(reveal: bool) -> Dictionary:
 		"statuses": statuses.duplicate(true),
 		"zone": zone,
 		"slot": slot,
+		"face_down": face_down,
+		"countermeasure_active": countermeasure_active,
+		"countermeasure_activation_cost": countermeasure_activation_cost,
 	}

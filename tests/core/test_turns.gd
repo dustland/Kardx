@@ -13,6 +13,7 @@ static func run(t) -> void:
 	_test_end_turn_rejection_is_atomic(t)
 	_test_overdraw_and_fatigue(t)
 	_test_fatigue_defeat_stops_turn_start_trigger(t)
+	_test_fatigue_hq_lethal_prevention_and_finalization(t)
 	_test_credit_slots_cap_without_change_event(t)
 	_test_terminal_end_trigger_stops_turn_transition(t)
 	_test_terminal_modifier_expiry_stops_turn_transition(t)
@@ -126,7 +127,43 @@ static func _test_fatigue_defeat_stops_turn_start_trigger(t) -> void:
 	t.assert_eq(next_player.headquarters.current_defense, 0, "fatigue clamps Headquarters defense at zero")
 	t.assert_eq(controller.state.winner_id, ending_player_id, "fatigue defeat awards the opponent")
 	t.assert_eq(controller.state.phase, "complete", "fatigue defeat completes the match")
-	t.assert_eq(_event_types(result.events), ["turn_ended", "turn_started", "credit_slots_changed", "credit_refilled", "fatigue_damage"], "fatal fatigue stops later turn-start triggers")
+	t.assert_eq(_event_types(result.events), ["turn_ended", "turn_started", "credit_slots_changed", "credit_refilled", "fatigue_damage", "match_ended"], "fatal fatigue finalizes once and stops later turn-start triggers")
+
+
+static func _test_fatigue_hq_lethal_prevention_and_finalization(t) -> void:
+	var prevention_controller := _started_controller(305)
+	var ending_player_id: String = prevention_controller.state.active_player_id
+	var fatigued_player_id := "opponent" if ending_player_id == "player" else "player"
+	var fatigued = prevention_controller.state.players[fatigued_player_id]
+	fatigued.deck.clear()
+	fatigued.headquarters.current_defense = 1
+	fatigued.headquarters.abilities = [{
+		"id": "fatigue-repair",
+		"trigger": "hq_lethal",
+		"conditions": {},
+		"target": {"selector": "friendly_hq", "count": 1},
+		"effects": [{"type": "repair", "amount": 3}],
+	}]
+	var prevented = prevention_controller.submit_action(GameAction.create(
+		"end_turn", ending_player_id, "", [], {}, prevention_controller.state.sequence
+	))
+	t.assert_true(prevented.accepted, "fatigue repair action is accepted")
+	t.assert_eq(fatigued.headquarters.current_defense, 3, "fatigue HQ-lethal ability repairs before finalization")
+	t.assert_eq(prevention_controller.state.winner_id, "", "fatigue repair prevents defeat")
+	t.assert_true(not _event_types(prevented.events).has("match_ended"), "prevented fatigue emits no terminal event")
+
+	var terminal_controller := _started_controller(306)
+	var terminal_ending_player_id: String = terminal_controller.state.active_player_id
+	var terminal_fatigued_player_id := "opponent" if terminal_ending_player_id == "player" else "player"
+	var terminal_fatigued = terminal_controller.state.players[terminal_fatigued_player_id]
+	terminal_fatigued.deck.clear()
+	terminal_fatigued.headquarters.current_defense = 1
+	var terminal = terminal_controller.submit_action(GameAction.create(
+		"end_turn", terminal_ending_player_id, "", [], {}, terminal_controller.state.sequence
+	))
+	t.assert_true(terminal.accepted, "unprevented fatigue action is accepted")
+	t.assert_eq(terminal_controller.state.winner_id, terminal_ending_player_id, "unprevented fatigue awards the opponent")
+	t.assert_eq(_event_types(terminal.events).count("match_ended"), 1, "unprevented fatigue finalizes exactly once")
 
 static func _test_credit_slots_cap_without_change_event(t) -> void:
 	var controller := _started_controller(301)

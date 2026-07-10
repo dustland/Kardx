@@ -35,6 +35,8 @@ static func run(t) -> void:
 	_test_controller_trigger_checkpoints(t)
 	_test_cancelled_attacks_pay_before_countermeasures(t)
 	_test_temporary_modifiers_expire_through_turn_lifecycle(t)
+	_test_reaction_checkpoints_halt_stale_actions(t)
+	_test_temporary_modifier_clamping_and_hq_expiry_lethal(t)
 
 
 static func _test_stat_and_status_effects(t) -> void:
@@ -985,6 +987,118 @@ static func _test_temporary_modifiers_expire_through_turn_lifecycle(t) -> void:
 	t.assert_true(_event_types(expired.events).has("modifier_expired"), "expiry emits a deterministic lifecycle event")
 	controller.submit_action(GameAction.create("end_turn", "opponent", "", [], {}, controller.state.sequence))
 	t.assert_eq([target.current_attack, target.current_defense], [2, 3], "expired modifier cannot reverse stats twice")
+
+
+static func _test_reaction_checkpoints_halt_stale_actions(t) -> void:
+	var order_controller := _controller(548)
+	var order := _damage_order("reaction-return-order", "player", 3, 2)
+	var order_target := _card("reaction-return-order-target", "opponent", "Unit", 1, 5)
+	var order_counter := _countermeasure("reaction-return-order-counter", "opponent", 1)
+	order_counter.abilities = [_ability(
+		"return-order-target", "order_played", {"selector": "action_targets", "count": 1}, [{"type": "return"}], {"enemy": true}
+	)]
+	_put_hand(order_controller, order)
+	_put_hand(order_controller, order_counter)
+	_place_support(order_controller, order_target, 0)
+	order_counter.countermeasure_active = true
+	order_counter.face_down = true
+	order_controller.state.players.opponent.active_countermeasures.append(order_counter)
+	var order_result = order_controller.submit_action(GameAction.create(
+		"play_order", "player", order.instance_id, [order_target.instance_id], {}, order_controller.state.sequence
+	))
+	t.assert_true(order_result.accepted, "zone-changing Order reaction accepts the paid action")
+	t.assert_eq(order_controller.state.players.player.credit, 8, "halted Order remains paid")
+	t.assert_eq(order_target.zone, "hand", "reaction returns the Order target before resolution")
+	t.assert_true(not _event_types(order_result.events).has("damage_dealt"), "halted Order cannot damage a returned target")
+	t.assert_eq(order_controller.state.players.player.discard.count(order), 1, "halted Order cleanup leaves one discard copy")
+	t.assert_true(not order_controller.state.players.player.hand.has(order), "halted Order leaves no duplicate hand copy")
+
+	var unit_controller := _controller(549)
+	var attacker := _card("reaction-return-attacker", "player", "Unit", 3, 5)
+	attacker.operation_cost = 2
+	var defender := _card("reaction-return-defender", "opponent", "Unit", 1, 5)
+	var attack_counter := _countermeasure("reaction-return-attack-counter", "opponent", 1)
+	attack_counter.abilities = [_ability(
+		"return-attack-target", "attack", {"selector": "action_targets", "count": 1}, [{"type": "return"}], {"enemy": true}
+	)]
+	_place_support(unit_controller, attacker, 0)
+	_place_frontline(unit_controller, defender, 0)
+	_put_hand(unit_controller, attack_counter)
+	attack_counter.countermeasure_active = true
+	attack_counter.face_down = true
+	unit_controller.state.players.opponent.active_countermeasures.append(attack_counter)
+	_ready(unit_controller, attacker)
+	var unit_result = unit_controller.submit_action(GameAction.create(
+		"attack_unit", "player", attacker.instance_id, [defender.instance_id], {}, unit_controller.state.sequence
+	))
+	t.assert_true(unit_result.accepted, "zone-changing unit reaction accepts the paid attack")
+	t.assert_eq(unit_controller.state.players.player.credit, 8, "halted unit attack keeps its operation payment")
+	t.assert_eq(attacker.operations_used, 1, "halted unit attack keeps its reserved operation")
+	t.assert_eq(defender.zone, "hand", "reaction returns the unit defender")
+	t.assert_true(not _event_types(unit_result.events).has("damage_dealt"), "halted unit attack cannot damage a returned defender")
+	t.assert_eq(unit_controller.state.players.opponent.hand.count(defender), 1, "returned defender has one hand copy")
+
+	var hq_controller := _controller(550)
+	var hq_attacker := _card("reaction-terminal-hq-attacker", "player", "Unit", 3, 5)
+	hq_attacker.unit_type = "Artillery"
+	hq_attacker.operation_cost = 2
+	hq_attacker.abilities = [_ability(
+		"terminal-attack-reaction", "attack", {"selector": "friendly_hq", "count": 1}, [{"type": "damage", "amount": 20}]
+	)]
+	_place_support(hq_controller, hq_attacker, 0)
+	_ready(hq_controller, hq_attacker)
+	var hq_result = hq_controller.submit_action(GameAction.create(
+		"attack_hq", "player", hq_attacker.instance_id, [hq_controller.state.players.opponent.headquarters.instance_id], {}, hq_controller.state.sequence
+	))
+	t.assert_true(hq_result.accepted, "terminal HQ reaction accepts the paid attack")
+	t.assert_eq(hq_controller.state.players.player.credit, 8, "terminal HQ reaction keeps operation payment")
+	t.assert_eq(hq_controller.state.players.opponent.headquarters.current_defense, 20, "terminal reaction stops the normal HQ damage")
+	t.assert_eq(hq_controller.state.winner_id, "opponent", "terminal reaction chooses the reaction winner")
+	t.assert_eq(_event_types(hq_result.events).count("match_ended"), 1, "terminal reaction finalizes exactly once")
+
+
+static func _test_temporary_modifier_clamping_and_hq_expiry_lethal(t) -> void:
+	var clamp_controller := _controller(551)
+	var clamp_source := _card("clamped-modifier-source", "player")
+	var clamp_target := _card("clamped-modifier-target", "opponent", "Unit", 2, 1)
+	clamp_source.abilities = [_ability(
+		"clamped-temporary-debuff", "manual", {"selector": "enemy_unit", "count": 1},
+		[{"type": "debuff", "defense": 2, "duration": "turn"}]
+	)]
+	_place_support(clamp_controller, clamp_source, 0)
+	_place_support(clamp_controller, clamp_target, 0)
+	var clamped = clamp_controller.submit_action(GameAction.create(
+		"activate_ability", "player", clamp_source.instance_id, [clamp_target.instance_id], {"ability_id": "clamped-temporary-debuff"}, clamp_controller.state.sequence
+	))
+	t.assert_true(clamped.accepted, "clamped temporary debuff action resolves")
+	t.assert_eq(clamp_target.current_defense, 0, "temporary debuff clamps defense at zero")
+	t.assert_eq(clamp_target.modifiers[0].defense_delta, -1, "modifier records the actual clamped defense delta")
+	clamp_controller.submit_action(GameAction.create("end_turn", "player", "", [], {}, clamp_controller.state.sequence))
+	t.assert_eq(clamp_target.current_defense, 1, "expiry restores exactly the clamped defense delta")
+	t.assert_eq(clamp_target.modifiers.size(), 0, "clamped modifier is removed once after expiry")
+
+	var hq_controller := _controller(552)
+	var hq_source := _card("expiry-hq-source", "player")
+	var hq = hq_controller.state.players.opponent.headquarters
+	hq_source.abilities = [_ability(
+		"temporary-hq-buffer", "manual", {"selector": "enemy_unit_or_hq", "count": 1},
+		[{"type": "buff", "defense": 2, "duration": "turn"}]
+	)]
+	hq.abilities = [_ability(
+		"expiry-hq-repair", "hq_lethal", {"selector": "friendly_hq", "count": 1}, [{"type": "repair", "amount": 3}]
+	)]
+	_place_support(hq_controller, hq_source, 0)
+	_put_deck(hq_controller, _card("expiry-hq-next-draw", "opponent"))
+	var buffered = hq_controller.submit_action(GameAction.create(
+		"activate_ability", "player", hq_source.instance_id, [hq.instance_id], {"ability_id": "temporary-hq-buffer"}, hq_controller.state.sequence
+	))
+	t.assert_true(buffered.accepted, "temporary HQ buffer action resolves")
+	hq.current_defense = 1
+	var expiry = hq_controller.submit_action(GameAction.create("end_turn", "player", "", [], {}, hq_controller.state.sequence))
+	t.assert_true(expiry.accepted, "HQ modifier expiry action resolves")
+	t.assert_eq(hq.current_defense, 3, "HQ lethal reaction repairs after modifier expiry")
+	t.assert_eq(hq_controller.state.winner_id, "", "HQ expiry repair prevents defeat")
+	t.assert_true(not _event_types(expiry.events).has("match_ended"), "prevented HQ expiry emits no terminal event")
 
 
 static func _resolve(

@@ -290,19 +290,21 @@ func _apply_effect(effect: Dictionary) -> Dictionary:
 		"buff", "debuff":
 			var sign := 1 if effect_type == "buff" else -1
 			for target in targets:
-				var attack_delta := sign * int(effect.get("attack", 0))
-				var defense_delta := sign * int(effect.get("defense", 0))
-				target.current_attack += attack_delta
-				target.current_defense = maxi(0, target.current_defense + defense_delta)
-				_check_lethal(target)
+				var previous_attack := target.current_attack
+				var previous_defense := target.current_defense
+				target.current_attack += sign * int(effect.get("attack", 0))
+				target.current_defense = maxi(0, target.current_defense + sign * int(effect.get("defense", 0)))
+				var applied_attack_delta := target.current_attack - previous_attack
+				var applied_defense_delta := target.current_defense - previous_defense
 				if not str(effect.get("duration", "")).is_empty():
 					target.add_temporary_modifier(
-						attack_delta,
-						defense_delta,
+						applied_attack_delta,
+						applied_defense_delta,
 						effect.get("duration", ""),
 						str(effect.get("actor_id", source.owner_id)),
 						source.instance_id
 					)
+				_check_lethal(target)
 			return _event("stats_changed", {"source_id": source.instance_id, "target_id": _first_id(targets)})
 		"status":
 			for target in targets:
