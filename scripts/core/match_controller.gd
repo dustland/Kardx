@@ -54,6 +54,8 @@ func submit_action(action: GameAction) -> ActionResult:
 	var transaction := _capture_transaction()
 	_effect_engine.begin_action()
 	var result := _dispatch_action(action)
+	if action.type in ["attack_unit", "attack_hq"]:
+		_expire_temporary_statuses("combat")
 	var resolution := _effect_engine.finish_action()
 	if not result.accepted or not resolution.valid:
 		_restore_transaction(transaction)
@@ -285,6 +287,7 @@ func _apply_card_snapshot(card: CardInstance, data: Dictionary) -> void:
 	card.deployed_turn = data.deployed_turn
 	card.modifiers = data.modifiers.duplicate(true)
 	card.statuses = data.statuses.duplicate(true)
+	card.temporary_statuses = data.temporary_statuses.duplicate(true)
 	card.face_down = data.face_down
 	card.countermeasure_active = data.countermeasure_active
 	card.countermeasure_activation_cost = data.countermeasure_activation_cost
@@ -450,7 +453,7 @@ func _valid_card_snapshot(data) -> bool:
 	for field in ["base_attack", "current_attack", "base_defense", "current_defense", "deployment_cost", "operation_cost", "slot", "operations_used", "operation_chain", "deployed_turn", "countermeasure_activation_cost"]:
 		if typeof(data.get(field, null)) != TYPE_INT:
 			return false
-	for field in ["keywords", "abilities", "modifiers"]:
+	for field in ["keywords", "abilities", "modifiers", "temporary_statuses"]:
 		if not (data.get(field, null) is Array):
 			return false
 	if not (data.get("statuses", null) is Dictionary):
@@ -654,6 +657,7 @@ func _card_state(card) -> Variant:
 		"deployed_turn": card.deployed_turn,
 		"modifiers": card.modifiers.duplicate(true),
 		"statuses": card.statuses.duplicate(true),
+		"temporary_statuses": card.temporary_statuses.duplicate(true),
 		"face_down": card.face_down,
 		"countermeasure_active": card.countermeasure_active,
 		"countermeasure_activation_cost": card.countermeasure_activation_cost,
@@ -771,6 +775,7 @@ func _capture_card(card, snapshots: Array[Dictionary], seen: Dictionary) -> void
 		"deployed_turn": card.deployed_turn,
 		"modifiers": card.modifiers.duplicate(true),
 		"statuses": card.statuses.duplicate(true),
+		"temporary_statuses": card.temporary_statuses.duplicate(true),
 		"face_down": card.face_down,
 		"countermeasure_active": card.countermeasure_active,
 		"countermeasure_activation_cost": card.countermeasure_activation_cost,
@@ -814,6 +819,7 @@ func _restore_transaction(transaction: Dictionary) -> void:
 		card.deployed_turn = snapshot.deployed_turn
 		card.modifiers = snapshot.modifiers.duplicate(true)
 		card.statuses = snapshot.statuses.duplicate(true)
+		card.temporary_statuses = snapshot.temporary_statuses.duplicate(true)
 		card.face_down = snapshot.face_down
 		card.countermeasure_active = snapshot.countermeasure_active
 		card.countermeasure_activation_cost = snapshot.countermeasure_activation_cost
@@ -1533,6 +1539,10 @@ func _expire_temporary_modifiers(player: PlayerState, events: Array = []) -> voi
 		if _is_terminal():
 			return
 	_update_frontline_control(events, frontline_source, player.id)
+
+func _expire_temporary_statuses(duration: String) -> void:
+	for card in _all_cards():
+		card.expire_temporary_statuses(duration)
 
 func _can_continue_order(player: PlayerState, order: CardInstance, context: Dictionary) -> bool:
 	if order.zone != "hand" or not player.hand.has(order):

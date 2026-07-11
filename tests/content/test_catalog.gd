@@ -87,16 +87,17 @@ static func _test_card_ids_references_and_category_shapes(t) -> void:
 
 static func _test_effect_schema_defaults_and_matrix(t) -> void:
 	var catalog := ContentCatalog.new()
-	catalog.cards = [_card("us-rifle", ["default-count", "attack-only", "signed-credit"]), _headquarters("us-hq")]
+	catalog.cards = [_card("us-rifle", ["default-count", "attack-only", "signed-credit", "combat-status"]), _headquarters("us-hq")]
 	catalog.abilities = [
 		{"id": "default-count", "trigger": "manual", "conditions": {}, "target": {"selector": "enemy_unit"}, "effects": [{"type": "damage", "amount": 1}]},
 		{"id": "attack-only", "trigger": "manual", "conditions": {}, "target": {"selector": "enemy_unit"}, "effects": [{"type": "buff", "attack": 1}]},
 		{"id": "signed-credit", "trigger": "manual", "conditions": {}, "target": {"selector": "none"}, "effects": [{"type": "credit", "amount": -2}]},
+		{"id": "combat-status", "trigger": "attack", "conditions": {"target_category": "Unit"}, "target": {"selector": "action_targets"}, "effects": [{"type": "status", "status": "Ambush", "duration": "combat"}]},
 	]
 	catalog.decks = []
 	catalog.rules = _rules()
 	catalog.rebuild_indexes()
-	t.assert_eq(ContentValidator.validate(catalog), [], "EffectEngine defaults, single-stat modifiers, and signed Credit validate")
+	t.assert_eq(ContentValidator.validate(catalog), [], "EffectEngine defaults, modifiers, signed Credit, and combat statuses validate")
 
 	var invalid := ContentCatalog.new()
 	invalid.cards = [_card("us-rifle", ["hq-count", "hq-retreat", "mixed-destroy", "action-return"]), _headquarters("us-hq")]

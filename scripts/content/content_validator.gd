@@ -167,6 +167,8 @@ static func _validate_conditions(diagnostics: Array[Dictionary], conditions: Var
 			_add(diagnostics, "invalid_conditions", "%s.%s" % [path, key], "target_owner condition must be owner")
 		elif key == "target_unit_type" and not UNIT_TYPES.has(str(value)):
 			_add(diagnostics, "invalid_conditions", "%s.%s" % [path, key], "target_unit_type must be a supported Unit type")
+		elif key == "target_category" and not CATEGORIES.has(str(value)):
+			_add(diagnostics, "invalid_conditions", "%s.%s" % [path, key], "target_category must be a supported card category")
 		elif key == "source_damaged" and not value is bool:
 			_add(diagnostics, "invalid_conditions", "%s.%s" % [path, key], "source_damaged condition must be a boolean")
 		elif key == "source_lacks_status" and (not value is String or str(value).strip_edges().is_empty()):
@@ -175,7 +177,7 @@ static func _validate_conditions(diagnostics: Array[Dictionary], conditions: Var
 			_add(diagnostics, "invalid_conditions", "%s.%s" % [path, key], "source_has_status must be a nonblank status")
 		elif key == "event_source_lethal" and not value is bool:
 			_add(diagnostics, "invalid_conditions", "%s.%s" % [path, key], "event_source_lethal must be a boolean")
-		elif key not in ["enemy", "target_owner", "target_unit_type", "source_damaged", "source_lacks_status", "source_has_status", "event_source_lethal"]:
+		elif key not in ["enemy", "target_owner", "target_unit_type", "target_category", "source_damaged", "source_lacks_status", "source_has_status", "event_source_lethal"]:
 			_add(diagnostics, "invalid_conditions", "%s.%s" % [path, key], "condition is not supported by EffectEngine")
 
 static func _validate_target(diagnostics: Array[Dictionary], target_value: Variant, path: String) -> Dictionary:
@@ -238,6 +240,8 @@ static func _validate_effect(diagnostics: Array[Dictionary], effect_value: Varia
 			_add(diagnostics, "missing_effect_field", "%s.status" % path, "status effect needs a status")
 		if effect.has("active") and not effect.get("active") is bool:
 			_add(diagnostics, "invalid_type", "%s.active" % path, "status active must be a boolean")
+		if effect.has("duration") and str(effect.get("duration", "")) != "combat":
+			_add(diagnostics, "invalid_type", "%s.duration" % path, "status duration must be combat")
 	elif effect_type == "create":
 		var definition_id_value = effect.get("definition_id", null)
 		if not definition_id_value is String or str(definition_id_value).strip_edges().is_empty():

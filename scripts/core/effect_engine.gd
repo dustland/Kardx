@@ -197,6 +197,11 @@ func _matches_conditions(source: CardInstance, conditions: Dictionary, context: 
 			var target := _find_card(str(target_id))
 			if target == null or target.unit_type != str(conditions.target_unit_type):
 				return false
+	if conditions.has("target_category"):
+		for target_id in context.get("target_ids", []):
+			var target := _find_card(str(target_id))
+			if target == null or target.category != str(conditions.target_category):
+				return false
 	if conditions.has("source_damaged") and bool(conditions.source_damaged) != (source.current_defense < source.base_defense):
 		return false
 	if conditions.has("source_lacks_status") and source.has_keyword_or_status(str(conditions.source_lacks_status)):
@@ -362,7 +367,11 @@ func _apply_effect(effect: Dictionary) -> Dictionary:
 			for target in targets:
 				var status := str(effect.get("status", ""))
 				if bool(effect.get("active", true)):
-					target.statuses[status] = true
+					var duration := str(effect.get("duration", ""))
+					if duration.is_empty():
+						target.statuses[status] = true
+					else:
+						target.add_temporary_status(status, duration, source.instance_id)
 				else:
 					target.statuses.erase(status)
 			return _event("status_changed", {"source_id": source.instance_id, "target_id": _first_id(targets)})

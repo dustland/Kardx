@@ -40,6 +40,12 @@ static func run(t) -> void:
 	_test_combat_and_move_reactions_stop_stale_continuations(t)
 	_test_terminal_countermeasure_cleanup_is_bound_to_reaction(t)
 	_test_overlapping_temporary_modifiers_expire_in_reverse_order(t)
+	_test_combat_status_grants_lethal_ambush_to_attacked_defender(t)
+	_test_combat_status_cleans_up_after_surviving_combat(t)
+	_test_combat_status_preserves_native_ambush(t)
+	_test_combat_status_ignores_wrong_owner_and_non_target(t)
+	_test_combat_status_cleans_up_after_cancellation(t)
+	_test_combat_status_cleans_up_after_terminal_reaction(t)
 
 
 static func _test_stat_and_status_effects(t) -> void:
@@ -1205,6 +1211,104 @@ static func _test_overlapping_temporary_modifiers_expire_in_reverse_order(t) -> 
 	controller.submit_action(GameAction.create("end_turn", "player", "", [], {}, controller.state.sequence))
 	t.assert_eq(target.current_defense, 3, "reverse-order expiry restores original defense exactly")
 	t.assert_eq(target.modifiers.size(), 0, "overlapping modifiers expire once")
+
+
+static func _test_combat_status_grants_lethal_ambush_to_attacked_defender(t) -> void:
+	var fixture := _ambush_attack_fixture(558, 3, 4, 2, 2)
+	var result = _submit_fixture_attack(fixture)
+	t.assert_true(result.accepted, "temporary Ambush attack resolves")
+	t.assert_eq(fixture.attacker.current_defense, 0, "attacked defender deals lethal Ambush damage first")
+	t.assert_eq(fixture.attacker.zone, "discard", "lethal temporary Ambush destroys the attacker")
+	t.assert_eq(fixture.defender.current_defense, 4, "lethal Ambush prevents attacker damage")
+	t.assert_eq(fixture.counter.zone, "discard", "triggered combat Countermeasure is revealed and discarded")
+	t.assert_true(not fixture.counter.face_down and not fixture.counter.countermeasure_active, "triggered combat Countermeasure is inactive")
+
+
+static func _test_combat_status_cleans_up_after_surviving_combat(t) -> void:
+	var fixture := _ambush_attack_fixture(559, 2, 5, 1, 5)
+	var result = _submit_fixture_attack(fixture)
+	t.assert_true(result.accepted, "surviving temporary Ambush combat resolves")
+	t.assert_eq([fixture.attacker.current_defense, fixture.defender.current_defense], [3, 4], "Ambush precedes normal attack when attacker survives")
+	t.assert_true(not fixture.defender.has_keyword_or_status("Ambush"), "temporary Ambush is removed after combat")
+
+
+static func _test_combat_status_preserves_native_ambush(t) -> void:
+	var fixture := _ambush_attack_fixture(560, 2, 5, 1, 5)
+	fixture.defender.keywords.append("Ambush")
+	var result = _submit_fixture_attack(fixture)
+	t.assert_true(result.accepted, "native Ambush defender combat resolves")
+	t.assert_true(fixture.defender.has_keyword_or_status("Ambush"), "combat cleanup preserves native Ambush")
+
+
+static func _test_combat_status_ignores_wrong_owner_and_non_target(t) -> void:
+	var fixture := _ambush_attack_fixture(561, 2, 5, 1, 5)
+	var bystander := _card("ambush-bystander", "player", "Unit", 4, 4)
+	_place_support(fixture.controller, bystander, 1)
+	var result = _submit_fixture_attack(fixture)
+	t.assert_true(result.accepted, "targeted defender attack resolves")
+	t.assert_true(not bystander.has_keyword_or_status("Ambush"), "combat status does not affect a friendly non-target")
+
+	var wrong_owner := _ambush_attack_fixture(562, 2, 5, 1, 5)
+	wrong_owner.counter.owner_id = "opponent"
+	wrong_owner.controller.state.players.player.active_countermeasures.erase(wrong_owner.counter)
+	wrong_owner.controller.state.players.player.hand.erase(wrong_owner.counter)
+	wrong_owner.controller.state.players.opponent.hand.append(wrong_owner.counter)
+	wrong_owner.controller.state.players.opponent.active_countermeasures.append(wrong_owner.counter)
+	var wrong_result = _submit_fixture_attack(wrong_owner)
+	t.assert_true(wrong_result.accepted, "wrong-owner Countermeasure attack resolves without reaction")
+	t.assert_eq(wrong_owner.counter.zone, "hand", "attacker-owned Countermeasure does not trigger")
+	t.assert_eq(wrong_owner.defender.current_defense, 4, "wrong-owner Countermeasure grants no Ambush")
+
+
+static func _test_combat_status_cleans_up_after_cancellation(t) -> void:
+	var fixture := _ambush_attack_fixture(563, 2, 5, 1, 5)
+	fixture.counter.abilities.append(_ability(
+		"cancel-same-attack", "attack", {"selector": "none"},
+		[{"type": "replace_event", "changes": {"cancelled": true}}], {"enemy": true}
+	))
+	var result = _submit_fixture_attack(fixture)
+	t.assert_true(result.accepted, "cancelled attack resolves its Countermeasure reaction")
+	t.assert_eq(fixture.defender.current_defense, 5, "cancelled attack deals no combat damage")
+	t.assert_true(not fixture.defender.has_keyword_or_status("Ambush"), "temporary Ambush is removed after cancellation")
+
+
+static func _test_combat_status_cleans_up_after_terminal_reaction(t) -> void:
+	var fixture := _ambush_attack_fixture(564, 2, 5, 1, 5)
+	fixture.counter.abilities.append(_ability(
+		"terminal-same-attack", "attack", {"selector": "friendly_hq", "count": 1},
+		[{"type": "damage", "amount": 20}], {"enemy": true}
+	))
+	var result = _submit_fixture_attack(fixture)
+	t.assert_true(result.accepted, "terminal attack reaction resolves")
+	t.assert_eq(fixture.controller.state.phase, "complete", "reaction ends match before combat")
+	t.assert_true(not fixture.defender.has_keyword_or_status("Ambush"), "temporary Ambush is removed after terminal reaction")
+
+
+static func _ambush_attack_fixture(seed: int, defender_attack: int, defender_defense: int, attacker_attack: int, attacker_defense: int) -> Dictionary:
+	var controller := _controller(seed)
+	var attacker := _card("ambush-attacker-%d" % seed, "opponent", "Unit", attacker_attack, attacker_defense)
+	var defender := _card("ambush-defender-%d" % seed, "player", "Unit", defender_attack, defender_defense)
+	var counter := _countermeasure("ambush-counter-%d" % seed, "player", 0)
+	counter.abilities = [_ability(
+		"temporary-ambush", "attack", {"selector": "action_targets", "count": 1},
+		[{"type": "status", "status": "Ambush", "duration": "combat"}],
+		{"enemy": true, "target_owner": "owner", "target_category": "Unit"}
+	)]
+	_place_support(controller, attacker, 0)
+	_place_frontline(controller, defender, 0)
+	_put_hand(controller, counter)
+	counter.countermeasure_active = true
+	counter.face_down = true
+	controller.state.players.player.active_countermeasures.append(counter)
+	controller.state.active_player_id = "opponent"
+	_ready(controller, attacker)
+	return {"controller": controller, "attacker": attacker, "defender": defender, "counter": counter}
+
+
+static func _submit_fixture_attack(fixture: Dictionary):
+	return fixture.controller.submit_action(GameAction.create(
+		"attack_unit", "opponent", fixture.attacker.instance_id, [fixture.defender.instance_id], {}, fixture.controller.state.sequence
+	))
 
 
 static func _resolve(

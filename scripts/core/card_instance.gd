@@ -30,6 +30,7 @@ var smokescreen_revealed: bool = false
 var deployed_turn: int = -1
 var modifiers: Array = []
 var statuses: Dictionary = {}
+var temporary_statuses: Array = []
 var revealed_to: Dictionary = {}
 var face_down: bool = false
 var countermeasure_active: bool = false
@@ -83,7 +84,31 @@ func has_keyword_or_status(keyword_name: String) -> bool:
 	for keyword in keywords:
 		if str(keyword) == keyword_name:
 			return true
-	return bool(statuses.get(keyword_name, false))
+	if bool(statuses.get(keyword_name, false)):
+		return true
+	for status_value in temporary_statuses:
+		if str((status_value as Dictionary).get("status", "")) == keyword_name:
+			return true
+	return false
+
+func add_temporary_status(status: String, duration: String, source_id: String) -> void:
+	temporary_statuses.append({
+		"status": status,
+		"duration": duration,
+		"source_id": source_id,
+	})
+
+func expire_temporary_statuses(duration: String) -> Array[Dictionary]:
+	var remaining: Array = []
+	var expired: Array[Dictionary] = []
+	for status_value in temporary_statuses:
+		var status: Dictionary = status_value
+		if str(status.get("duration", "")) == duration:
+			expired.append(status)
+		else:
+			remaining.append(status)
+	temporary_statuses = remaining
+	return expired
 
 func add_temporary_modifier(
 	attack_delta: int,
