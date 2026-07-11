@@ -7,11 +7,11 @@ const NATIONS := ["UnitedStates", "SovietUnion"]
 const CATEGORIES := ["Headquarters", "Unit", "Order", "Countermeasure"]
 const UNIT_TYPES := ["Infantry", "Tank", "Artillery", "Fighter", "Bomber"]
 const TRIGGERS := [
-	"attack", "countermeasure_triggered", "damage", "death", "defend", "deploy", "discard", "draw",
+	"attack", "countermeasure_triggered", "damage", "repair", "death", "defend", "deploy", "discard", "draw",
 	"frontline_gained", "frontline_lost", "hq_lethal", "manual", "move", "order_played", "play_order",
 	"turn_end", "turn_start",
 ]
-const TARGET_SELECTORS := ["none", "self", "action_targets", "enemy_hq", "friendly_hq", "enemy_unit_or_hq", "enemy_unit", "friendly_unit", "friendly_units", "friendly_infantry", "enemy_units", "enemy_air_units", "adjacent_enemy_units", "random_enemy_unit", "random_enemy_hand"]
+const TARGET_SELECTORS := ["none", "self", "action_targets", "enemy_hq", "friendly_hq", "enemy_unit_or_hq", "enemy_unit", "friendly_unit", "friendly_units", "friendly_frontline_units", "friendly_infantry", "enemy_units", "enemy_air_units", "adjacent_enemy_units", "random_enemy_unit", "random_enemy_hand"]
 const EFFECT_TYPES := ["damage", "repair", "buff", "debuff", "status", "draw", "discard", "create", "copy", "destroy", "return", "retreat", "credit", "credit_slots", "replace_event", "reveal"]
 const TARGETLESS_EFFECTS := ["credit", "credit_slots", "draw", "create", "replace_event"]
 const HQ_SAFE_EFFECTS := ["damage", "repair", "buff", "debuff", "status"]
@@ -171,7 +171,11 @@ static func _validate_conditions(diagnostics: Array[Dictionary], conditions: Var
 			_add(diagnostics, "invalid_conditions", "%s.%s" % [path, key], "source_damaged condition must be a boolean")
 		elif key == "source_lacks_status" and (not value is String or str(value).strip_edges().is_empty()):
 			_add(diagnostics, "invalid_conditions", "%s.%s" % [path, key], "source_lacks_status must be a nonblank status")
-		elif key not in ["enemy", "target_owner", "target_unit_type", "source_damaged", "source_lacks_status"]:
+		elif key == "source_has_status" and (not value is String or str(value).strip_edges().is_empty()):
+			_add(diagnostics, "invalid_conditions", "%s.%s" % [path, key], "source_has_status must be a nonblank status")
+		elif key == "event_source_lethal" and not value is bool:
+			_add(diagnostics, "invalid_conditions", "%s.%s" % [path, key], "event_source_lethal must be a boolean")
+		elif key not in ["enemy", "target_owner", "target_unit_type", "source_damaged", "source_lacks_status", "source_has_status", "event_source_lethal"]:
 			_add(diagnostics, "invalid_conditions", "%s.%s" % [path, key], "condition is not supported by EffectEngine")
 
 static func _validate_target(diagnostics: Array[Dictionary], target_value: Variant, path: String) -> Dictionary:

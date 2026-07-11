@@ -78,7 +78,7 @@ static func _test_su_maskirovka(t, catalog) -> void: _ability(t, catalog, "su-ma
 static func _test_su_t34_spearhead(t, catalog) -> void: _keyword(t, catalog, "su-t34-spearhead", "Blitz")
 static func _test_su_heavy_breakthrough(t, catalog) -> void: _keyword(t, catalog, "su-heavy-breakthrough", "Heavy Armor")
 static func _test_su_katyusha_battery(t, catalog) -> void: _ability(t, catalog, "su-katyusha-battery", "attack", "adjacent_enemy_units", "damage", 1)
-static func _test_su_hold_the_line(t, catalog) -> void: _ability(t, catalog, "su-hold-the-line", "frontline_lost", "friendly_units", "repair", 2)
+static func _test_su_hold_the_line(t, catalog) -> void: _ability(t, catalog, "su-hold-the-line", "damage", "friendly_frontline_units", "repair", 2)
 static func _test_su_yak_patrol(t, catalog) -> void: _keyword(t, catalog, "su-yak-patrol", "Fury")
 static func _test_su_pe2_bomber_wing(t, catalog) -> void: _ability(t, catalog, "su-pe2-bomber-wing", "deploy", "enemy_hq", "damage", 2)
 static func _test_su_deep_battle(t, catalog) -> void: _ability(t, catalog, "su-deep-battle", "play_order", "enemy_unit", "retreat", -1)

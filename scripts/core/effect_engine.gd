@@ -197,10 +197,16 @@ func _matches_conditions(source: CardInstance, conditions: Dictionary, context: 
 			var target := _find_card(str(target_id))
 			if target == null or target.unit_type != str(conditions.target_unit_type):
 				return false
-	if bool(conditions.get("source_damaged", false)) and source.current_defense >= source.base_defense:
+	if conditions.has("source_damaged") and bool(conditions.source_damaged) != (source.current_defense < source.base_defense):
 		return false
 	if conditions.has("source_lacks_status") and source.has_keyword_or_status(str(conditions.source_lacks_status)):
 		return false
+	if conditions.has("source_has_status") and not source.has_keyword_or_status(str(conditions.source_has_status)):
+		return false
+	if conditions.has("event_source_lethal"):
+		var event_source := _find_card(str(context.get("source_id", "")))
+		if event_source == null or bool(conditions.event_source_lethal) != (event_source.current_defense <= 0):
+			return false
 	return true
 
 
@@ -224,6 +230,8 @@ func _select_targets(source: CardInstance, target: Dictionary, context: Dictiona
 		return _string_ids(context.get("target_ids", []))
 	if selector == "friendly_units":
 		return _public_units(source.owner_id)
+	if selector == "friendly_frontline_units":
+		return _public_units(source.owner_id).filter(func(id): return _find_card(id).zone == "frontline")
 	if selector == "friendly_infantry":
 		return _public_units(source.owner_id).filter(func(id): return _find_card(id).unit_type == "Infantry")
 	if selector == "enemy_units":
@@ -329,6 +337,7 @@ func _apply_effect(effect: Dictionary) -> Dictionary:
 		"repair":
 			for target in targets:
 				target.current_defense = mini(target.base_defense, target.current_defense + int(effect.get("amount", 0)))
+				_enqueue_trigger("repair", {"source_id": target.instance_id, "actor_id": str(effect.get("actor_id", source.owner_id)), "target_ids": []})
 			return _event("damage_repaired", {"source_id": source.instance_id, "target_id": _first_id(targets)})
 		"buff", "debuff":
 			var sign := 1 if effect_type == "buff" else -1
@@ -753,7 +762,7 @@ func _target_count(target_spec: Dictionary, targets: Array[String]) -> int:
 	var selector := str(target_spec.get("selector", ""))
 	if selector == "none":
 		return 0
-	if selector in ["friendly_units", "friendly_infantry", "enemy_units", "enemy_air_units", "adjacent_enemy_units"]:
+	if selector in ["friendly_units", "friendly_frontline_units", "friendly_infantry", "enemy_units", "enemy_air_units", "adjacent_enemy_units"]:
 		return targets.size()
 	return int(target_spec.get("count", 1))
 
