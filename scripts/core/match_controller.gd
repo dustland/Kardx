@@ -951,7 +951,7 @@ func _deploy_unit(action: GameAction) -> ActionResult:
 	var deploy_validation := _effect_engine.validate_trigger("deploy", {
 		"source_id": card.instance_id,
 		"actor_id": player.id,
-		"target_ids": [],
+		"target_ids": action.target_ids.duplicate(),
 	})
 	if not deploy_validation.valid:
 		return _reject_rule(action, deploy_validation)
@@ -970,7 +970,7 @@ func _deploy_unit(action: GameAction) -> ActionResult:
 		"zone": "support_line",
 		"slot": slot,
 	})
-	_resolve_trigger("deploy", {"source_id": card.instance_id, "actor_id": player.id, "target_ids": []}, events)
+	_resolve_trigger("deploy", {"source_id": card.instance_id, "actor_id": player.id, "target_ids": action.target_ids.duplicate()}, events)
 	if not _effect_engine.last_resolution.valid:
 		return _reject_rule(action, _effect_engine.last_resolution)
 	return _accept(action, events)
@@ -1345,6 +1345,8 @@ func _start_turn(player: PlayerState, events: Array) -> void:
 	if _is_terminal():
 		return
 	state.turn += 1
+	for card in player.hand:
+		card.revealed_to.clear()
 	player.turns_started += 1
 	_emit(events, "turn_started", {"player_id": player.id, "turn": state.turn})
 	var previous_credit_slots := player.credit_slots

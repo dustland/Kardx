@@ -156,15 +156,29 @@ func _prepare_trigger(trigger: String, context: Dictionary, resolve_random: bool
 
 func _trigger_sources(trigger: String, context: Dictionary) -> Array[CardInstance]:
 	var sources: Array[CardInstance] = []
+	var seen := {}
 	var source_id := str(context.get("source_id", ""))
 	var explicit_source := _find_card(source_id)
 	if explicit_source != null:
 		sources.append(explicit_source)
+		seen[explicit_source.instance_id] = true
+	if explicit_source == null:
+		for player_id in state.players:
+			var owner = state.players[player_id]
+			for card in owner.support_line:
+				if card != null and not seen.has(card.instance_id):
+					sources.append(card)
+					seen[card.instance_id] = true
+		for card in state.frontline:
+			if card != null and not seen.has(card.instance_id):
+				sources.append(card)
+				seen[card.instance_id] = true
 	for player_id in state.players:
 		var player = state.players[player_id]
 		for counter in player.active_countermeasures:
 			if counter != null and counter.countermeasure_active and counter != explicit_source and str(context.get("actor_id", "")) != counter.owner_id:
 				sources.append(counter)
+				seen[counter.instance_id] = true
 	return sources
 
 
@@ -308,9 +322,10 @@ func _apply_effect(effect: Dictionary) -> Dictionary:
 	match effect_type:
 		"damage":
 			for target in targets:
-				target.current_defense = maxi(0, target.current_defense - int(effect.get("amount", 0)))
+				var damage := maxi(0, int(effect.get("amount", 0)) - (1 if target.has_keyword_or_status("Heavy Armor") else 0))
+				target.current_defense = maxi(0, target.current_defense - damage)
 				_queue_damage_checkpoint(target, source.instance_id)
-			return _event("damage_dealt", {"source_id": source.instance_id, "target_id": _first_id(targets), "damage": int(effect.get("amount", 0))})
+			return _event("damage_dealt", {"source_id": source.instance_id, "target_id": _first_id(targets), "damage": maxi(0, int(effect.get("amount", 0)) - (1 if not targets.is_empty() and targets[0].has_keyword_or_status("Heavy Armor") else 0))})
 		"repair":
 			for target in targets:
 				target.current_defense = mini(target.base_defense, target.current_defense + int(effect.get("amount", 0)))
@@ -388,6 +403,8 @@ func _apply_effect(effect: Dictionary) -> Dictionary:
 				pending[key] = effect.changes[key]
 			return _event("event_replaced", {"source_id": source.instance_id})
 		"reveal":
+			for target in targets:
+				target.revealed_to[str(effect.get("actor_id", source.owner_id))] = true
 			return _event("card_revealed", {"source_id": source.instance_id, "target_id": _first_id(targets)})
 	return _event("effect_resolved", {"source_id": source.instance_id, "effect_type": effect_type})
 

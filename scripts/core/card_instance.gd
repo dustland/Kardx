@@ -30,6 +30,7 @@ var smokescreen_revealed: bool = false
 var deployed_turn: int = -1
 var modifiers: Array = []
 var statuses: Dictionary = {}
+var revealed_to: Dictionary = {}
 var face_down: bool = false
 var countermeasure_active: bool = false
 var countermeasure_activation_cost: int = 0

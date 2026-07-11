@@ -42,12 +42,14 @@ static func _validate_cards(diagnostics: Array[Dictionary], cards: Array, abilit
 			continue
 		var card: Dictionary = card_value
 		_validate_required_fields(diagnostics, card, path, {
-			"id": TYPE_STRING, "title": TYPE_STRING, "nation": TYPE_STRING, "category": TYPE_STRING,
+			"id": TYPE_STRING, "title": TYPE_STRING, "description": TYPE_STRING, "nation": TYPE_STRING, "category": TYPE_STRING,
 			"unit_type": TYPE_STRING, "rarity": TYPE_STRING, "deployment_cost": TYPE_INT,
 			"operation_cost": TYPE_INT, "attack": TYPE_INT, "defense": TYPE_INT,
 			"keywords": TYPE_ARRAY, "ability_ids": TYPE_ARRAY, "image_path": TYPE_STRING,
 		})
 		_validate_id(diagnostics, card, path)
+		if _has_type(card, "description", TYPE_STRING) and str(card.description).strip_edges().is_empty():
+			_add(diagnostics, "blank_description", "%s.description" % path, "description cannot be empty or whitespace")
 		var nation: String = str(card.get("nation", "")) if _has_type(card, "nation", TYPE_STRING) else ""
 		var category: String = str(card.get("category", "")) if _has_type(card, "category", TYPE_STRING) else ""
 		var unit_type: String = str(card.get("unit_type", "")) if _has_type(card, "unit_type", TYPE_STRING) else ""

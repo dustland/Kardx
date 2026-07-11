@@ -30,7 +30,7 @@ func snapshot_for(viewer_id: String) -> Dictionary:
 		var player_id := str(id)
 		var player: PlayerState = players[player_id]
 		var is_viewer: bool = player_id == viewer_id
-		public_players[player_id] = player.to_public_dict(is_viewer, is_viewer)
+		public_players[player_id] = player.to_public_dict(is_viewer, is_viewer, viewer_id)
 	var public_frontline: Array = []
 	for card in frontline:
 		public_frontline.append(card.to_public_dict(true) if card != null else null)

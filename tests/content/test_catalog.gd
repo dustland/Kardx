@@ -274,6 +274,7 @@ static func _card(id: String, ability_ids: Array) -> Dictionary:
 	return {
 		"id": id,
 		"title": "Rifle Platoon",
+		"description": "Test card.",
 		"nation": "UnitedStates",
 		"category": "Unit",
 		"unit_type": "Infantry",
@@ -291,6 +292,7 @@ static func _headquarters(id: String) -> Dictionary:
 	return {
 		"id": id,
 		"title": "Command Post",
+		"description": "Test headquarters.",
 		"nation": "UnitedStates",
 		"category": "Headquarters",
 		"unit_type": "",

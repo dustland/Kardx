@@ -40,10 +40,10 @@ func deactivate_countermeasures() -> void:
 			card.countermeasure_active = false
 	active_countermeasures.clear()
 
-func to_public_dict(reveal_hand: bool, reveal_deck_order: bool) -> Dictionary:
+func to_public_dict(reveal_hand: bool, reveal_deck_order: bool, viewer_id: String = "") -> Dictionary:
 	var public_hand: Array = []
 	for card in hand:
-		public_hand.append(card.to_public_dict(reveal_hand))
+		public_hand.append(card.to_public_dict(reveal_hand or bool(card.revealed_to.get(viewer_id, false))) )
 	var public_support_line: Array = []
 	for card in support_line:
 		public_support_line.append(card.to_public_dict(true) if card != null else null)

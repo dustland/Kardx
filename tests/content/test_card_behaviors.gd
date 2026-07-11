@@ -1,6 +1,9 @@
 extends RefCounted
 
 const ContentCatalog = preload("res://scripts/content/content_catalog.gd")
+const CardInstance = preload("res://scripts/core/card_instance.gd")
+const GameAction = preload("res://scripts/core/game_action.gd")
+const MatchController = preload("res://scripts/core/match_controller.gd")
 
 
 static func run(t) -> void:
@@ -41,10 +44,13 @@ static func run(t) -> void:
 	_test_su_pe2_bomber_wing(t, catalog)
 	_test_su_deep_battle(t, catalog)
 	_test_su_artillery_preparation(t, catalog)
+	_test_deploy_targets_are_runtime_actions(t, catalog)
 
 
 static func _test_us_hq(t, catalog) -> void: _card(t, catalog, "us-hq", "US Command Post", "UnitedStates", "Headquarters", "", "Standard", 0, 0, 0, 20)
-static func _test_us_rifle_platoon(t, catalog) -> void: _card(t, catalog, "us-rifle-platoon", "Rifle Platoon", "UnitedStates", "Unit", "Infantry", "Standard", 1, 1, 1, 2)
+static func _test_us_rifle_platoon(t, catalog) -> void:
+	_card(t, catalog, "us-rifle-platoon", "Rifle Platoon", "UnitedStates", "Unit", "Infantry", "Standard", 1, 1, 1, 2)
+	t.assert_eq(catalog.cards_by_id["us-rifle-platoon"].description, "Reliable infantry for holding ground.", "Rifle Platoon locked description")
 static func _test_us_combat_engineers(t, catalog) -> void: _ability(t, catalog, "us-combat-engineers", "deploy", "friendly_hq", "repair", 1)
 static func _test_us_field_hospital(t, catalog) -> void: _ability(t, catalog, "us-field-hospital", "deploy", "friendly_unit", "repair", 2)
 static func _test_us_supply_column(t, catalog) -> void: _ability(t, catalog, "us-supply-column", "deploy", "none", "credit", 1)
@@ -77,6 +83,24 @@ static func _test_su_yak_patrol(t, catalog) -> void: _keyword(t, catalog, "su-ya
 static func _test_su_pe2_bomber_wing(t, catalog) -> void: _ability(t, catalog, "su-pe2-bomber-wing", "deploy", "enemy_hq", "damage", 2)
 static func _test_su_deep_battle(t, catalog) -> void: _ability(t, catalog, "su-deep-battle", "play_order", "enemy_unit", "retreat", -1)
 static func _test_su_artillery_preparation(t, catalog) -> void: _ability(t, catalog, "su-artillery-preparation", "play_order", "enemy_units", "damage", 2)
+
+
+static func _test_deploy_targets_are_runtime_actions(t, catalog) -> void:
+	var controller: MatchController = MatchController.create(catalog.cards_by_id, ["us-hq"], ["su-hq"], 800)
+	controller.state.phase = "action"
+	controller.state.active_player_id = "player"
+	controller.state.turn = 4
+	controller.state.players.player.credit = 10
+	var hospital := CardInstance.from_definition(catalog.cards_by_id["us-field-hospital"], "player", "hospital")
+	var patient := CardInstance.from_definition(catalog.cards_by_id["us-rifle-platoon"], "player", "patient")
+	patient.zone = "support_line"
+	patient.slot = 1
+	patient.current_defense = 1
+	controller.state.players.player.hand.append(hospital)
+	controller.state.players.player.support_line[1] = patient
+	var result = controller.submit_action(GameAction.create("deploy_unit", "player", hospital.instance_id, [patient.instance_id], {"support_slot": 0}, controller.state.sequence))
+	t.assert_true(result.accepted, "Field Hospital deploy accepts its friendly target")
+	t.assert_eq([hospital.zone, hospital.slot, patient.current_defense], ["support_line", 0, 2], "deploy target resolves without changing support slot")
 
 
 static func _card(t, catalog, id: String, title: String, nation: String, category: String, unit_type: String, rarity: String, deployment_cost: int, operation_cost: int, attack: int, defense: int) -> void:
