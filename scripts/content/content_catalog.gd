@@ -56,7 +56,22 @@ func _load_json(path: String, label: String) -> Variant:
 	if data == null:
 		_add_load_error("invalid_root_type", path, "%s JSON root cannot be null" % label)
 		return null
-	return data
+	return _normalize_json_numbers(data)
+
+func _normalize_json_numbers(value: Variant) -> Variant:
+	if value is float and value == floori(value):
+		return int(value)
+	if value is Array:
+		var normalized: Array = []
+		for entry in value:
+			normalized.append(_normalize_json_numbers(entry))
+		return normalized
+	if value is Dictionary:
+		var normalized := {}
+		for key in value:
+			normalized[key] = _normalize_json_numbers(value[key])
+		return normalized
+	return value
 
 func _index_by_id(entries: Array) -> Dictionary:
 	var indexed := {}

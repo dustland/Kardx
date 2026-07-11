@@ -1,318 +1,36 @@
 [
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "title": "Infantry Squad",
-    "description": "A basic infantry unit with versatile combat capabilities.",
-    "category": "Unit",
-    "subtype": "Infantry",
-    "deploymentCost": 2,
-    "operationCost": 1,
-    "baseDefense": 3,
-    "baseAttack": 2,
-    "baseCounterAttack": 1,
-    "rarity": "Standard",
-    "setId": "base_set",
-    "imageUrl": "BasicGermanB1.png",
-    "attributes": {
-      "health": 5,
-      "speed": 1
-    },
-    "abilities": [
-      "550e8400-e29b-41d4-a716-446655440000",
-      "550e8400-e29b-41d4-a716-446655440001",
-      "550e8400-e29b-41d4-a716-446655440008"
-    ],
-    "keywords": [2]
-  },
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440001",
-    "title": "Artillery Battery",
-    "description": "A long-range artillery unit capable of devastating attacks.",
-    "category": "Unit",
-    "subtype": "Artillery",
-    "deploymentCost": 4,
-    "operationCost": 1,
-    "baseDefense": 2,
-    "baseAttack": 5,
-    "baseCounterAttack": 0,
-    "rarity": "Limited",
-    "setId": "base_set",
-    "imageUrl": "T_blitzkreig_improved1.png",
-    "attributes": {
-      "health": 4,
-      "range": 3
-    },
-    "abilities": [
-      "550e8400-e29b-41d4-a716-446655440006",
-      "550e8400-e29b-41d4-a716-446655440005",
-      "550e8400-e29b-41d4-a716-446655440003"
-    ]
-  },
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440002",
-    "title": "Tank Division",
-    "description": "A heavily armored unit with high attack and defense.",
-    "category": "Unit",
-    "subtype": "Armor",
-    "deploymentCost": 5,
-    "operationCost": 1,
-    "baseDefense": 6,
-    "baseAttack": 4,
-    "baseCounterAttack": 2,
-    "rarity": "Elite",
-    "setId": "base_set",
-    "imageUrl": "T_t_80_light_tank1.png",
-    "attributes": {
-      "health": 8,
-      "speed": 2
-    },
-    "abilities": [
-      "550e8400-e29b-41d4-a716-446655440000",
-      "550e8400-e29b-41d4-a716-446655440005",
-      "550e8400-e29b-41d4-a716-446655440008"
-    ],
-    "keywords": [1]
-  },
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440003",
-    "title": "Medic Team",
-    "description": "A support unit that heals allied units.",
-    "category": "Unit",
-    "subtype": "Support",
-    "deploymentCost": 3,
-    "operationCost": 1,
-    "baseDefense": 2,
-    "baseAttack": 1,
-    "baseCounterAttack": 0,
-    "rarity": "Standard",
-    "setId": "base_set",
-    "imageUrl": "SovietBasicB1.png",
-    "attributes": {
-      "health": 4,
-      "speed": 1
-    },
-    "abilities": [
-      "550e8400-e29b-41d4-a716-446655440007",
-      "550e8400-e29b-41d4-a716-446655440001",
-      "550e8400-e29b-41d4-a716-446655440003"
-    ]
-  },
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440004",
-    "title": "Paratroopers",
-    "description": "A fast-moving infantry unit that can deploy behind enemy lines.",
-    "category": "Unit",
-    "subtype": "Infantry",
-    "deploymentCost": 3,
-    "operationCost": 1,
-    "baseDefense": 2,
-    "baseAttack": 3,
-    "baseCounterAttack": 1,
-    "rarity": "Limited",
-    "setId": "base_set",
-    "imageUrl": "T_soviet_infantry_x1.png",
-    "attributes": {
-      "health": 4,
-      "speed": 3
-    },
-    "abilities": [
-      "550e8400-e29b-41d4-a716-446655440004",
-      "550e8400-e29b-41d4-a716-446655440000",
-      "550e8400-e29b-41d4-a716-446655440003"
-    ],
-    "keywords": [4]
-  },
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440005",
-    "title": "Anti-Tank Gun",
-    "description": "A specialized unit designed to counter armored threats.",
-    "category": "Unit",
-    "subtype": "Artillery",
-    "deploymentCost": 4,
-    "operationCost": 2,
-    "baseDefense": 3,
-    "baseAttack": 6,
-    "baseCounterAttack": 0,
-    "rarity": "Elite",
-    "setId": "base_set",
-    "imageUrl": "T_blitzkreig_improved1.png",
-    "attributes": {
-      "health": 5,
-      "range": 2
-    },
-    "abilities": [
-      "550e8400-e29b-41d4-a716-446655440006",
-      "550e8400-e29b-41d4-a716-446655440005",
-      "550e8400-e29b-41d4-a716-446655440008"
-    ]
-  },
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440006",
-    "title": "Recon Plane",
-    "description": "A reconnaissance unit that provides battlefield intelligence.",
-    "category": "Unit",
-    "subtype": "Air",
-    "deploymentCost": 2,
-    "operationCost": 1,
-    "baseDefense": 1,
-    "baseAttack": 1,
-    "baseCounterAttack": 0,
-    "rarity": "Standard",
-    "setId": "base_set",
-    "imageUrl": "BasicGermanB1.png",
-    "attributes": {
-      "health": 3,
-      "speed": 4
-    },
-    "abilities": [
-      "550e8400-e29b-41d4-a716-446655440003",
-      "550e8400-e29b-41d4-a716-446655440004",
-      "550e8400-e29b-41d4-a716-446655440001"
-    ]
-  },
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440007",
-    "title": "Fighter Squadron",
-    "description": "An air unit specialized in dogfighting and air superiority.",
-    "category": "Unit",
-    "subtype": "Air",
-    "deploymentCost": 5,
-    "operationCost": 2,
-    "baseDefense": 4,
-    "baseAttack": 5,
-    "baseCounterAttack": 2,
-    "rarity": "Limited",
-    "setId": "base_set",
-    "imageUrl": "T_soviet_infantry_x1.png",
-    "attributes": {
-      "health": 6,
-      "speed": 5
-    },
-    "abilities": [
-      "550e8400-e29b-41d4-a716-446655440000",
-      "550e8400-e29b-41d4-a716-446655440004",
-      "550e8400-e29b-41d4-a716-446655440008"
-    ]
-  },
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440008",
-    "title": "Supply Convoy",
-    "description": "A logistics unit that provides resources to allied units.",
-    "category": "Unit",
-    "subtype": "Support",
-    "deploymentCost": 3,
-    "operationCost": 1,
-    "baseDefense": 2,
-    "baseAttack": 1,
-    "baseCounterAttack": 0,
-    "rarity": "Standard",
-    "setId": "base_set",
-    "imageUrl": "SovietBasicB1.png",
-    "attributes": {
-      "health": 4,
-      "speed": 2
-    },
-    "abilities": [
-      "550e8400-e29b-41d4-a716-446655440003",
-      "550e8400-e29b-41d4-a716-446655440001",
-      "550e8400-e29b-41d4-a716-446655440007"
-    ]
-  },
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440009",
-    "title": "Heavy Tank",
-    "description": "A heavily armored unit with devastating firepower.",
-    "category": "Unit",
-    "subtype": "Armor",
-    "deploymentCost": 6,
-    "operationCost": 3,
-    "baseDefense": 8,
-    "baseAttack": 6,
-    "baseCounterAttack": 3,
-    "rarity": "Elite",
-    "setId": "base_set",
-    "imageUrl": "T_t_80_light_tank1.png",
-    "attributes": {
-      "health": 10,
-      "speed": 1
-    },
-    "abilities": [
-      "550e8400-e29b-41d4-a716-446655440000",
-      "550e8400-e29b-41d4-a716-446655440005",
-      "550e8400-e29b-41d4-a716-446655440008"
-    ],
-    "keywords": [1]
-  },
-  {
-    "id": "cm-intercept-001",
-    "title": "Signal Intercept",
-    "description": "Counter an enemy Order before it takes effect.",
-    "category": "Countermeasure",
-    "subtype": "Tactical",
-    "deploymentCost": 2,
-    "operationCost": 0,
-    "baseDefense": 0,
-    "baseAttack": 0,
-    "baseCounterAttack": 0,
-    "rarity": "Limited",
-    "setId": "base_set",
-    "imageUrl": "SovietBasicB1.png",
-    "attributes": {},
-    "abilities": []
-  },
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440010",
-    "title": "Strategic Bombardment",
-    "description": "Call in an air strike to deal damage to all enemy units on the battlefield.",
-    "category": "Order",
-    "subtype": "Tactical",
-    "deploymentCost": 4,
-    "operationCost": 1,
-    "baseDefense": 0,
-    "baseAttack": 0,
-    "baseCounterAttack": 0,
-    "rarity": "Limited",
-    "setId": "base_set",
-    "imageUrl": "T_blitzkreig_improved1.png",
-    "attributes": {
-      "area_damage": 2
-    },
-    "abilities": [
-      "550e8400-e29b-41d4-a716-44665544000a"
-    ]
-  },
-  {
-    "id": "hq-us-001",
-    "title": "US Command Post",
-    "description": "American headquarters. Destroy the enemy HQ to win.",
-    "category": "Headquarters",
-    "subtype": "HQ",
-    "deploymentCost": 0,
-    "operationCost": 0,
-    "baseDefense": 20,
-    "baseAttack": 0,
-    "baseCounterAttack": 0,
-    "rarity": "Standard",
-    "setId": "base_set",
-    "imageUrl": "BasicGermanB1.png",
-    "attributes": {},
-    "abilities": []
-  },
-  {
-    "id": "hq-soviet-001",
-    "title": "Soviet Command Post",
-    "description": "Soviet headquarters. Destroy the enemy HQ to win.",
-    "category": "Headquarters",
-    "subtype": "HQ",
-    "deploymentCost": 0,
-    "operationCost": 0,
-    "baseDefense": 20,
-    "baseAttack": 0,
-    "baseCounterAttack": 0,
-    "rarity": "Standard",
-    "setId": "base_set",
-    "imageUrl": "SovietBasicB1.png",
-    "attributes": {},
-    "abilities": []
-  }
+  {"id":"us-hq","title":"US Command Post","description":"US headquarters.","nation":"UnitedStates","category":"Headquarters","unit_type":"","rarity":"Standard","deployment_cost":0,"operation_cost":0,"attack":0,"defense":20,"keywords":[],"ability_ids":[],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"us-rifle-platoon","title":"Rifle Platoon","description":"US infantry unit.","nation":"UnitedStates","category":"Unit","unit_type":"Infantry","rarity":"Standard","deployment_cost":1,"operation_cost":1,"attack":1,"defense":2,"keywords":[],"ability_ids":[],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"us-combat-engineers","title":"Combat Engineers","description":"US engineering unit.","nation":"UnitedStates","category":"Unit","unit_type":"Infantry","rarity":"Standard","deployment_cost":2,"operation_cost":1,"attack":2,"defense":3,"keywords":[],"ability_ids":["us-combat-engineers--deploy"],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"us-field-hospital","title":"Field Hospital","description":"US medical unit.","nation":"UnitedStates","category":"Unit","unit_type":"Infantry","rarity":"Standard","deployment_cost":2,"operation_cost":1,"attack":1,"defense":4,"keywords":[],"ability_ids":["us-field-hospital--deploy"],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"us-supply-column","title":"Supply Column","description":"US supply unit.","nation":"UnitedStates","category":"Unit","unit_type":"Infantry","rarity":"Standard","deployment_cost":2,"operation_cost":1,"attack":1,"defense":3,"keywords":[],"ability_ids":["us-supply-column--deploy"],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"us-forward-observers","title":"Forward Observers","description":"US observation unit.","nation":"UnitedStates","category":"Unit","unit_type":"Infantry","rarity":"Standard","deployment_cost":3,"operation_cost":1,"attack":2,"defense":3,"keywords":[],"ability_ids":["us-forward-observers--frontline-gained"],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"us-p40-patrol","title":"P-40 Patrol","description":"US fighter patrol.","nation":"UnitedStates","category":"Unit","unit_type":"Fighter","rarity":"Standard","deployment_cost":3,"operation_cost":1,"attack":3,"defense":2,"keywords":["Smokescreen"],"ability_ids":[],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"us-rapid-resupply","title":"Rapid Resupply","description":"US supply order.","nation":"UnitedStates","category":"Order","unit_type":"","rarity":"Standard","deployment_cost":2,"operation_cost":0,"attack":0,"defense":0,"keywords":[],"ability_ids":["us-rapid-resupply--draw"],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"us-signal-watch","title":"Signal Watch","description":"US countermeasure.","nation":"UnitedStates","category":"Countermeasure","unit_type":"","rarity":"Standard","deployment_cost":2,"operation_cost":0,"attack":0,"defense":0,"keywords":[],"ability_ids":["us-signal-watch--order-played"],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"us-ranger-company","title":"Ranger Company","description":"US ranger unit.","nation":"UnitedStates","category":"Unit","unit_type":"Infantry","rarity":"Limited","deployment_cost":3,"operation_cost":1,"attack":3,"defense":3,"keywords":["Blitz"],"ability_ids":[],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"us-armored-group","title":"Armored Group","description":"US armored unit.","nation":"UnitedStates","category":"Unit","unit_type":"Tank","rarity":"Limited","deployment_cost":4,"operation_cost":2,"attack":4,"defense":5,"keywords":["Fury"],"ability_ids":[],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"us-field-battery","title":"105mm Field Battery","description":"US artillery unit.","nation":"UnitedStates","category":"Unit","unit_type":"Artillery","rarity":"Limited","deployment_cost":4,"operation_cost":2,"attack":4,"defense":3,"keywords":[],"ability_ids":[],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"us-emergency-repairs","title":"Emergency Repairs","description":"US repair countermeasure.","nation":"UnitedStates","category":"Countermeasure","unit_type":"","rarity":"Limited","deployment_cost":2,"operation_cost":0,"attack":0,"defense":0,"keywords":[],"ability_ids":["us-emergency-repairs--hq-lethal"],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"us-tank-hunters","title":"Tank Hunters","description":"US anti-tank unit.","nation":"UnitedStates","category":"Unit","unit_type":"Artillery","rarity":"Special","deployment_cost":5,"operation_cost":2,"attack":6,"defense":3,"keywords":[],"ability_ids":["us-tank-hunters--attack"],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"us-b25-strike-group","title":"B-25 Strike Group","description":"US bomber unit.","nation":"UnitedStates","category":"Unit","unit_type":"Bomber","rarity":"Special","deployment_cost":6,"operation_cost":2,"attack":5,"defense":4,"keywords":["Bypass Guard"],"ability_ids":[],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"us-air-superiority","title":"Air Superiority","description":"US air order.","nation":"UnitedStates","category":"Order","unit_type":"","rarity":"Elite","deployment_cost":5,"operation_cost":0,"attack":0,"defense":0,"keywords":[],"ability_ids":["us-air-superiority--damage"],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"us-combined-arms","title":"Combined Arms","description":"US combined order.","nation":"UnitedStates","category":"Order","unit_type":"","rarity":"Elite","deployment_cost":6,"operation_cost":0,"attack":0,"defense":0,"keywords":[],"ability_ids":["us-combined-arms--buff","us-combined-arms--draw"],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"su-hq","title":"Soviet Command Post","description":"Soviet headquarters.","nation":"SovietUnion","category":"Headquarters","unit_type":"","rarity":"Standard","deployment_cost":0,"operation_cost":0,"attack":0,"defense":20,"keywords":[],"ability_ids":[],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"su-guards-rifle","title":"Guards Rifle Section","description":"Soviet infantry unit.","nation":"SovietUnion","category":"Unit","unit_type":"Infantry","rarity":"Standard","deployment_cost":1,"operation_cost":1,"attack":1,"defense":3,"keywords":["Guard"],"ability_ids":[],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"su-siberian-volunteers","title":"Siberian Volunteers","description":"Soviet volunteer unit.","nation":"SovietUnion","category":"Unit","unit_type":"Infantry","rarity":"Standard","deployment_cost":2,"operation_cost":1,"attack":2,"defense":3,"keywords":[],"ability_ids":["su-siberian-volunteers--damage"],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"su-combat-sappers","title":"Combat Sappers","description":"Soviet engineering unit.","nation":"SovietUnion","category":"Unit","unit_type":"Infantry","rarity":"Standard","deployment_cost":2,"operation_cost":1,"attack":2,"defense":2,"keywords":[],"ability_ids":["su-combat-sappers--deploy"],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"su-medical-battalion","title":"Medical Battalion","description":"Soviet medical unit.","nation":"SovietUnion","category":"Unit","unit_type":"Infantry","rarity":"Standard","deployment_cost":2,"operation_cost":1,"attack":1,"defense":4,"keywords":[],"ability_ids":["su-medical-battalion--turn-end"],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"su-rail-convoy","title":"Rail Supply Convoy","description":"Soviet supply unit.","nation":"SovietUnion","category":"Unit","unit_type":"Infantry","rarity":"Standard","deployment_cost":3,"operation_cost":1,"attack":1,"defense":4,"keywords":[],"ability_ids":["su-rail-convoy--deploy"],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"su-partisan-scouts","title":"Partisan Scouts","description":"Soviet scout unit.","nation":"SovietUnion","category":"Unit","unit_type":"Infantry","rarity":"Standard","deployment_cost":2,"operation_cost":1,"attack":2,"defense":2,"keywords":[],"ability_ids":["su-partisan-scouts--deploy"],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"su-massed-assault","title":"Massed Assault","description":"Soviet infantry order.","nation":"SovietUnion","category":"Order","unit_type":"","rarity":"Standard","deployment_cost":3,"operation_cost":0,"attack":0,"defense":0,"keywords":[],"ability_ids":["su-massed-assault--buff"],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"su-maskirovka","title":"Maskirovka","description":"Soviet countermeasure.","nation":"SovietUnion","category":"Countermeasure","unit_type":"","rarity":"Standard","deployment_cost":2,"operation_cost":0,"attack":0,"defense":0,"keywords":[],"ability_ids":["su-maskirovka--defend"],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"su-t34-spearhead","title":"T-34 Spearhead","description":"Soviet tank unit.","nation":"SovietUnion","category":"Unit","unit_type":"Tank","rarity":"Limited","deployment_cost":4,"operation_cost":1,"attack":4,"defense":4,"keywords":["Blitz"],"ability_ids":[],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"su-heavy-breakthrough","title":"Heavy Breakthrough Regiment","description":"Soviet tank unit.","nation":"SovietUnion","category":"Unit","unit_type":"Tank","rarity":"Limited","deployment_cost":6,"operation_cost":2,"attack":6,"defense":7,"keywords":["Heavy Armor"],"ability_ids":[],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"su-katyusha-battery","title":"Katyusha Battery","description":"Soviet artillery unit.","nation":"SovietUnion","category":"Unit","unit_type":"Artillery","rarity":"Limited","deployment_cost":4,"operation_cost":2,"attack":3,"defense":3,"keywords":[],"ability_ids":["su-katyusha-battery--attack"],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"su-hold-the-line","title":"Hold the Line","description":"Soviet countermeasure.","nation":"SovietUnion","category":"Countermeasure","unit_type":"","rarity":"Limited","deployment_cost":3,"operation_cost":0,"attack":0,"defense":0,"keywords":[],"ability_ids":["su-hold-the-line--frontline-lost"],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"su-yak-patrol","title":"Yak Patrol","description":"Soviet fighter unit.","nation":"SovietUnion","category":"Unit","unit_type":"Fighter","rarity":"Special","deployment_cost":5,"operation_cost":1,"attack":4,"defense":4,"keywords":["Fury"],"ability_ids":[],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"su-pe2-bomber-wing","title":"Pe-2 Bomber Wing","description":"Soviet bomber unit.","nation":"SovietUnion","category":"Unit","unit_type":"Bomber","rarity":"Special","deployment_cost":6,"operation_cost":2,"attack":5,"defense":4,"keywords":[],"ability_ids":["su-pe2-bomber-wing--deploy"],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"su-deep-battle","title":"Deep Battle","description":"Soviet battle order.","nation":"SovietUnion","category":"Order","unit_type":"","rarity":"Elite","deployment_cost":5,"operation_cost":0,"attack":0,"defense":0,"keywords":[],"ability_ids":["su-deep-battle--retreat","su-deep-battle--draw"],"image_path":"res://game_assets/cards/BasicGermanB1.png"},
+  {"id":"su-artillery-preparation","title":"Artillery Preparation","description":"Soviet artillery order.","nation":"SovietUnion","category":"Order","unit_type":"","rarity":"Elite","deployment_cost":6,"operation_cost":0,"attack":0,"defense":0,"keywords":[],"ability_ids":["su-artillery-preparation--damage"],"image_path":"res://game_assets/cards/BasicGermanB1.png"}
 ]

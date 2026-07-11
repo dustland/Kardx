@@ -122,7 +122,7 @@ func _prepare_trigger(trigger: String, context: Dictionary, resolve_random: bool
 			var target_spec: Dictionary = ability.get("target", {})
 			var targets := _select_targets(source, target_spec, context)
 			var effects: Array = ability.get("effects", [])
-			if str(target_spec.get("selector", "action_targets")) == "random_enemy_unit":
+			if str(target_spec.get("selector", "action_targets")) in ["random_enemy_unit", "random_enemy_hand"]:
 				var random_preparation := _prepare_random_targets(source, target_spec, effects, context, resolve_random)
 				if not random_preparation.valid:
 					return random_preparation
@@ -133,8 +133,8 @@ func _prepare_trigger(trigger: String, context: Dictionary, resolve_random: bool
 				effect["actor_id"] = str(context.get("actor_id", source.owner_id))
 				effect["target_ids"] = targets.duplicate()
 				effect["target_selector"] = ability.get("target", {}).get("selector", "action_targets")
-				effect["target_count"] = int(ability.get("target", {}).get("count", 0 if str(ability.get("target", {}).get("selector", "")) == "none" else 1))
-				effect["random_resolved"] = str(target_spec.get("selector", "")) == "random_enemy_unit" and resolve_random
+				effect["target_count"] = _target_count(target_spec, targets)
+				effect["random_resolved"] = str(target_spec.get("selector", "")) in ["random_enemy_unit", "random_enemy_hand"] and resolve_random
 				effect["context"] = context
 				var validation := _validate_effect(effect)
 				if not validation.valid:
@@ -178,6 +178,15 @@ func _matches_conditions(source: CardInstance, conditions: Dictionary, context: 
 			var target := _find_card(str(target_id))
 			if target != null and target.owner_id != source.owner_id:
 				return false
+	if conditions.has("target_unit_type"):
+		for target_id in context.get("target_ids", []):
+			var target := _find_card(str(target_id))
+			if target == null or target.unit_type != str(conditions.target_unit_type):
+				return false
+	if bool(conditions.get("source_damaged", false)) and source.current_defense >= source.base_defense:
+		return false
+	if conditions.has("source_lacks_status") and source.has_keyword_or_status(str(conditions.source_lacks_status)):
+		return false
 	return true
 
 
@@ -185,6 +194,8 @@ func _select_targets(source: CardInstance, target: Dictionary, context: Dictiona
 	var selector := str(target.get("selector", "action_targets"))
 	if selector == "none":
 		return []
+	if selector == "self":
+		return [source.instance_id]
 	if selector == "action_targets":
 		return _string_ids(context.get("target_ids", []))
 	if selector == "enemy_hq":
@@ -195,7 +206,21 @@ func _select_targets(source: CardInstance, target: Dictionary, context: Dictiona
 		return _string_ids(context.get("target_ids", []))
 	if selector == "enemy_unit":
 		return _string_ids(context.get("target_ids", []))
+	if selector == "friendly_unit":
+		return _string_ids(context.get("target_ids", []))
+	if selector == "friendly_units":
+		return _public_units(source.owner_id)
+	if selector == "friendly_infantry":
+		return _public_units(source.owner_id).filter(func(id): return _find_card(id).unit_type == "Infantry")
+	if selector == "enemy_units":
+		return _public_enemy_units(source.owner_id)
+	if selector == "enemy_air_units":
+		return _public_enemy_units(source.owner_id).filter(func(id): return _find_card(id).unit_type in ["Fighter", "Bomber"])
+	if selector == "adjacent_enemy_units":
+		return _adjacent_enemy_units(source.owner_id, _string_ids(context.get("target_ids", [])))
 	if selector == "random_enemy_unit":
+		return []
+	if selector == "random_enemy_hand":
 		return []
 	return []
 
@@ -207,14 +232,14 @@ func _validate_effect(effect: Dictionary, applying: bool = false) -> Dictionary:
 	var target_count := int(effect.get("target_count", 0))
 	var effect_context: Dictionary = effect.get("context", {})
 	var caller_targets: Array = effect_context.get("target_ids", [])
-	if selector == "random_enemy_unit":
+	if selector in ["random_enemy_unit", "random_enemy_hand"]:
 		if not caller_targets.is_empty():
 			return {"valid": false, "code": "invalid_target"}
 		if bool(effect.get("random_resolved", false)) and target_ids.size() != target_count:
 			return {"valid": false, "code": "invalid_target"}
 	elif target_ids.size() != target_count:
 		return {"valid": false, "code": "invalid_target"}
-	if selector != "random_enemy_unit" and not [
+	if selector not in ["random_enemy_unit", "random_enemy_hand"] and not [
 		"credit", "credit_slots", "draw", "create", "replace_event",
 		"trigger_countermeasure", "frontline_changed", "match_ended", "finalize_hq_lethal", "check_lethal",
 	].has(effect_type) and target_ids.is_empty():
@@ -231,11 +256,14 @@ func _validate_effect(effect: Dictionary, applying: bool = false) -> Dictionary:
 		if source == null:
 			return {"valid": false, "code": "invalid_source"}
 		var owner_can_select_hand := effect_type == "discard" and target.zone == "hand" and target.owner_id == str(effect_context.get("actor_id", ""))
-		if not _is_public_target(target) and not owner_can_select_hand:
+		var revealed_enemy_hand := effect_type == "reveal" and selector == "random_enemy_hand" and target.zone == "hand" and target.owner_id != source.owner_id
+		if not _is_public_target(target) and not owner_can_select_hand and not revealed_enemy_hand:
 			return {"valid": false, "code": "invalid_origin" if applying else "invalid_target"}
 		if applying and effect_type == "retreat" and target.zone != "frontline":
 			return {"valid": false, "code": "invalid_origin"}
 		if selector == "enemy_unit" and (target.owner_id == source.owner_id or target.category != "Unit" or target.zone == "headquarters"):
+			return {"valid": false, "code": "invalid_target"}
+		if selector == "friendly_unit" and (target.owner_id != source.owner_id or target.category != "Unit" or not _is_public_target(target)):
 			return {"valid": false, "code": "invalid_target"}
 		if selector == "enemy_unit_or_hq" and (target.owner_id == source.owner_id or not ["Unit", "Headquarters"].has(target.category)):
 			return {"valid": false, "code": "invalid_target"}
@@ -359,6 +387,8 @@ func _apply_effect(effect: Dictionary) -> Dictionary:
 			for key in effect.get("changes", {}):
 				pending[key] = effect.changes[key]
 			return _event("event_replaced", {"source_id": source.instance_id})
+		"reveal":
+			return _event("card_revealed", {"source_id": source.instance_id, "target_id": _first_id(targets)})
 	return _event("effect_resolved", {"source_id": source.instance_id, "effect_type": effect_type})
 
 
@@ -629,7 +659,7 @@ func _prepare_random_targets(
 	if not (context.get("target_ids", []) as Array).is_empty():
 		return {"valid": false, "code": "invalid_target"}
 	var count := int(target_spec.get("count", 1))
-	var candidates := _random_candidates(source.owner_id, effects)
+	var candidates := _random_hand_candidates(source.owner_id) if str(target_spec.get("selector", "")) == "random_enemy_hand" else _random_candidates(source.owner_id, effects)
 	if candidates.size() < count:
 		return {"valid": false, "code": "invalid_target"}
 	var retreat_effects := 0
@@ -671,6 +701,44 @@ func _public_enemy_units(owner_id: String) -> Array[String]:
 		if card.category == "Unit" and (card.zone == "support_line" or card.zone == "frontline"):
 			candidates.append(card.instance_id)
 	return candidates
+
+
+func _public_units(owner_id: String) -> Array[String]:
+	var candidates: Array[String] = []
+	for card in _cards_for_owner(owner_id):
+		if card.category == "Unit" and (card.zone == "support_line" or card.zone == "frontline"):
+			candidates.append(card.instance_id)
+	return candidates
+
+
+func _random_hand_candidates(owner_id: String) -> Array[String]:
+	var candidates: Array[String] = []
+	for card in _player_for(owner_id, false).hand:
+		candidates.append(card.instance_id)
+	return candidates
+
+
+func _adjacent_enemy_units(owner_id: String, target_ids: Array[String]) -> Array[String]:
+	if target_ids.is_empty():
+		return []
+	var target := _find_card(target_ids[0])
+	if target == null or target.owner_id == owner_id or not ["support_line", "frontline"].has(target.zone):
+		return []
+	var line: Array = state.frontline if target.zone == "frontline" else _player_for(target.owner_id, true).support_line
+	var ids: Array[String] = []
+	for slot in [target.slot - 1, target.slot + 1]:
+		if slot >= 0 and slot < line.size() and line[slot] != null and line[slot].owner_id != owner_id:
+			ids.append(line[slot].instance_id)
+	return ids
+
+
+func _target_count(target_spec: Dictionary, targets: Array[String]) -> int:
+	var selector := str(target_spec.get("selector", ""))
+	if selector == "none":
+		return 0
+	if selector in ["friendly_units", "friendly_infantry", "enemy_units", "enemy_air_units", "adjacent_enemy_units"]:
+		return targets.size()
+	return int(target_spec.get("count", 1))
 
 
 func _open_support_slots(player) -> int:

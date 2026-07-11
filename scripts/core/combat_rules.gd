@@ -203,7 +203,7 @@ static func _type_can_target(attacker: CardInstance, defender: CardInstance) -> 
 
 static func _passes_guard_adjacency(state, attacker: CardInstance, defender: CardInstance) -> bool:
 	var rules: Dictionary = TYPE_RULES.get(attacker.unit_type, {})
-	if not bool(rules.get("guard_restricted", false)) or defender.has_keyword_or_status("Guard"):
+	if not bool(rules.get("guard_restricted", false)) or attacker.has_keyword_or_status("Bypass Guard") or defender.has_keyword_or_status("Guard"):
 		return true
 	var line: Array = state.frontline if defender.zone == "frontline" else state.players[defender.owner_id].support_line
 	for adjacent_slot in [defender.slot - 1, defender.slot + 1]:

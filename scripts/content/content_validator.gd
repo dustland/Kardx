@@ -11,8 +11,8 @@ const TRIGGERS := [
 	"frontline_gained", "frontline_lost", "hq_lethal", "manual", "move", "order_played", "play_order",
 	"turn_end", "turn_start",
 ]
-const TARGET_SELECTORS := ["none", "action_targets", "enemy_hq", "friendly_hq", "enemy_unit_or_hq", "enemy_unit", "random_enemy_unit"]
-const EFFECT_TYPES := ["damage", "repair", "buff", "debuff", "status", "draw", "discard", "create", "copy", "destroy", "return", "retreat", "credit", "credit_slots", "replace_event"]
+const TARGET_SELECTORS := ["none", "self", "action_targets", "enemy_hq", "friendly_hq", "enemy_unit_or_hq", "enemy_unit", "friendly_unit", "friendly_units", "friendly_infantry", "enemy_units", "enemy_air_units", "adjacent_enemy_units", "random_enemy_unit", "random_enemy_hand"]
+const EFFECT_TYPES := ["damage", "repair", "buff", "debuff", "status", "draw", "discard", "create", "copy", "destroy", "return", "retreat", "credit", "credit_slots", "replace_event", "reveal"]
 const TARGETLESS_EFFECTS := ["credit", "credit_slots", "draw", "create", "replace_event"]
 const HQ_SAFE_EFFECTS := ["damage", "repair", "buff", "debuff", "status"]
 const UNIT_ONLY_EFFECTS := ["copy", "discard", "destroy", "return", "retreat"]
@@ -163,7 +163,13 @@ static func _validate_conditions(diagnostics: Array[Dictionary], conditions: Var
 			_add(diagnostics, "invalid_conditions", "%s.%s" % [path, key], "enemy condition must be a boolean")
 		elif key == "target_owner" and str(value) != "owner":
 			_add(diagnostics, "invalid_conditions", "%s.%s" % [path, key], "target_owner condition must be owner")
-		elif key not in ["enemy", "target_owner"]:
+		elif key == "target_unit_type" and not UNIT_TYPES.has(str(value)):
+			_add(diagnostics, "invalid_conditions", "%s.%s" % [path, key], "target_unit_type must be a supported Unit type")
+		elif key == "source_damaged" and not value is bool:
+			_add(diagnostics, "invalid_conditions", "%s.%s" % [path, key], "source_damaged condition must be a boolean")
+		elif key == "source_lacks_status" and (not value is String or str(value).strip_edges().is_empty()):
+			_add(diagnostics, "invalid_conditions", "%s.%s" % [path, key], "source_lacks_status must be a nonblank status")
+		elif key not in ["enemy", "target_owner", "target_unit_type", "source_damaged", "source_lacks_status"]:
 			_add(diagnostics, "invalid_conditions", "%s.%s" % [path, key], "condition is not supported by EffectEngine")
 
 static func _validate_target(diagnostics: Array[Dictionary], target_value: Variant, path: String) -> Dictionary:
@@ -192,7 +198,7 @@ static func _validate_target(diagnostics: Array[Dictionary], target_value: Varia
 	if selector != "none" and count < 1:
 		_add(diagnostics, "invalid_target_count", "%s.count" % path, "card target selectors need at least one target")
 		return target_info
-	if selector in ["enemy_hq", "friendly_hq"] and count != 1:
+	if selector in ["enemy_hq", "friendly_hq", "self"] and count != 1:
 		_add(diagnostics, "invalid_hq_target_count", "%s.count" % path, "HQ selectors must target exactly one Headquarters")
 		return target_info
 	target_info["count"] = count
