@@ -133,13 +133,17 @@ static func _test_us_supply_column_deploy_adds_credit(t, catalog) -> void:
 static func _test_us_forward_observers_frontline_draw(t, catalog) -> void:
 	_assert_locked(t, catalog, "us-forward-observers")
 	var controller := _controller(catalog, 706)
-	var observers := _place_support(controller, _card(catalog, "us-forward-observers", "player", "observers"), 0)
-	_ready(controller, observers)
+	_place_support(controller, _card(catalog, "us-forward-observers", "player", "observers"), 1)
+	_place_support(controller, _card(catalog, "us-forward-observers", "opponent", "enemy-observers"), 0)
+	var capturing_unit := _place_support(controller, _card(catalog, "us-rifle-platoon", "player", "capturing-unit"), 0)
+	_ready(controller, capturing_unit)
 	_put_deck(controller, _card(catalog, "us-rifle-platoon", "player", "drawn"))
+	_put_deck(controller, _card(catalog, "us-rifle-platoon", "opponent", "enemy-draw"))
 	var before: int = controller.state.players.player.hand.size()
-	var result = _move(controller, observers, 0)
-	t.assert_true(result.accepted, "Forward Observers capture Frontline")
-	t.assert_eq(controller.state.players.player.hand.size(), before + 1, "Frontline gained trigger draws one")
+	var result = _move(controller, capturing_unit, 0)
+	t.assert_true(result.accepted, "different friendly unit captures Frontline")
+	t.assert_eq(controller.state.players.player.hand.size(), before + 1, "standing Forward Observers draw one for friendly Frontline capture")
+	t.assert_eq(controller.state.players.opponent.hand.size(), 0, "enemy Forward Observers do not trigger")
 
 
 static func _test_us_p40_patrol_smokescreen(t, catalog) -> void:
@@ -265,6 +269,9 @@ static func _test_us_combined_arms_buffs_and_draws(t, catalog) -> void:
 	t.assert_true(result.accepted, "Combined Arms resolves")
 	t.assert_eq([unit.current_attack, unit.current_defense], [2, 3], "Combined Arms grants plus one attack and defense this turn")
 	t.assert_eq(controller.state.players.player.hand.size(), 1, "Combined Arms also draws one")
+	var ended = controller.submit_action(GameAction.create("end_turn", "player", "", [], {}, controller.state.sequence))
+	t.assert_true(ended.accepted, "Combined Arms turn ends")
+	t.assert_eq([unit.current_attack, unit.current_defense, unit.modifiers.size()], [1, 2, 0], "Combined Arms buff expires exactly at owner turn end")
 
 
 static func _test_soviet_command_post_defeat(t, catalog) -> void:
@@ -347,6 +354,10 @@ static func _test_su_partisan_scouts_intel_perspective_reveal(t, catalog) -> voi
 	var opponent_view: Dictionary = controller.state.snapshot_for("opponent")
 	t.assert_eq(_visible_hand_count(player_view.players.opponent.hand), 1, "revealed card is visible from scout owner's perspective")
 	t.assert_eq(_visible_hand_count(opponent_view.players.opponent.hand), 2, "hand owner sees both own cards")
+	var ended = controller.submit_action(GameAction.create("end_turn", "player", "", [], {}, controller.state.sequence))
+	t.assert_true(ended.accepted, "Intel observer ends turn into revealed hand owner's turn")
+	t.assert_eq([enemy_a.revealed_to, enemy_b.revealed_to], [{}, {}], "Intel reveal expires when hand owner's next turn starts")
+	t.assert_eq(_visible_hand_count(controller.state.snapshot_for("player").players.opponent.hand), 0, "expired Intel card is hidden from former viewer")
 
 
 static func _test_su_massed_assault_buffs_infantry(t, catalog) -> void:
@@ -358,6 +369,9 @@ static func _test_su_massed_assault_buffs_infantry(t, catalog) -> void:
 	var result = _play_order(controller, order)
 	t.assert_true(result.accepted, "Massed Assault resolves")
 	t.assert_eq([infantry.current_attack, tank.current_attack], [2, 4], "Massed Assault buffs friendly Infantry only")
+	var ended = controller.submit_action(GameAction.create("end_turn", "player", "", [], {}, controller.state.sequence))
+	t.assert_true(ended.accepted, "Massed Assault turn ends")
+	t.assert_eq([infantry.current_attack, infantry.modifiers.size(), tank.current_attack], [1, 0, 4], "Massed Assault Infantry buff expires exactly at owner turn end")
 
 
 static func _test_su_maskirovka_temporary_defender_ambush(t, catalog) -> void:
@@ -391,6 +405,12 @@ static func _test_su_heavy_breakthrough_heavy_armor(t, catalog) -> void:
 	var result = _attack(controller, attacker, heavy)
 	t.assert_true(result.accepted, "Heavy Breakthrough is attacked")
 	t.assert_eq(heavy.current_defense, 5, "Heavy Armor reduces incoming three damage to two")
+	var effect_controller := _controller(catalog, 736)
+	var effect_heavy := _place_support(effect_controller, _card(catalog, "su-heavy-breakthrough", "opponent", "effect-heavy"), 0)
+	var order := _put_hand(effect_controller, _card(catalog, "su-artillery-preparation", "player", "effect-damage"))
+	var effect_result = _play_order(effect_controller, order)
+	t.assert_true(effect_result.accepted, "EffectEngine damage Order resolves against Heavy Armor")
+	t.assert_eq(effect_heavy.current_defense, 6, "Heavy Armor reduces EffectEngine two damage to one")
 
 
 static func _test_su_katyusha_battery_adjacent_damage(t, catalog) -> void:
@@ -620,10 +640,18 @@ static func _assert_two_attacks(t, catalog, card_id: String, seed: int) -> void:
 	defender.current_defense = 30
 	defender.current_attack = 0
 	_ready(controller, attacker)
+	var initial_credit: int = controller.state.players.player.credit
 	var first = _attack(controller, attacker, defender)
+	var credit_after_first: int = controller.state.players.player.credit
 	var second = _attack(controller, attacker, defender)
+	var credit_after_second: int = controller.state.players.player.credit
+	var third = _attack(controller, attacker, defender)
 	t.assert_true(first.accepted and second.accepted, "%s performs two paid attacks via Fury" % card_id)
 	t.assert_eq(attacker.operations_used, 2, "%s consumes two operation allowances" % card_id)
+	t.assert_eq([initial_credit, credit_after_first, credit_after_second], [12, 12 - attacker.operation_cost, 12 - attacker.operation_cost * 2], "%s deducts exact operation Credit twice" % card_id)
+	t.assert_eq([_credit_spent_amount(first.events), _credit_spent_amount(second.events)], [attacker.operation_cost, attacker.operation_cost], "%s emits two exact Credit deductions" % card_id)
+	t.assert_eq(third.reason_code, "operation_limit", "%s rejects third operation" % card_id)
+	t.assert_eq([controller.state.players.player.credit, third.events.size()], [credit_after_second, 0], "%s third rejection deducts no Credit" % card_id)
 
 
 static func _attack_fixture(catalog, attacker_id: String, defender_id: String, seed: int) -> Dictionary:
@@ -640,6 +668,13 @@ static func _visible_hand_count(hand: Array) -> int:
 		if not bool(card.get("hidden", false)):
 			count += 1
 	return count
+
+
+static func _credit_spent_amount(events: Array) -> int:
+	for event in events:
+		if event.type == "credit_spent":
+			return int(event.amount)
+	return 0
 
 
 static func _string_ids(values: Array) -> Array[String]:

@@ -46,6 +46,10 @@ static func run(t) -> void:
 	_test_combat_status_ignores_wrong_owner_and_non_target(t)
 	_test_combat_status_cleans_up_after_cancellation(t)
 	_test_combat_status_cleans_up_after_terminal_reaction(t)
+	_test_global_triggers_include_event_source_and_owner_battlefield(t)
+	_test_hold_the_line_ignores_lethal_support_unit(t)
+	_test_hold_the_line_ignores_hq_attack_without_frontline_targets(t)
+	_test_failed_action_rolls_back_reveal_state(t)
 
 
 static func _test_stat_and_status_effects(t) -> void:
@@ -1282,6 +1286,109 @@ static func _test_combat_status_cleans_up_after_terminal_reaction(t) -> void:
 	t.assert_true(result.accepted, "terminal attack reaction resolves")
 	t.assert_eq(fixture.controller.state.phase, "complete", "reaction ends match before combat")
 	t.assert_true(not fixture.defender.has_keyword_or_status("Ambush"), "temporary Ambush is removed after terminal reaction")
+
+
+static func _test_global_triggers_include_event_source_and_owner_battlefield(t) -> void:
+	var controller := _controller(565)
+	var mover := _card("global-trigger-mover", "player")
+	var standing := _card("global-trigger-standing", "player")
+	var enemy := _card("global-trigger-enemy", "opponent")
+	mover.abilities = [_ability(
+		"mover-frontline-gained", "frontline_gained", {"selector": "none"},
+		[{"type": "credit", "amount": 1, "player": "owner"}]
+	)]
+	standing.abilities = [_ability(
+		"standing-frontline-gained", "frontline_gained", {"selector": "none"},
+		[{"type": "credit", "amount": 2, "player": "owner"}]
+	)]
+	enemy.abilities = [_ability(
+		"enemy-frontline-gained", "frontline_gained", {"selector": "none"},
+		[{"type": "credit", "amount": 4, "player": "owner"}]
+	)]
+	_place_support(controller, mover, 0)
+	_place_support(controller, standing, 1)
+	_place_support(controller, enemy, 0)
+	_ready(controller, mover)
+	var result = controller.submit_action(GameAction.create(
+		"move_unit", "player", mover.instance_id, [], {"zone": "frontline", "slot": 0}, controller.state.sequence
+	))
+	t.assert_true(result.accepted, "Frontline capture resolves with standing trigger sources")
+	t.assert_eq(controller.state.players.player.credit, 13, "event source and standing friendly source each trigger exactly once")
+	t.assert_eq(controller.state.players.opponent.credit, 10, "enemy standing source does not receive owner-wide trigger")
+	var trigger_credits: Array = result.events.filter(func(event): return event.type == "credit_changed").map(func(event): return event.credit)
+	t.assert_eq(trigger_credits, [11, 13], "global triggers resolve event source then battlefield slot order")
+
+
+static func _test_hold_the_line_ignores_lethal_support_unit(t) -> void:
+	var controller := _controller(566)
+	var counter := _hold_the_line_counter("hold-support", "player")
+	var victim := _card("hold-support-victim", "player", "Unit", 1, 1)
+	var attacker := _card("hold-support-attacker", "opponent", "Unit", 2, 5)
+	_place_support(controller, victim, 0)
+	_place_frontline(controller, attacker, 0)
+	_put_hand(controller, counter)
+	_activate_counter_for_enemy_turn(controller, counter)
+	_ready(controller, attacker)
+	var result = controller.submit_action(GameAction.create(
+		"attack_unit", "opponent", attacker.instance_id, [victim.instance_id], {}, controller.state.sequence
+	))
+	t.assert_true(result.accepted, "lethal Support attack is unrelated to Hold the Line")
+	t.assert_eq(victim.zone, "discard", "lethal Support unit is destroyed")
+	t.assert_true(counter.countermeasure_active and counter.zone == "hand", "lethal Support unit does not consume Hold the Line")
+
+
+static func _test_hold_the_line_ignores_hq_attack_without_frontline_targets(t) -> void:
+	var controller := _controller(567)
+	var counter := _hold_the_line_counter("hold-hq", "player")
+	var attacker := _card("hold-hq-attacker", "opponent", "Unit", 1, 5)
+	attacker.unit_type = "Artillery"
+	_place_support(controller, attacker, 0)
+	_put_hand(controller, counter)
+	_activate_counter_for_enemy_turn(controller, counter)
+	_ready(controller, attacker)
+	var result = controller.submit_action(GameAction.create(
+		"attack_hq", "opponent", attacker.instance_id,
+		[controller.state.players.player.headquarters.instance_id], {}, controller.state.sequence
+	))
+	t.assert_true(result.accepted, "HQ attack remains valid with active Hold the Line and no friendly Frontline units")
+	t.assert_eq(controller.state.players.player.headquarters.current_defense, 19, "unrelated HQ attack deals normal damage")
+	t.assert_true(counter.countermeasure_active and counter.zone == "hand", "HQ attack does not consume Hold the Line")
+
+
+static func _hold_the_line_counter(instance_id: String, owner_id: String) -> CardInstance:
+	var counter := _countermeasure(instance_id, owner_id, 0)
+	counter.abilities = [_ability(
+		"hold-the-line", "damage", {"selector": "friendly_frontline_units"},
+		[{"type": "repair", "amount": 2}],
+		{"enemy": true, "event_source_owner": "owner", "event_source_zone": "frontline", "event_source_lethal": true}
+	)]
+	return counter
+
+
+static func _activate_counter_for_enemy_turn(controller: MatchController, counter: CardInstance) -> void:
+	controller.submit_action(GameAction.create(
+		"toggle_countermeasure", counter.owner_id, counter.instance_id, [], {}, controller.state.sequence
+	))
+	controller.state.active_player_id = "opponent"
+
+
+static func _test_failed_action_rolls_back_reveal_state(t) -> void:
+	var controller := _controller(568)
+	var source := _card("rollback-reveal-source", "player")
+	var target := _card("rollback-reveal-target", "opponent")
+	source.abilities = [_ability(
+		"rollback-reveal", "manual", {"selector": "enemy_unit", "count": 1},
+		[{"type": "reveal"}, {"type": "return"}, {"type": "retreat"}]
+	)]
+	_place_support(controller, source, 0)
+	_place_frontline(controller, target, 0)
+	var result = controller.submit_action(GameAction.create(
+		"activate_ability", "player", source.instance_id, [target.instance_id],
+		{"ability_id": "rollback-reveal"}, controller.state.sequence
+	))
+	t.assert_eq(result.reason_code, "invalid_origin", "later queued failure rejects reveal action")
+	t.assert_eq(target.zone, "frontline", "failed action restores target zone")
+	t.assert_eq(target.revealed_to, {}, "failed action restores authoritative reveal state")
 
 
 static func _ambush_attack_fixture(seed: int, defender_attack: int, defender_defense: int, attacker_attack: int, attacker_defense: int) -> Dictionary:

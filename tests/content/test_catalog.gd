@@ -87,12 +87,13 @@ static func _test_card_ids_references_and_category_shapes(t) -> void:
 
 static func _test_effect_schema_defaults_and_matrix(t) -> void:
 	var catalog := ContentCatalog.new()
-	catalog.cards = [_card("us-rifle", ["default-count", "attack-only", "signed-credit", "combat-status"]), _headquarters("us-hq")]
+	catalog.cards = [_card("us-rifle", ["default-count", "attack-only", "signed-credit", "combat-status", "frontline-lethal"]), _headquarters("us-hq")]
 	catalog.abilities = [
 		{"id": "default-count", "trigger": "manual", "conditions": {}, "target": {"selector": "enemy_unit"}, "effects": [{"type": "damage", "amount": 1}]},
 		{"id": "attack-only", "trigger": "manual", "conditions": {}, "target": {"selector": "enemy_unit"}, "effects": [{"type": "buff", "attack": 1}]},
 		{"id": "signed-credit", "trigger": "manual", "conditions": {}, "target": {"selector": "none"}, "effects": [{"type": "credit", "amount": -2}]},
 		{"id": "combat-status", "trigger": "attack", "conditions": {"target_category": "Unit"}, "target": {"selector": "action_targets"}, "effects": [{"type": "status", "status": "Ambush", "duration": "combat"}]},
+		{"id": "frontline-lethal", "trigger": "damage", "conditions": {"event_source_owner": "owner", "event_source_zone": "frontline", "event_source_lethal": true}, "target": {"selector": "friendly_frontline_units"}, "effects": [{"type": "repair", "amount": 2}]},
 	]
 	catalog.decks = []
 	catalog.rules = _rules()

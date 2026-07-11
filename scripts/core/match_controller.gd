@@ -288,6 +288,7 @@ func _apply_card_snapshot(card: CardInstance, data: Dictionary) -> void:
 	card.modifiers = data.modifiers.duplicate(true)
 	card.statuses = data.statuses.duplicate(true)
 	card.temporary_statuses = data.temporary_statuses.duplicate(true)
+	card.revealed_to = data.revealed_to.duplicate(true)
 	card.face_down = data.face_down
 	card.countermeasure_active = data.countermeasure_active
 	card.countermeasure_activation_cost = data.countermeasure_activation_cost
@@ -458,8 +459,18 @@ func _valid_card_snapshot(data) -> bool:
 			return false
 	if not (data.get("statuses", null) is Dictionary):
 		return false
+	if not _valid_revealed_to(data.get("revealed_to", null)):
+		return false
 	for field in ["smokescreen_revealed", "face_down", "countermeasure_active"]:
 		if typeof(data.get(field, null)) != TYPE_BOOL:
+			return false
+	return true
+
+func _valid_revealed_to(value) -> bool:
+	if not (value is Dictionary):
+		return false
+	for viewer_id in value:
+		if not (viewer_id in ["player", "opponent"]) or typeof(value[viewer_id]) != TYPE_BOOL:
 			return false
 	return true
 
@@ -658,6 +669,7 @@ func _card_state(card) -> Variant:
 		"modifiers": card.modifiers.duplicate(true),
 		"statuses": card.statuses.duplicate(true),
 		"temporary_statuses": card.temporary_statuses.duplicate(true),
+		"revealed_to": card.revealed_to.duplicate(true),
 		"face_down": card.face_down,
 		"countermeasure_active": card.countermeasure_active,
 		"countermeasure_activation_cost": card.countermeasure_activation_cost,
@@ -776,6 +788,7 @@ func _capture_card(card, snapshots: Array[Dictionary], seen: Dictionary) -> void
 		"modifiers": card.modifiers.duplicate(true),
 		"statuses": card.statuses.duplicate(true),
 		"temporary_statuses": card.temporary_statuses.duplicate(true),
+		"revealed_to": card.revealed_to.duplicate(true),
 		"face_down": card.face_down,
 		"countermeasure_active": card.countermeasure_active,
 		"countermeasure_activation_cost": card.countermeasure_activation_cost,
@@ -820,6 +833,7 @@ func _restore_transaction(transaction: Dictionary) -> void:
 		card.modifiers = snapshot.modifiers.duplicate(true)
 		card.statuses = snapshot.statuses.duplicate(true)
 		card.temporary_statuses = snapshot.temporary_statuses.duplicate(true)
+		card.revealed_to = snapshot.revealed_to.duplicate(true)
 		card.face_down = snapshot.face_down
 		card.countermeasure_active = snapshot.countermeasure_active
 		card.countermeasure_activation_cost = snapshot.countermeasure_activation_cost

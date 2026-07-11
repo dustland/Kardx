@@ -4,6 +4,8 @@ extends RefCounted
 const CardInstance = preload("res://scripts/core/card_instance.gd")
 const GameConstants = preload("res://scripts/core/game_constants.gd")
 
+const OWNER_WIDE_TRIGGERS := ["frontline_gained", "frontline_lost", "turn_end", "turn_start"]
+
 var state
 var definitions: Dictionary
 var rng: RandomNumberGenerator
@@ -162,24 +164,35 @@ func _trigger_sources(trigger: String, context: Dictionary) -> Array[CardInstanc
 	if explicit_source != null:
 		sources.append(explicit_source)
 		seen[explicit_source.instance_id] = true
-	if explicit_source == null:
+	if OWNER_WIDE_TRIGGERS.has(trigger):
+		var owner_id := str(context.get("player_id", explicit_source.owner_id if explicit_source != null else context.get("actor_id", "")))
+		if state.players.has(owner_id):
+			var owner = state.players[owner_id]
+			for card in owner.support_line:
+				_append_unique_source(sources, seen, card)
+			for card in state.frontline:
+				if card != null and card.owner_id == owner_id:
+					_append_unique_source(sources, seen, card)
+	elif explicit_source == null:
 		for player_id in state.players:
 			var owner = state.players[player_id]
 			for card in owner.support_line:
-				if card != null and not seen.has(card.instance_id):
-					sources.append(card)
-					seen[card.instance_id] = true
+				_append_unique_source(sources, seen, card)
 		for card in state.frontline:
-			if card != null and not seen.has(card.instance_id):
-				sources.append(card)
-				seen[card.instance_id] = true
+			_append_unique_source(sources, seen, card)
 	for player_id in state.players:
 		var player = state.players[player_id]
 		for counter in player.active_countermeasures:
-			if counter != null and counter.countermeasure_active and counter != explicit_source and str(context.get("actor_id", "")) != counter.owner_id:
-				sources.append(counter)
-				seen[counter.instance_id] = true
+			if counter != null and counter.countermeasure_active and not seen.has(counter.instance_id) and str(context.get("actor_id", "")) != counter.owner_id:
+				_append_unique_source(sources, seen, counter)
 	return sources
+
+
+func _append_unique_source(sources: Array[CardInstance], seen: Dictionary, source: CardInstance) -> void:
+	if source == null or seen.has(source.instance_id):
+		return
+	sources.append(source)
+	seen[source.instance_id] = true
 
 
 func _matches_conditions(source: CardInstance, conditions: Dictionary, context: Dictionary) -> bool:
@@ -211,6 +224,14 @@ func _matches_conditions(source: CardInstance, conditions: Dictionary, context: 
 	if conditions.has("event_source_lethal"):
 		var event_source := _find_card(str(context.get("source_id", "")))
 		if event_source == null or bool(conditions.event_source_lethal) != (event_source.current_defense <= 0):
+			return false
+	if conditions.has("event_source_owner"):
+		var event_source := _find_card(str(context.get("source_id", "")))
+		if event_source == null or str(conditions.event_source_owner) != "owner" or event_source.owner_id != source.owner_id:
+			return false
+	if conditions.has("event_source_zone"):
+		var event_source := _find_card(str(context.get("source_id", "")))
+		if event_source == null or event_source.zone != str(conditions.event_source_zone):
 			return false
 	return true
 

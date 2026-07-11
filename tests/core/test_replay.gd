@@ -23,6 +23,8 @@ static func run(t) -> void:
 	_test_state_hash_is_canonical_for_dictionary_order(t)
 	_test_state_hash_preserves_numeric_and_string_dictionary_keys(t)
 	_test_state_hash_includes_rng_state(t)
+	_test_state_hash_includes_reveal_sets(t)
+	_test_invalid_snapshot_serializes_and_validates_reveal_sets(t)
 	_test_rejected_action_preserves_state_hash_and_log(t)
 	_test_broken_zone_invariant_aborts_match_once(t)
 	_test_owner_slot_frontline_and_terminal_invariants_abort(t)
@@ -337,6 +339,31 @@ static func _test_state_hash_includes_rng_state(t) -> void:
 	var hash_before := controller.state_hash()
 	controller._rng.randi()
 	t.assert_true(controller.state_hash() != hash_before, "state hash includes owned rng state")
+
+
+static func _test_state_hash_includes_reveal_sets(t) -> void:
+	var fixture := CoreCards.build_valid_fixture()
+	var first := MatchController.create(fixture.definitions, fixture.player_deck, fixture.enemy_deck, 90229)
+	var second := MatchController.create(fixture.definitions, fixture.player_deck, fixture.enemy_deck, 90229)
+	first.state.players.opponent.deck[0].revealed_to = {"player": true}
+	second.state.players.opponent.deck[0].revealed_to = {"opponent": true}
+	t.assert_true(first.state_hash() != second.state_hash(), "different authoritative reveal sets produce different state hashes")
+
+
+static func _test_invalid_snapshot_serializes_and_validates_reveal_sets(t) -> void:
+	var fixture := CoreCards.build_valid_fixture()
+	var source := MatchController.create(fixture.definitions, fixture.player_deck, fixture.enemy_deck, 90230)
+	var revealed = source.state.players.opponent.deck[0]
+	revealed.revealed_to = {"player": true}
+	var snapshot: Dictionary = source._invalid_replay_snapshot()
+	var card_snapshot: Dictionary = snapshot.cards[revealed.instance_id]
+	t.assert_eq(card_snapshot.revealed_to, {"player": true}, "invalid replay snapshot serializes reveal set")
+	var restored := MatchController.create(fixture.definitions, fixture.player_deck, fixture.enemy_deck, 90230)
+	t.assert_true(restored._restore_invalid_replay_snapshot(snapshot).valid, "snapshot with reveal set restores")
+	var restored_card = restored.state.players.opponent.deck.filter(func(card): return card.instance_id == revealed.instance_id)[0]
+	t.assert_eq(restored_card.revealed_to, {"player": true}, "snapshot restore preserves reveal set")
+	card_snapshot.revealed_to = []
+	t.assert_true(not source._validate_invalid_replay_snapshot(snapshot).valid, "invalid replay snapshot rejects non-dictionary reveal set")
 
 
 static func _test_rejected_action_preserves_state_hash_and_log(t) -> void:

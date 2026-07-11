@@ -177,7 +177,11 @@ static func _validate_conditions(diagnostics: Array[Dictionary], conditions: Var
 			_add(diagnostics, "invalid_conditions", "%s.%s" % [path, key], "source_has_status must be a nonblank status")
 		elif key == "event_source_lethal" and not value is bool:
 			_add(diagnostics, "invalid_conditions", "%s.%s" % [path, key], "event_source_lethal must be a boolean")
-		elif key not in ["enemy", "target_owner", "target_unit_type", "target_category", "source_damaged", "source_lacks_status", "source_has_status", "event_source_lethal"]:
+		elif key == "event_source_owner" and str(value) != "owner":
+			_add(diagnostics, "invalid_conditions", "%s.%s" % [path, key], "event_source_owner condition must be owner")
+		elif key == "event_source_zone" and not ["support_line", "frontline", "headquarters", "hand", "deck", "discard"].has(str(value)):
+			_add(diagnostics, "invalid_conditions", "%s.%s" % [path, key], "event_source_zone must be a supported card zone")
+		elif key not in ["enemy", "target_owner", "target_unit_type", "target_category", "source_damaged", "source_lacks_status", "source_has_status", "event_source_lethal", "event_source_owner", "event_source_zone"]:
 			_add(diagnostics, "invalid_conditions", "%s.%s" % [path, key], "condition is not supported by EffectEngine")
 
 static func _validate_target(diagnostics: Array[Dictionary], target_value: Variant, path: String) -> Dictionary:
