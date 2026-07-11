@@ -222,7 +222,7 @@ static func _validate_effect(diagnostics: Array[Dictionary], effect_value: Varia
 		_validate_modifier(diagnostics, effect, path)
 	elif effect_type == "status":
 		var status_value = effect.get("status", null)
-		if not status_value is String or str(status_value).is_empty():
+		if not status_value is String or str(status_value).strip_edges().is_empty():
 			_add(diagnostics, "missing_effect_field", "%s.status" % path, "status effect needs a status")
 		if effect.has("active") and not effect.get("active") is bool:
 			_add(diagnostics, "invalid_type", "%s.active" % path, "status active must be a boolean")

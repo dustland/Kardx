@@ -144,6 +144,13 @@ static func _test_required_enum_strings_and_create_constraints(t) -> void:
 			"target": {"selector": "none"},
 			"effects": [{"type": "create", "definition_id": "blank-enums", "destination": "frontline"}],
 		},
+		{
+			"id": "blank-status",
+			"trigger": "manual",
+			"conditions": {},
+			"target": {"selector": "enemy_unit"},
+			"effects": [{"type": "status", "status": "   "}],
+		},
 	]
 	catalog.decks = []
 	catalog.rules = _rules()
@@ -161,8 +168,9 @@ static func _test_required_enum_strings_and_create_constraints(t) -> void:
 		{"code": "invalid_effect_type", "path": "abilities[0].effects[0].type"},
 		{"code": "invalid_create_definition", "path": "abilities[1].effects[0].definition_id"},
 		{"code": "invalid_create_destination", "path": "abilities[2].effects[0].destination"},
-	]:
-		t.assert_true(errors.any(func(error): return error.code == expected.code and error.path == expected.path), "reports %s at %s" % [expected.code, expected.path])
+		]:
+			t.assert_true(errors.any(func(error): return error.code == expected.code and error.path == expected.path), "reports %s at %s" % [expected.code, expected.path])
+	t.assert_true(errors.any(func(error): return error.code == "missing_effect_field" and error.path == "abilities[3].effects[0].status"), "whitespace-only status is rejected")
 
 static func _test_malformed_nested_content_stays_diagnostic(t) -> void:
 	var catalog := ContentCatalog.new()
