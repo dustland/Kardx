@@ -35,6 +35,11 @@ class DeckBuilderViewModel:
 	func validation() -> Dictionary:
 		return DeckValidator.validate(_cards(), catalog.cards_by_id)
 
+	func selected_deck() -> Dictionary:
+		if not decks.has(selected_deck_id):
+			return {}
+		return (decks[selected_deck_id] as Dictionary).duplicate(true)
+
 	func add_card(card_id: String) -> void:
 		if not catalog.cards_by_id.has(card_id) or selected_deck_id.is_empty():
 			return
@@ -105,6 +110,29 @@ var store
 var difficulty := "standard"
 
 
+func _ready() -> void:
+	resized.connect(_apply_responsive_layout)
+	_apply_responsive_layout()
+
+
+func selected_deck() -> Dictionary:
+	return {} if model == null else model.selected_deck()
+
+
+func _apply_responsive_layout() -> void:
+	var compact := size.x <= 1100.0
+	%Filters.custom_minimum_size.x = 152.0 if compact else 184.0
+	%DeckPanel.custom_minimum_size.x = 240.0 if compact else 284.0
+	%Filters.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	%DeckPanel.size_flags_horizontal = Control.SIZE_SHRINK_END
+	var filter_margin := get_node("Margin/Page/Workspace/Filters/Margin") as MarginContainer
+	for side in ["margin_left", "margin_right"]:
+		filter_margin.add_theme_constant_override(side, 6 if compact else 10)
+	var page_margin := get_node("Margin") as MarginContainer
+	page_margin.offset_left = 10.0 if compact else 16.0
+	page_margin.offset_right = -10.0 if compact else -16.0
+
+
 func initialize(main, payload: Dictionary) -> void:
 	router = main
 	catalog = payload.get("catalog")
@@ -124,6 +152,7 @@ func _populate_controls() -> void:
 	_populate_deck_selector()
 	for filter_data in [[%NationFilter, "nation"], [%CategoryFilter, "category"], [%UnitTypeFilter, "unit_type"], [%RarityFilter, "rarity"]]:
 		var control := filter_data[0] as OptionButton
+		control.fit_to_longest_item = false
 		control.clear()
 		control.add_item("All")
 		var values: Array[String] = []
@@ -135,6 +164,7 @@ func _populate_controls() -> void:
 		for value in values:
 			control.add_item(value)
 	var costs := %CostFilter as OptionButton
+	costs.fit_to_longest_item = false
 	costs.clear()
 	costs.add_item("All costs", -1)
 	for cost in range(0, 8):
@@ -183,6 +213,9 @@ func _refresh_deck() -> void:
 		var row := Button.new()
 		row.text = "%dx  %s" % [counts[card_id], str((catalog.cards_by_id[card_id] as Dictionary).get("title", card_id))]
 		row.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		row.clip_text = true
+		row.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.pressed.connect(_on_remove_card.bind(card_id))
 		%DeckRows.add_child(row)
 	%NationDistribution.text = "  ".join(nations.keys().map(func(key): return "%s %d" % [key, nations[key]]))

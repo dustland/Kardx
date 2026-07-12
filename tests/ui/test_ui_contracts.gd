@@ -16,16 +16,21 @@ class TestScreen:
 
 	var router: Main
 	var payload: Dictionary
+	var selected_definition: Dictionary = {}
 
 	func initialize(main: Main, data: Dictionary) -> void:
 		router = main
 		payload = data.duplicate(true)
+
+	func selected_deck() -> Dictionary:
+		return selected_definition.duplicate(true)
 
 
 static func run(t) -> void:
 	_test_theme_and_screen_contract(t)
 	_test_router_replaces_screen_and_initializes_payload(t)
 	_test_main_routes_play_to_mulligan_fallback(t)
+	_test_main_passes_selected_deck_to_mulligan(t)
 	_test_missing_scene_uses_fallback(t)
 	_test_content_errors_are_sorted_and_retryable(t)
 	_test_main_scene_exposes_screen_host(t)
@@ -85,11 +90,29 @@ static func _test_main_routes_play_to_mulligan_fallback(t) -> void:
 	main.screen_factory = func(path: String) -> Control:
 		return TestScreen.new() if path.ends_with("deck_builder_view.tscn") else null
 	main.show_screen("deck_builder", {})
+	(main.current_screen as TestScreen).selected_definition = {"id": "user-us-starter", "cards": ["us-hq", "su-yak-patrol"], "meta": {"unsaved": true}}
 	(main.current_screen as TestScreen).play_requested.emit("user-us-starter", "hard")
 	t.assert_eq(main.selected_deck_id, "user-us-starter", "Play stores selected deck")
 	t.assert_eq(main.difficulty, "hard", "Play stores difficulty")
+	t.assert_eq(main.selected_player_deck, {"id": "user-us-starter", "cards": ["us-hq", "su-yak-patrol"], "meta": {"unsaved": true}}, "Play captures full unsaved deck before freeing builder")
 	t.assert_true(main.current_screen is CenterContainer, "missing mulligan scene uses fallback")
 	t.assert_eq((main.current_screen.get_child(0) as Label).text, "Mulligan", "Play visibly advances to mulligan fallback")
+	main.free()
+
+
+static func _test_main_passes_selected_deck_to_mulligan(t) -> void:
+	var main := Main.new()
+	var host := Control.new()
+	main.screen_host = host
+	main.screen_factory = func(_path: String) -> Control: return TestScreen.new()
+	main.show_screen("deck_builder", {})
+	var deck := {"id": "user-us-starter", "cards": ["us-hq"], "meta": {"unsaved": true}}
+	(main.current_screen as TestScreen).selected_definition = deck
+	(main.current_screen as TestScreen).play_requested.emit("user-us-starter", "standard")
+	var payload: Dictionary = (main.current_screen as TestScreen).payload
+	t.assert_eq(payload.get("player_deck"), deck, "mulligan payload receives complete selected deck")
+	deck.cards.clear()
+	t.assert_eq((payload.player_deck as Dictionary).cards, ["us-hq"], "mulligan payload owns a deep copy")
 	main.free()
 
 
@@ -267,6 +290,9 @@ static func _test_deck_builder_model(t) -> void:
 	t.assert_eq((catalog.decks_by_id["us-starter"] as Dictionary).cards.size(), 40, "shipped deck remains immutable")
 	model.remove_card("su-yak-patrol")
 	t.assert_true(model.validation().valid, "removing edit restores validity")
+	var selected: Dictionary = model.selected_deck()
+	selected.cards.clear()
+	t.assert_eq(model.card_count(), 40, "selected deck accessor returns a deep copy")
 
 
 static func _test_deck_builder_filters(t) -> void:
@@ -325,6 +351,7 @@ static func _test_deck_store_surfaces_corrupt_load(t) -> void:
 
 static func _test_deck_builder_scene_contract(t) -> void:
 	var view = DeckBuilderScene.instantiate()
+	view.theme = ThemeFactory.create()
 	Engine.get_main_loop().root.add_child(view)
 	view.initialize(null, {"catalog": _catalog(), "deck_id": "us-starter", "difficulty": "standard", "store_path": "user://test-decks-task3.json"})
 	for path in ["DeckSelector", "Difficulty", "Search", "NationFilter", "CategoryFilter", "UnitTypeFilter", "RarityFilter", "CostFilter", "CatalogGrid", "DeckList", "NationDistribution", "CardCount", "Validation", "SaveButton", "PlayButton"]:
@@ -343,6 +370,12 @@ static func _assert_builder_layout(t, view: Control, viewport_size: Vector2) -> 
 	view.size = viewport_size
 	await Engine.get_main_loop().process_frame
 	await Engine.get_main_loop().process_frame
+	t.assert_eq(view.size, viewport_size, "%s-wide builder preserves assigned viewport size" % int(viewport_size.x))
+	if viewport_size.x == 1024:
+		t.assert_true(view.get_combined_minimum_size().x <= 1024.0, "builder combined minimum genuinely fits 1024")
+		t.assert_true((view.get_node("Margin/Page") as Control).get_combined_minimum_size().x <= 992.0, "builder content minimum fits inside 1024 margins")
+		t.assert_true((view.get_node("%Filters") as Control).size.x <= 160.0, "1024 layout compacts filter rail")
+		t.assert_true((view.get_node("%DeckPanel") as Control).size.x <= 245.0, "1024 layout compacts deck rail")
 	var columns := [view.get_node("%Filters") as Control, view.get_node("%Catalog") as Control, view.get_node("%DeckPanel") as Control]
 	for index in range(columns.size() - 1):
 		t.assert_true(columns[index].get_global_rect().end.x <= columns[index + 1].get_global_rect().position.x, "%s-wide builder columns do not overlap" % int(viewport_size.x))

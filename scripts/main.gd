@@ -25,6 +25,7 @@ const CONTENT_PATHS := [
 var current_screen: Control
 var catalog: ContentCatalog
 var selected_deck_id := "us-starter"
+var selected_player_deck: Dictionary = {}
 var difficulty := "standard"
 var controller: MatchController
 var ai: AIPlayer
@@ -59,7 +60,15 @@ func show_screen(screen_name: String, payload: Dictionary = {}) -> void:
 func _on_play_requested(deck_id: String, selected_difficulty: String) -> void:
 	selected_deck_id = deck_id
 	difficulty = selected_difficulty
-	show_screen("mulligan", {"catalog": catalog, "deck_id": selected_deck_id, "difficulty": difficulty})
+	selected_player_deck = {}
+	if current_screen != null and current_screen.has_method("selected_deck"):
+		selected_player_deck = (current_screen.selected_deck() as Dictionary).duplicate(true)
+	show_screen("mulligan", {
+		"catalog": catalog,
+		"deck_id": selected_deck_id,
+		"difficulty": difficulty,
+		"player_deck": selected_player_deck.duplicate(true),
+	})
 
 
 func _validate_and_start() -> void:
