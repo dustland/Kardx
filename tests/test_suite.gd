@@ -21,6 +21,10 @@ const SUITES := [
 ]
 
 func _init() -> void:
+	call_deferred("_run")
+
+
+func _run() -> void:
 	var test_case := TestCase.new()
 	var args := OS.get_cmdline_user_args()
 	var suites := SUITES
@@ -29,8 +33,10 @@ func _init() -> void:
 	elif "--art-assets-only" in args:
 		suites = [ART_ASSET_SUITE]
 	for suite in suites:
-		suite.run(test_case)
+		await suite.run(test_case)
 	var failures := test_case.finish()
+	await process_frame
+	await process_frame
 	if failures == 0:
 		if "--art-assets-only" in args:
 			print("PASS generated card art assets")

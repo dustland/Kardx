@@ -1,4 +1,5 @@
 .godot/
+.superpowers/
 *.import
 *.translation
 *.uid
