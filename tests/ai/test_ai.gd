@@ -1,6 +1,7 @@
 extends RefCounted
 
 const ActionGenerator = preload("res://scripts/ai/action_generator.gd")
+const AIPlayer = preload("res://scripts/ai/ai_player.gd")
 const BoardEvaluator = preload("res://scripts/ai/board_evaluator.gd")
 const CardInstance = preload("res://scripts/core/card_instance.gd")
 const GameAction = preload("res://scripts/core/game_action.gd")
@@ -9,6 +10,16 @@ const MatchController = preload("res://scripts/core/match_controller.gd")
 
 
 static func run(t) -> void:
+	_test_ai_player_factory_normalizes_difficulties(t)
+	_test_ai_player_exposes_safe_chooser_contract(t)
+	_test_ai_choices_are_deterministic_legal_and_isolated(t)
+	_test_easy_seed_breaks_equal_action_ties(t)
+	_test_search_retains_negative_score_ties(t)
+	_test_standard_looks_ahead_for_a_tactical_sequence(t)
+	_test_standard_avoids_suicidal_attack_when_deployment_is_better(t)
+	_test_hard_takes_an_immediate_lethal(t)
+	_test_ai_end_turn_fallback_and_safe_null_cases(t)
+	_test_ai_respects_hidden_information_boundary(t)
 	_test_rich_midgame_actions_are_complete_legal_and_stable(t)
 	_test_manual_adjacent_enemy_anchor_actions(t)
 	_test_action_keys_preserve_delimited_ids_and_typed_payloads(t)
@@ -19,6 +30,107 @@ static func run(t) -> void:
 	_test_evaluator_respects_information_boundary(t)
 	_test_evaluator_handles_malformed_snapshots(t)
 	_test_evaluator_requires_exact_player_map(t)
+
+
+static func _test_ai_player_factory_normalizes_difficulties(t) -> void:
+	var ai_script = load("res://scripts/ai/ai_player.gd")
+	t.assert_true(ai_script != null, "AIPlayer script exists")
+	if ai_script == null:
+		return
+	var easy = ai_script.create("easy", 11)
+	var standard = ai_script.create("standard", 11)
+	var hard = ai_script.create("hard", 11)
+	var fallback = ai_script.create("unknown", 11)
+	t.assert_eq(easy.difficulty, "easy", "easy difficulty is retained")
+	t.assert_eq([easy.node_budget, easy.max_depth, easy.beam_width], [32, 1, 4], "easy has exact search limits")
+	t.assert_eq([standard.node_budget, standard.max_depth, standard.beam_width], [256, 4, 8], "standard has exact search limits")
+	t.assert_eq([hard.node_budget, hard.max_depth, hard.beam_width], [1200, 8, 16], "hard has exact search limits")
+	t.assert_eq(fallback.difficulty, "standard", "invalid difficulty falls back safely to standard")
+
+
+static func _test_ai_player_exposes_safe_chooser_contract(t) -> void:
+	var ai_script = load("res://scripts/ai/ai_player.gd")
+	if ai_script == null:
+		return
+	var ai = ai_script.create("standard", 12)
+	t.assert_true(ai.has_method("choose_action"), "AIPlayer exposes choose_action")
+
+
+static func _test_ai_choices_are_deterministic_legal_and_isolated(t) -> void:
+	for difficulty in ["easy", "standard", "hard"]:
+		var controller := _rich_controller(720)
+		var before_hash := controller.state_hash()
+		var before_events := controller.event_history.duplicate(true)
+		var before_replay := controller.replay_log.to_dict()
+		var first := AIPlayer.create(difficulty, 99)
+		var second := AIPlayer.create(difficulty, 99)
+		var action = first.choose_action(controller, "player")
+		var repeated = second.choose_action(controller, "player")
+		t.assert_true(_contains_action(ActionGenerator.generate(controller, "player"), action), "%s returns a legal action" % difficulty)
+		t.assert_eq(_action_data(action), _action_data(repeated), "%s is deterministic for the same seed and state" % difficulty)
+		t.assert_true(first.visited_nodes > 0 and first.visited_nodes <= first.node_budget, "%s search respects its node budget" % difficulty)
+		t.assert_eq(controller.state_hash(), before_hash, "%s choice preserves source state and RNG" % difficulty)
+		t.assert_eq(controller.event_history, before_events, "%s choice preserves source events" % difficulty)
+		t.assert_eq(controller.replay_log.to_dict(), before_replay, "%s choice preserves source replay" % difficulty)
+
+
+static func _test_easy_seed_breaks_equal_action_ties(t) -> void:
+	var choices := {}
+	for seed in range(1, 17):
+		var action = AIPlayer.create("easy", seed).choose_action(_tied_deployment_controller(721), "player")
+		choices[JSON.stringify(_action_data(action))] = true
+	t.assert_true(choices.size() > 1, "different easy seeds vary equal-priority choices")
+
+
+static func _test_search_retains_negative_score_ties(t) -> void:
+	var ai := AIPlayer.create("standard", 100)
+	var best_nodes: Array[Dictionary] = []
+	var first := {"score": -2.0, "first_action": GameAction.create("deploy_unit", "player", "alpha")}
+	var second := {"score": -2.0, "first_action": GameAction.create("deploy_unit", "player", "beta")}
+	var best_score := ai._record_best(first, -3.0, best_nodes)
+	ai._record_best(second, best_score, best_nodes)
+	t.assert_eq(best_nodes.size(), 2, "search retains equal improvements even when their scores are negative")
+
+
+static func _test_standard_looks_ahead_for_a_tactical_sequence(t) -> void:
+	var controller := _sequence_controller(722)
+	var action = AIPlayer.create("standard", 101).choose_action(controller, "player")
+	t.assert_eq(action.type, "activate_ability", "standard starts the sequence that creates a lethal attack")
+	t.assert_eq(action.source_id, "tactician", "standard chooses the tactical setup source")
+
+
+static func _test_standard_avoids_suicidal_attack_when_deployment_is_better(t) -> void:
+	var action = AIPlayer.create("standard", 102).choose_action(_suicide_or_deploy_controller(723), "player")
+	t.assert_eq(action.type, "deploy_unit", "standard deploys instead of taking the suicidal attack")
+
+
+static func _test_hard_takes_an_immediate_lethal(t) -> void:
+	var action = AIPlayer.create("hard", 103).choose_action(_lethal_controller(724), "player")
+	t.assert_eq(action.type, "attack_hq", "hard chooses an immediate Headquarters lethal")
+
+
+static func _test_ai_end_turn_fallback_and_safe_null_cases(t) -> void:
+	var fallback_controller := _empty_action_controller(725)
+	var fallback = AIPlayer.create("standard", 104).choose_action(fallback_controller, "player")
+	t.assert_eq(fallback.type, "end_turn", "AI returns legal end turn when no command improves the board")
+	var ai := AIPlayer.create("hard", 105)
+	var malformed = ai.choose_action(null, "player")
+	t.assert_eq([malformed.type, malformed.actor_id], ["", ""], "malformed controller returns recognizable null action")
+	var wrong_actor = ai.choose_action(fallback_controller, "opponent")
+	t.assert_eq([wrong_actor.type, wrong_actor.actor_id], ["", ""], "wrong actor returns recognizable null action")
+	fallback_controller.state.phase = "complete"
+	var terminal = ai.choose_action(fallback_controller, "player")
+	t.assert_eq([terminal.type, terminal.actor_id], ["", ""], "terminal match returns recognizable null action")
+
+
+static func _test_ai_respects_hidden_information_boundary(t) -> void:
+	var visible := _rich_controller(726)
+	var substituted = visible.clone_for_simulation("player")
+	substituted.state.players.opponent.hand[0].definition_id = "hidden-substitution"
+	substituted.state.players.opponent.hand[0].title = "not visible to player"
+	var original_action = AIPlayer.create("hard", 106).choose_action(visible, "player")
+	var substituted_action = AIPlayer.create("hard", 106).choose_action(substituted, "player")
+	t.assert_eq(_action_data(original_action), _action_data(substituted_action), "hidden enemy identities do not affect AI choice")
 
 
 static func _test_rich_midgame_actions_are_complete_legal_and_stable(t) -> void:
@@ -270,6 +382,91 @@ static func _collision_controller(seed: int) -> MatchController:
 	return controller
 
 
+static func _tied_deployment_controller(seed: int) -> MatchController:
+	var definitions := {
+		"p-hq": _definition("p-hq", "Headquarters", 0, 20),
+		"o-hq": _definition("o-hq", "Headquarters", 0, 20),
+		"alpha": _definition("alpha", "Unit", 2, 2, 1),
+		"beta": _definition("beta", "Unit", 2, 2, 1),
+	}
+	var controller := _empty_action_controller_with_definitions(definitions, seed)
+	controller.state.players.player.credit = 3
+	_put_hand(controller, _card(definitions, "alpha", "player", "alpha"))
+	_put_hand(controller, _card(definitions, "beta", "player", "beta"))
+	return controller
+
+
+static func _sequence_controller(seed: int) -> MatchController:
+	var definitions := {
+		"p-hq": _definition("p-hq", "Headquarters", 0, 20),
+		"o-hq": _definition("o-hq", "Headquarters", 0, 20),
+		"tactician": _definition("tactician", "Unit", 1, 4, 0, 0, [_ability("rally", "manual", {"selector": "friendly_unit", "count": 1}, [{"type": "buff", "attack": 2, "defense": 0}])]),
+		"striker": _definition("striker", "Unit", 2, 4, 0, 0),
+	}
+	var controller := _empty_action_controller_with_definitions(definitions, seed)
+	controller.state.players.player.credit = 5
+	controller.state.players.opponent.headquarters.current_defense = 3
+	var tactician := _card(definitions, "tactician", "player", "tactician")
+	var striker := _card(definitions, "striker", "player", "striker")
+	striker.unit_type = "Artillery"
+	_place_support(controller, tactician, 0)
+	_place_support(controller, striker, 1)
+	_ready(controller, tactician)
+	_ready(controller, striker)
+	return controller
+
+
+static func _suicide_or_deploy_controller(seed: int) -> MatchController:
+	var definitions := {
+		"p-hq": _definition("p-hq", "Headquarters", 0, 20),
+		"o-hq": _definition("o-hq", "Headquarters", 0, 20),
+		"scout": _definition("scout", "Unit", 1, 1, 0, 0),
+		"brute": _definition("brute", "Unit", 9, 9, 0, 0),
+		"reinforcement": _definition("reinforcement", "Unit", 4, 4, 1, 0),
+	}
+	var controller := _empty_action_controller_with_definitions(definitions, seed)
+	controller.state.players.player.credit = 3
+	var scout := _card(definitions, "scout", "player", "scout")
+	var brute := _card(definitions, "brute", "opponent", "brute")
+	_place_frontline(controller, scout, 0)
+	brute.keywords.append("Guard")
+	_place_support(controller, brute, 1)
+	_ready(controller, scout)
+	_ready(controller, brute)
+	_put_hand(controller, _card(definitions, "reinforcement", "player", "reinforcement"))
+	return controller
+
+
+static func _lethal_controller(seed: int) -> MatchController:
+	var definitions := {
+		"p-hq": _definition("p-hq", "Headquarters", 0, 20),
+		"o-hq": _definition("o-hq", "Headquarters", 0, 20),
+		"finisher": _definition("finisher", "Unit", 4, 4, 0, 0),
+	}
+	var controller := _empty_action_controller_with_definitions(definitions, seed)
+	controller.state.players.opponent.headquarters.current_defense = 4
+	var finisher := _card(definitions, "finisher", "player", "finisher")
+	_place_frontline(controller, finisher, 0)
+	_ready(controller, finisher)
+	return controller
+
+
+static func _empty_action_controller(seed: int) -> MatchController:
+	return _empty_action_controller_with_definitions({
+		"p-hq": _definition("p-hq", "Headquarters", 0, 20),
+		"o-hq": _definition("o-hq", "Headquarters", 0, 20),
+	}, seed)
+
+
+static func _empty_action_controller_with_definitions(definitions: Dictionary, seed: int) -> MatchController:
+	var controller := MatchController.create(definitions, ["p-hq"], ["o-hq"], seed)
+	controller.state.phase = "action"
+	controller.state.active_player_id = "player"
+	controller.state.starting_player_id = "player"
+	controller.state.turn = 5
+	return controller
+
+
 static func _definition(id: String, category: String, attack: int, defense: int, deployment_cost: int = 0, operation_cost: int = 0, abilities: Array = []) -> Dictionary:
 	return {
 		"id": id,
@@ -354,3 +551,21 @@ static func _action_dicts(actions: Array) -> Array:
 			"expected_sequence": action.expected_sequence,
 		})
 	return values
+
+
+static func _contains_action(actions: Array, expected: GameAction) -> bool:
+	for action in actions:
+		if _action_data(action) == _action_data(expected):
+			return true
+	return false
+
+
+static func _action_data(action: GameAction) -> Dictionary:
+	return {
+		"type": action.type,
+		"actor_id": action.actor_id,
+		"source_id": action.source_id,
+		"target_ids": action.target_ids.duplicate(),
+		"payload": action.payload.duplicate(true),
+		"expected_sequence": action.expected_sequence,
+	}
