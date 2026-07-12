@@ -70,6 +70,11 @@ func show_screen(screen_name: String, payload: Dictionary = {}) -> void:
 		current_screen.action_requested.connect(submit_player_action)
 		_refresh_match_view()
 		call_deferred("start_match_turn_flow")
+	if screen_name == "result":
+		if current_screen.has_signal("rematch_requested"):
+			current_screen.rematch_requested.connect(_on_rematch_requested)
+		if current_screen.has_signal("deck_builder_requested"):
+			current_screen.deck_builder_requested.connect(_on_deck_builder_requested)
 
 
 func _on_play_requested(deck_id: String, selected_difficulty: String) -> void:
@@ -307,13 +312,45 @@ func _route_match_result_if_complete() -> bool:
 	_match_generation += 1
 	var payload := {
 		"winner_id": controller.state.winner_id,
-		"reason": "invalid" if controller.state.phase == "invalid" else "headquarters_destroyed",
+		"reason": _terminal_reason(),
 		"turns": controller.state.turn,
 		"seed": controller.state.seed,
 		"replay_log": controller.replay_log.to_dict() if controller.replay_log != null else {},
 	}
 	show_screen("result", payload)
 	return true
+
+
+func _terminal_reason() -> String:
+	if controller.state.phase == "invalid":
+		return "invalid"
+	if controller.state.winner_id.is_empty():
+		return "draw"
+	return "headquarters_destroyed"
+
+
+func _on_rematch_requested() -> void:
+	if selected_player_deck.is_empty():
+		return
+	start_mulligan(selected_player_deck.duplicate(true), difficulty, _next_match_seed())
+
+
+func _next_match_seed() -> int:
+	var previous_seed := controller.state.seed if controller != null else 0
+	var next_seed := int(_match_rng.randi())
+	while next_seed == 0 or next_seed == previous_seed:
+		next_seed = int(_match_rng.randi())
+	return next_seed
+
+
+func _on_deck_builder_requested() -> void:
+	controller = null
+	ai = null
+	show_screen("deck_builder", {
+		"catalog": catalog,
+		"deck_id": selected_deck_id,
+		"difficulty": difficulty,
+	})
 
 
 func _shipped_opponent_deck(player_deck_id: String) -> Dictionary:

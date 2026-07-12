@@ -13,6 +13,7 @@ const MulliganScene = preload("res://scenes/ui/mulligan_view.tscn")
 const ActionResult = preload("res://scripts/core/action_result.gd")
 const MatchViewScript = preload("res://scripts/ui/match_view.gd")
 const MatchViewScene = preload("res://scenes/ui/match_view.tscn")
+const ResultViewScene = preload("res://scenes/ui/result_view.tscn")
 const CardInstanceScript = preload("res://scripts/core/card_instance.gd")
 const CoreCards = preload("res://tests/fixtures/core_cards.gd")
 const AIPlayerScript = preload("res://scripts/ai/ai_player.gd")
@@ -73,6 +74,117 @@ static func run_task5(t) -> void:
 	await _test_main_rejection_recovers_fresh_actions(t)
 	await _test_main_drives_opponent_first_without_reentrancy(t)
 	_test_main_routes_terminal_payload(t)
+
+
+static func run_task6(t) -> void:
+	await _test_result_view_outcomes_and_layout(t)
+	await _test_result_view_signals(t)
+	await _test_main_rematch_preserves_complete_selection(t)
+	_test_main_result_returns_to_builder_with_preferences(t)
+	_test_main_routes_complete_terminal_payload(t)
+
+
+static func _test_result_view_outcomes_and_layout(t) -> void:
+	var cases := [
+		["player", "Victory"],
+		["opponent", "Defeat"],
+		["", "Draw"],
+	]
+	for viewport_size in [Vector2(1280, 720), Vector2(1024, 720)]:
+		for outcome in cases:
+			var host := Control.new()
+			host.size = viewport_size
+			Engine.get_main_loop().root.add_child(host)
+			var view = ResultViewScene.instantiate()
+			host.add_child(view)
+			view.initialize(null, {
+				"winner_id": outcome[0], "reason": "headquarters_destroyed",
+				"turns": 12, "seed": 77, "replay_log": {"actions": [1, 2]},
+			})
+			await Engine.get_main_loop().process_frame
+			t.assert_eq(view.get_node("%OutcomeLabel").text, outcome[1], "result labels %s outcome" % outcome[1])
+			t.assert_eq(view.get_node("%ReasonLabel").text, "Headquarters destroyed", "result renders exact terminal reason")
+			t.assert_eq(view.get_node("%TurnsLabel").text, "12 turns", "result renders turn statistics")
+			t.assert_eq(view.size, viewport_size, "result root fits viewport")
+			var viewport_rect := Rect2(Vector2.ZERO, viewport_size)
+			for path in ["%OutcomeLabel", "%WinnerLabel", "%ReasonLabel", "%TurnsLabel", "%RematchButton", "%DeckBuilderButton"]:
+				var control: Control = view.get_node(path)
+				t.assert_true(viewport_rect.encloses(control.get_global_rect()), "%s stays inside %s" % [path, viewport_size])
+			t.assert_true(not view.get_node("%RematchButton").get_global_rect().intersects(view.get_node("%DeckBuilderButton").get_global_rect()), "result commands do not overlap")
+			host.queue_free()
+			await Engine.get_main_loop().process_frame
+
+
+static func _test_result_view_signals(t) -> void:
+	var view = ResultViewScene.instantiate()
+	Engine.get_main_loop().root.add_child(view)
+	await Engine.get_main_loop().process_frame
+	var events: Array[String] = []
+	view.rematch_requested.connect(func() -> void: events.append("rematch"))
+	view.deck_builder_requested.connect(func() -> void: events.append("builder"))
+	view.get_node("%RematchButton").pressed.emit()
+	view.get_node("%DeckBuilderButton").pressed.emit()
+	t.assert_eq(events, ["rematch", "builder"], "result exposes both navigation commands")
+	view.queue_free()
+	await Engine.get_main_loop().process_frame
+
+
+static func _test_main_rematch_preserves_complete_selection(t) -> void:
+	var main := Main.new()
+	var host := Control.new()
+	main.screen_host = host
+	Engine.get_main_loop().root.add_child(host)
+	main.catalog = ContentCatalog.load_from_paths("res://data/cards.json", "res://data/abilities.json", "res://data/decks.json", "res://data/rules.json")
+	main.screen_factory = func(path: String) -> Control: return ResultViewScene.instantiate() if path.ends_with("result_view.tscn") else TestScreen.new()
+	var deck: Dictionary = main.catalog.decks_by_id["us-starter"].duplicate(true)
+	deck["id"] = "user-complete-deck"
+	main.selected_deck_id = deck.id
+	main.selected_player_deck = deck.duplicate(true)
+	main.difficulty = "hard"
+	main._match_rng.seed = 600
+	main.show_screen("result", {"winner_id": "player", "reason": "fatigue", "turns": 8, "seed": 9, "replay_log": {}})
+	main.current_screen.rematch_requested.emit()
+	await Engine.get_main_loop().process_frame
+	var payload: Dictionary = (main.current_screen as TestScreen).payload
+	var rematch_seed := main.controller.state.seed
+	t.assert_eq(payload.player_deck, deck, "rematch keeps the complete selected player deck")
+	t.assert_eq(payload.difficulty, "hard", "rematch keeps difficulty")
+	t.assert_true(rematch_seed != 9 and rematch_seed != 0, "rematch advances to a fresh deterministic app RNG seed")
+	main.free()
+	host.free()
+
+
+static func _test_main_result_returns_to_builder_with_preferences(t) -> void:
+	var main := Main.new()
+	var host := Control.new()
+	main.screen_host = host
+	main.screen_factory = func(path: String) -> Control: return ResultViewScene.instantiate() if path.ends_with("result_view.tscn") else TestScreen.new()
+	main.selected_deck_id = "user-preferred"
+	main.difficulty = "hard"
+	main.show_screen("result", {"winner_id": "opponent", "reason": "concede", "turns": 3, "seed": 4, "replay_log": {}})
+	main.current_screen.deck_builder_requested.emit()
+	var payload: Dictionary = (main.current_screen as TestScreen).payload
+	t.assert_eq(payload, {"catalog": null, "deck_id": "user-preferred", "difficulty": "hard"}, "builder return preserves deck and difficulty preferences")
+	main.free()
+	host.free()
+
+
+static func _test_main_routes_complete_terminal_payload(t) -> void:
+	var controller = _started_controller_with_active("player")
+	controller.state.phase = "complete"
+	controller.state.winner_id = ""
+	var main := Main.new()
+	var host := Control.new()
+	main.screen_host = host
+	main.controller = controller
+	main.screen_factory = func(_path: String) -> Control: return TestScreen.new()
+	t.assert_true(main._route_match_result_if_complete(), "draw terminal state routes")
+	var payload: Dictionary = (main.current_screen as TestScreen).payload
+	for field in ["winner_id", "reason", "turns", "seed", "replay_log"]:
+		t.assert_true(payload.has(field), "terminal payload includes %s" % field)
+	t.assert_eq(payload.reason, "draw", "winnerless completion has exact draw reason")
+	main.free()
+	host.free()
 
 
 static func _test_match_selection_builds_only_legal_actions(t) -> void:
@@ -338,6 +450,7 @@ static func _test_missing_scene_uses_fallback(t) -> void:
 	var main := Main.new()
 	var host := Control.new()
 	main.screen_host = host
+	main.screen_factory = func(_path: String) -> Control: return null
 	main.show_screen("result", {})
 	t.assert_true(main.current_screen is CenterContainer, "missing screen uses stable fallback")
 	t.assert_eq((main.current_screen.get_child(0) as Label).text, "Result", "fallback names requested screen")
