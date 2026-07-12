@@ -27,6 +27,7 @@ static func run(t) -> void:
 	_test_card_view_modes_and_geometry(t)
 	_test_card_view_hidden_mode_redacts_data(t)
 	_test_card_view_press_and_drag_share_instance_id(t)
+	await _test_card_view_container_layout(t)
 
 
 static func _test_theme_and_screen_contract(t) -> void:
@@ -154,6 +155,59 @@ static func _test_card_view_press_and_drag_share_instance_id(t) -> void:
 	t.assert_eq(dragged_ids, ["p-01"], "drag emits bound instance ID")
 	t.assert_eq(drag_data.get("instance_id"), "p-01", "drag data maps the same instance ID")
 	view.free()
+
+
+static func _test_card_view_container_layout(t) -> void:
+	var expected_sizes := {
+		"catalog": Vector2(180, 252),
+		"hand": Vector2(116, 162),
+		"battlefield": Vector2(84, 118),
+		"hidden": Vector2(116, 162),
+	}
+	for mode in expected_sizes:
+		var container := CenterContainer.new()
+		container.size = Vector2(420, 360)
+		Engine.get_main_loop().root.add_child(container)
+		var view = CardViewScene.instantiate()
+		container.add_child(view)
+		view.bind(_card_data(), mode)
+		await Engine.get_main_loop().process_frame
+		await Engine.get_main_loop().process_frame
+		t.assert_eq(view.size, expected_sizes[mode], "%s stays exact inside a larger container" % mode)
+		_assert_visible_layout(t, view, mode)
+		container.free()
+
+
+static func _assert_visible_layout(t, view: Control, mode: String) -> void:
+	var paths := [
+		"CardBack/Mark",
+		"Frame/Artwork",
+		"Frame/Title",
+		"Frame/Type",
+		"Frame/Costs/Deployment",
+		"Frame/Costs/Operation",
+		"Frame/Description",
+		"Frame/Keywords",
+		"Frame/Stats/Attack",
+		"Frame/Stats/Defense",
+	]
+	var visible_controls: Array[Control] = []
+	var card_rect := view.get_global_rect()
+	for path in paths:
+		var control := view.get_node(path) as Control
+		if not control.is_visible_in_tree():
+			continue
+		visible_controls.append(control)
+		var rect := control.get_global_rect()
+		t.assert_true(card_rect.encloses(rect), "%s %s stays within card bounds" % [mode, path])
+	for index in range(visible_controls.size()):
+		for other_index in range(index + 1, visible_controls.size()):
+			var first := visible_controls[index]
+			var second := visible_controls[other_index]
+			t.assert_true(
+				not first.get_global_rect().intersects(second.get_global_rect()),
+				"%s %s does not overlap %s" % [mode, first.get_path(), second.get_path()]
+			)
 
 
 static func _card_data() -> Dictionary:

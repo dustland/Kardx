@@ -36,6 +36,9 @@ corner_radius_bottom_left = 4
 
 [node name="CardView" type="Button"]
 custom_minimum_size = Vector2(180, 252)
+size_flags_horizontal = 4
+size_flags_vertical = 4
+clip_contents = true
 mouse_default_cursor_shape = 2
 theme_override_styles/normal = SubResource("StyleCard")
 theme_override_styles/hover = SubResource("StyleCard")

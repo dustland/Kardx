@@ -10,7 +10,7 @@ func _init() -> void:
 
 func _run() -> void:
 	var test_case := TestCase.new()
-	UiContracts.run(test_case)
+	await UiContracts.run(test_case)
 	var failures := test_case.finish()
 	if failures == 0:
 		print("PASS focused UI behavior contracts")
