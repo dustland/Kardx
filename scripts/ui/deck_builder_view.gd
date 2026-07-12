@@ -85,10 +85,9 @@ class DeckBuilderViewModel:
 			return
 		var source: Dictionary = decks[selected_deck_id]
 		var user_id := "user-%s" % selected_deck_id
-		var suffix := 2
-		while decks.has(user_id):
-			user_id = "user-%s-%d" % [selected_deck_id, suffix]
-			suffix += 1
+		if decks.has(user_id):
+			selected_deck_id = user_id
+			return
 		var copy := source.duplicate(true)
 		copy.id = user_id
 		copy.name = "%s Copy" % _deck_name(source)
@@ -117,16 +116,12 @@ func initialize(main, payload: Dictionary) -> void:
 	difficulty = str(payload.get("difficulty", "standard"))
 	_populate_controls()
 	_refresh()
+	if not store.last_error.is_empty():
+		%Validation.text = store.last_error
 
 
 func _populate_controls() -> void:
-	var selector := %DeckSelector as OptionButton
-	selector.clear()
-	for deck_id in model.decks:
-		selector.add_item(str(deck_id).replace("-", " ").capitalize())
-		selector.set_item_metadata(selector.item_count - 1, deck_id)
-		if deck_id == model.selected_deck_id:
-			selector.select(selector.item_count - 1)
+	_populate_deck_selector()
 	for filter_data in [[%NationFilter, "nation"], [%CategoryFilter, "category"], [%UnitTypeFilter, "unit_type"], [%RarityFilter, "rarity"]]:
 		var control := filter_data[0] as OptionButton
 		control.clear()
@@ -148,6 +143,16 @@ func _populate_controls() -> void:
 		(button as Button).button_pressed = (button as Button).name.to_lower() == difficulty
 
 
+func _populate_deck_selector() -> void:
+	var selector := %DeckSelector as OptionButton
+	selector.clear()
+	for deck_id in model.decks:
+		selector.add_item(str(deck_id).replace("-", " ").capitalize())
+		selector.set_item_metadata(selector.item_count - 1, deck_id)
+		if deck_id == model.selected_deck_id:
+			selector.select(selector.item_count - 1)
+
+
 func _refresh() -> void:
 	_refresh_catalog()
 	_refresh_deck()
@@ -166,7 +171,7 @@ func _refresh_catalog() -> void:
 
 
 func _refresh_deck() -> void:
-	for child in %DeckList.get_children():
+	for child in %DeckRows.get_children():
 		child.queue_free()
 	var counts := {}
 	var nations := {}
@@ -179,7 +184,7 @@ func _refresh_deck() -> void:
 		row.text = "%dx  %s" % [counts[card_id], str((catalog.cards_by_id[card_id] as Dictionary).get("title", card_id))]
 		row.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		row.pressed.connect(_on_remove_card.bind(card_id))
-		%DeckList.add_child(row)
+		%DeckRows.add_child(row)
 	%NationDistribution.text = "  ".join(nations.keys().map(func(key): return "%s %d" % [key, nations[key]]))
 	%CardCount.text = "%d / 40" % model.card_count()
 	var validation := model.validation()
@@ -188,12 +193,18 @@ func _refresh_deck() -> void:
 
 
 func _on_add_card(card_id: String) -> void:
+	var previous_deck_id := model.selected_deck_id
 	model.add_card(card_id)
+	if model.selected_deck_id != previous_deck_id:
+		_populate_deck_selector()
 	_refresh_deck()
 
 
 func _on_remove_card(card_id: String) -> void:
+	var previous_deck_id := model.selected_deck_id
 	model.remove_card(card_id)
+	if model.selected_deck_id != previous_deck_id:
+		_populate_deck_selector()
 	_refresh_deck()
 
 
@@ -225,7 +236,10 @@ func _on_difficulty_pressed(value: String) -> void:
 
 
 func _on_save_pressed() -> void:
-	%Validation.text = "Saved" if store.save_user_decks(model.user_decks(), catalog.decks) else "Save failed"
+	if store.save_user_decks(model.user_decks(), catalog.decks):
+		%Validation.text = "Saved"
+	else:
+		%Validation.text = store.last_error
 
 
 func _on_play_pressed() -> void:

@@ -12,6 +12,7 @@ const DeckStore = preload("res://scripts/ui/deck_store.gd")
 
 class TestScreen:
 	extends Control
+	signal play_requested(deck_id: String, difficulty: String)
 
 	var router: Main
 	var payload: Dictionary
@@ -24,6 +25,7 @@ class TestScreen:
 static func run(t) -> void:
 	_test_theme_and_screen_contract(t)
 	_test_router_replaces_screen_and_initializes_payload(t)
+	_test_main_routes_play_to_mulligan_fallback(t)
 	_test_missing_scene_uses_fallback(t)
 	_test_content_errors_are_sorted_and_retryable(t)
 	_test_main_scene_exposes_screen_host(t)
@@ -33,9 +35,13 @@ static func run(t) -> void:
 	_test_card_view_press_and_drag_share_instance_id(t)
 	await _test_card_view_container_layout(t)
 	_test_deck_builder_model(t)
+	_test_deck_builder_reuses_existing_user_copy(t)
 	_test_deck_builder_filters(t)
 	_test_deck_store_round_trip_and_shipped_immutability(t)
+	_test_deck_store_surfaces_corrupt_load(t)
 	await _test_deck_builder_scene_contract(t)
+	await _test_deck_builder_copy_selection_and_save_failure(t)
+	_test_deck_builder_displays_corrupt_load_status(t)
 
 
 static func _test_theme_and_screen_contract(t) -> void:
@@ -69,6 +75,21 @@ static func _test_missing_scene_uses_fallback(t) -> void:
 	main.show_screen("result", {})
 	t.assert_true(main.current_screen is CenterContainer, "missing screen uses stable fallback")
 	t.assert_eq((main.current_screen.get_child(0) as Label).text, "Result", "fallback names requested screen")
+	main.free()
+
+
+static func _test_main_routes_play_to_mulligan_fallback(t) -> void:
+	var main := Main.new()
+	var host := Control.new()
+	main.screen_host = host
+	main.screen_factory = func(path: String) -> Control:
+		return TestScreen.new() if path.ends_with("deck_builder_view.tscn") else null
+	main.show_screen("deck_builder", {})
+	(main.current_screen as TestScreen).play_requested.emit("user-us-starter", "hard")
+	t.assert_eq(main.selected_deck_id, "user-us-starter", "Play stores selected deck")
+	t.assert_eq(main.difficulty, "hard", "Play stores difficulty")
+	t.assert_true(main.current_screen is CenterContainer, "missing mulligan scene uses fallback")
+	t.assert_eq((main.current_screen.get_child(0) as Label).text, "Mulligan", "Play visibly advances to mulligan fallback")
 	main.free()
 
 
@@ -261,6 +282,17 @@ static func _test_deck_builder_filters(t) -> void:
 	t.assert_eq((cards[0] as Dictionary).id, "su-yak-patrol", "filters retain matching card")
 
 
+static func _test_deck_builder_reuses_existing_user_copy(t) -> void:
+	var model = DeckBuilderViewModel.DeckBuilderViewModel.new(_catalog())
+	model.select_deck("us-starter")
+	model.add_card("su-yak-patrol")
+	var copy_id: String = model.selected_deck_id
+	model.select_deck("us-starter")
+	model.add_card("su-yak-patrol")
+	t.assert_eq(model.selected_deck_id, copy_id, "editing shipped deck reselects existing user copy")
+	t.assert_eq(model.user_decks().size(), 1, "repeated shipped edits do not create hidden duplicate copies")
+
+
 static func _test_deck_store_round_trip_and_shipped_immutability(t) -> void:
 	var path := "user://test-decks-task3.json"
 	var temp_path := path + ".tmp"
@@ -278,6 +310,19 @@ static func _test_deck_store_round_trip_and_shipped_immutability(t) -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
+static func _test_deck_store_surfaces_corrupt_load(t) -> void:
+	var path := "user://test-decks-task3-corrupt.json"
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	file.store_string("{not valid json")
+	file.close()
+	var store = DeckStore.new(path)
+	var loaded: Dictionary = store.load_all([{"id": "us-starter", "cards": ["us-hq"]}])
+	t.assert_true(loaded.has("us-starter"), "corrupt user data does not hide shipped decks")
+	t.assert_true(not store.last_error.is_empty(), "corrupt user data surfaces a load error")
+	t.assert_true("corrupt" in store.last_error.to_lower(), "load error is actionable")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
 static func _test_deck_builder_scene_contract(t) -> void:
 	var view = DeckBuilderScene.instantiate()
 	Engine.get_main_loop().root.add_child(view)
@@ -288,16 +333,54 @@ static func _test_deck_builder_scene_contract(t) -> void:
 	await Engine.get_main_loop().process_frame
 	t.assert_eq((view.get_node("%CatalogGrid") as GridContainer).columns, 3, "catalog uses three columns")
 	t.assert_true(not (view.get_node("%PlayButton") as Button).disabled, "valid shipped deck enables play")
-	_assert_builder_columns_do_not_overlap(t, view, Vector2(1280, 720))
-	_assert_builder_columns_do_not_overlap(t, view, Vector2(1024, 720))
+	await _assert_builder_layout(t, view, Vector2(1280, 720))
+	await _assert_builder_layout(t, view, Vector2(1024, 720))
 	view.free()
 
 
-static func _assert_builder_columns_do_not_overlap(t, view: Control, viewport_size: Vector2) -> void:
+static func _assert_builder_layout(t, view: Control, viewport_size: Vector2) -> void:
+	view.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	view.size = viewport_size
+	await Engine.get_main_loop().process_frame
+	await Engine.get_main_loop().process_frame
 	var columns := [view.get_node("%Filters") as Control, view.get_node("%Catalog") as Control, view.get_node("%DeckPanel") as Control]
 	for index in range(columns.size() - 1):
-		t.assert_true(columns[index].get_rect().end.x <= columns[index + 1].get_rect().position.x, "%s-wide builder columns do not overlap" % int(viewport_size.x))
+		t.assert_true(columns[index].get_global_rect().end.x <= columns[index + 1].get_global_rect().position.x, "%s-wide builder columns do not overlap" % int(viewport_size.x))
+	var viewport_rect := view.get_global_rect()
+	for path in ["DeckSelector", "Difficulty", "Search", "NationFilter", "CategoryFilter", "UnitTypeFilter", "RarityFilter", "CostFilter", "Catalog", "DeckList", "NationDistribution", "CardCount", "Validation", "SaveButton", "PlayButton"]:
+		var control := view.get_node("%%%s" % path) as Control
+		t.assert_true(viewport_rect.encloses(control.get_global_rect()), "%s-wide viewport contains %s" % [int(viewport_size.x), path])
+
+
+static func _test_deck_builder_copy_selection_and_save_failure(t) -> void:
+	var path := "user://test-decks-task3-blocker"
+	var blocker := FileAccess.open(path, FileAccess.WRITE)
+	blocker.store_string("file blocks directory creation")
+	blocker.close()
+	var view = DeckBuilderScene.instantiate()
+	Engine.get_main_loop().root.add_child(view)
+	view.initialize(null, {"catalog": _catalog(), "deck_id": "us-starter", "difficulty": "standard", "store_path": path + "/decks.json"})
+	view._on_add_card("su-yak-patrol")
+	var selector := view.get_node("%DeckSelector") as OptionButton
+	t.assert_eq(str(selector.get_item_metadata(selector.selected)), view.model.selected_deck_id, "copy-on-edit visibly selects user deck")
+	t.assert_eq(selector.item_count, view.model.decks.size(), "selector rebuild includes user copy exactly once")
+	view._on_save_pressed()
+	t.assert_true("failed" in (view.get_node("%Validation") as Label).text.to_lower(), "failed persistence never claims Saved")
+	t.assert_true(not view.store.last_error.is_empty(), "save failure exposes actionable detail")
+	view.free()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+static func _test_deck_builder_displays_corrupt_load_status(t) -> void:
+	var path := "user://test-decks-task3-ui-corrupt.json"
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	file.store_string("broken")
+	file.close()
+	var view = DeckBuilderScene.instantiate()
+	view.initialize(null, {"catalog": _catalog(), "deck_id": "us-starter", "difficulty": "standard", "store_path": path})
+	t.assert_true("corrupt" in (view.get_node("%Validation") as Label).text.to_lower(), "builder displays corrupt persistence status")
+	view.free()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
 static func _catalog():

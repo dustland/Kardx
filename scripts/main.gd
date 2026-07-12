@@ -47,9 +47,19 @@ func show_screen(screen_name: String, payload: Dictionary = {}) -> void:
 	else:
 		var packed_scene: PackedScene = load(scene_path)
 		current_screen = packed_scene.instantiate()
+	if current_screen == null:
+		current_screen = _pending_screen(screen_name)
 	screen_host.add_child(current_screen)
 	if current_screen.has_method("initialize"):
 		current_screen.initialize(self, payload)
+	if screen_name == "deck_builder" and current_screen.has_signal("play_requested"):
+		current_screen.play_requested.connect(_on_play_requested)
+
+
+func _on_play_requested(deck_id: String, selected_difficulty: String) -> void:
+	selected_deck_id = deck_id
+	difficulty = selected_difficulty
+	show_screen("mulligan", {"catalog": catalog, "deck_id": selected_deck_id, "difficulty": difficulty})
 
 
 func _validate_and_start() -> void:
