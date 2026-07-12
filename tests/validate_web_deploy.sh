@@ -78,6 +78,10 @@ required_commands.each do |command|
   fail_validation("build is missing command: #{command}") unless all_runs.include?(command)
 end
 
+mkdir_web = all_runs.index("mkdir -p builds/web")
+export_web = all_runs.index("godot --headless --path . --export-release Web builds/web/index.html")
+fail_validation("Web export directory must be created before export") unless mkdir_web && export_web && mkdir_web < export_web
+
 fail_validation("archives must be checked with sha256sum before unzip") unless all_runs.scan("sha256sum --check --strict").length >= 2
 %w[GODOT_EDITOR_SHA256 GODOT_TEMPLATES_SHA256].each do |name|
   fail_validation("SHA256 verification must use $#{name}") unless all_runs.include?("$#{name}")
