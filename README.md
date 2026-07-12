@@ -35,7 +35,10 @@ Export output is written under ignored `builds/`. The named `PCK` preset package
 
 ```sh
 godot --headless --path . --export-pack PCK builds/pck/OpenCards.pck
+godot --headless --main-pack builds/pck/OpenCards.pck --script "$PWD/tests/verify_pck_manifest.gd"
 ```
+
+The manifest check verifies required runtime files and all 12 generated card-art resources are packed while tests, documentation, legacy card art, unused backgrounds, and local build metadata are absent.
 
 The `Web` preset targets Godot 4.7's Compatibility renderer without thread support, so it does not require cross-origin isolation. With matching Godot 4.7 export templates installed, create release builds with:
 
