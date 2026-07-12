@@ -17,6 +17,8 @@ func _initialize() -> void:
 	var player_classes := {}
 	var steps := 0
 	while controller.state.phase == "action" and steps < 220:
+		if not _validate_public_ownership(controller.state.snapshot_for("player")):
+			return _fail("perspective snapshot ownership contract failed")
 		var actor: String = controller.state.active_player_id
 		var action = _choose_player_action(controller, player_classes) if actor == "player" else ai.choose_action(controller, "opponent")
 		if action == null or action.type.is_empty():
@@ -33,6 +35,19 @@ func _initialize() -> void:
 		return _fail("fixture did not exercise attack")
 	print("Task5 scripted player-vs-AI passed: %s" % [player_classes.keys()])
 	quit(0)
+
+func _validate_public_ownership(snapshot: Dictionary) -> bool:
+	for card in snapshot.get("frontline", []):
+		if card is Dictionary and str(card.get("owner_id", "")) not in ["player", "opponent"]: return false
+	for player_id in ["player", "opponent"]:
+		var player: Dictionary = snapshot.get("players", {}).get(player_id, {})
+		var hq: Dictionary = player.get("headquarters", {})
+		if str(hq.get("owner_id", "")) != player_id: return false
+		for card in player.get("support_line", []):
+			if card is Dictionary and str(card.get("owner_id", "")) != player_id: return false
+	for hidden_card in snapshot.get("players", {}).get("opponent", {}).get("hand", []):
+		if hidden_card is Dictionary and hidden_card.has("owner_id"): return false
+	return true
 
 func _choose_player_action(controller, seen: Dictionary):
 	var actions: Array = controller.legal_actions("player")

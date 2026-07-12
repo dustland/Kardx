@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/match_view.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/ui/zone_view.gd" id="2"]
 [ext_resource type="Script" path="res://scripts/ui/timeline_view.gd" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/ui/card_view.tscn" id="4"]
 
 [node name="MatchView" type="Control"]
 layout_mode = 3
@@ -18,18 +19,20 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 12.0
-offset_top = 8.0
-offset_right = -12.0
-offset_bottom = -8.0
+offset_left = 8.0
+offset_top = 6.0
+offset_right = -8.0
+offset_bottom = -6.0
 
 [node name="Columns" type="HBoxContainer" parent="Margin"]
 layout_mode = 2
+theme_override_constants/separation = 8
 
 [node name="Board" type="VBoxContainer" parent="Margin/Columns"]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_constants/separation = 4
+theme_override_constants/separation = 2
 
 [node name="Top" type="HBoxContainer" parent="Margin/Columns/Board"]
 layout_mode = 2
@@ -41,27 +44,39 @@ size_flags_horizontal = 3
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="OpponentSupport" type="HBoxContainer" parent="Margin/Columns/Board"]
+[node name="OpponentArea" type="HBoxContainer" parent="Margin/Columns/Board"]
+custom_minimum_size = Vector2(0, 122)
+layout_mode = 2
+alignment = 1
+[node name="OpponentHQ" parent="Margin/Columns/Board/OpponentArea" instance=ExtResource("4")]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_vertical = 3
+[node name="OpponentSupport" type="HBoxContainer" parent="Margin/Columns/Board/OpponentArea"]
+unique_name_in_owner = true
+layout_mode = 2
 alignment = 1
 script = ExtResource("2")
 zone_name = "opponent_support"
 
 [node name="Frontline" type="HBoxContainer" parent="Margin/Columns/Board"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 122)
 layout_mode = 2
-size_flags_vertical = 3
 alignment = 1
 script = ExtResource("2")
 zone_name = "frontline"
 slot_count = 5
 
-[node name="PlayerSupport" type="HBoxContainer" parent="Margin/Columns/Board"]
+[node name="PlayerArea" type="HBoxContainer" parent="Margin/Columns/Board"]
+custom_minimum_size = Vector2(0, 122)
+layout_mode = 2
+alignment = 1
+[node name="PlayerHQ" parent="Margin/Columns/Board/PlayerArea" instance=ExtResource("4")]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_vertical = 3
+[node name="PlayerSupport" type="HBoxContainer" parent="Margin/Columns/Board/PlayerArea"]
+unique_name_in_owner = true
+layout_mode = 2
 alignment = 1
 script = ExtResource("2")
 
@@ -74,15 +89,29 @@ size_flags_horizontal = 3
 [node name="CreditLabel" type="Label" parent="Margin/Columns/Board/PlayerBar"]
 unique_name_in_owner = true
 layout_mode = 2
+[node name="CancelButton" type="Button" parent="Margin/Columns/Board/PlayerBar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Cancel"
+[node name="ConfirmButton" type="Button" parent="Margin/Columns/Board/PlayerBar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Confirm"
 [node name="EndTurnButton" type="Button" parent="Margin/Columns/Board/PlayerBar"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "End Turn"
 
-[node name="PlayerHand" type="HBoxContainer" parent="Margin/Columns/Board"]
+[node name="HandScroll" type="ScrollContainer" parent="Margin/Columns/Board"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 166)
+custom_minimum_size = Vector2(0, 170)
 layout_mode = 2
+horizontal_scroll_mode = 2
+vertical_scroll_mode = 0
+[node name="PlayerHand" type="HBoxContainer" parent="Margin/Columns/Board/HandScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
 alignment = 1
 
 [node name="StatusLabel" type="Label" parent="Margin/Columns/Board"]
@@ -91,7 +120,8 @@ custom_minimum_size = Vector2(0, 22)
 layout_mode = 2
 
 [node name="TimelinePanel" type="PanelContainer" parent="Margin/Columns"]
-custom_minimum_size = Vector2(190, 0)
+unique_name_in_owner = true
+custom_minimum_size = Vector2(160, 0)
 layout_mode = 2
 [node name="Scroll" type="ScrollContainer" parent="Margin/Columns/TimelinePanel"]
 layout_mode = 2
@@ -101,14 +131,20 @@ layout_mode = 2
 size_flags_horizontal = 3
 script = ExtResource("3")
 
-[connection signal="card_pressed" from="Margin/Columns/Board/OpponentSupport" to="." method="_on_board_card_pressed"]
+[connection signal="card_pressed" from="Margin/Columns/Board/OpponentArea/OpponentHQ" to="." method="_on_board_card_pressed"]
+[connection signal="card_dropped" from="Margin/Columns/Board/OpponentArea/OpponentHQ" to="." method="_on_target_dropped"]
+[connection signal="card_pressed" from="Margin/Columns/Board/OpponentArea/OpponentSupport" to="." method="_on_board_card_pressed"]
 [connection signal="card_pressed" from="Margin/Columns/Board/Frontline" to="." method="_on_board_card_pressed"]
-[connection signal="card_pressed" from="Margin/Columns/Board/PlayerSupport" to="." method="_on_board_card_pressed"]
+[connection signal="card_pressed" from="Margin/Columns/Board/PlayerArea/PlayerHQ" to="." method="_on_board_card_pressed"]
+[connection signal="card_dropped" from="Margin/Columns/Board/PlayerArea/PlayerHQ" to="." method="_on_target_dropped"]
+[connection signal="card_pressed" from="Margin/Columns/Board/PlayerArea/PlayerSupport" to="." method="_on_board_card_pressed"]
 [connection signal="slot_pressed" from="Margin/Columns/Board/Frontline" to="." method="_on_slot_pressed"]
-[connection signal="slot_pressed" from="Margin/Columns/Board/PlayerSupport" to="." method="_on_slot_pressed"]
+[connection signal="slot_pressed" from="Margin/Columns/Board/PlayerArea/PlayerSupport" to="." method="_on_slot_pressed"]
 [connection signal="card_dropped" from="Margin/Columns/Board/Frontline" to="." method="_on_card_dropped"]
-[connection signal="card_dropped" from="Margin/Columns/Board/PlayerSupport" to="." method="_on_card_dropped"]
-[connection signal="target_dropped" from="Margin/Columns/Board/OpponentSupport" to="." method="_on_target_dropped"]
+[connection signal="card_dropped" from="Margin/Columns/Board/PlayerArea/PlayerSupport" to="." method="_on_card_dropped"]
+[connection signal="target_dropped" from="Margin/Columns/Board/OpponentArea/OpponentSupport" to="." method="_on_target_dropped"]
 [connection signal="target_dropped" from="Margin/Columns/Board/Frontline" to="." method="_on_target_dropped"]
-[connection signal="target_dropped" from="Margin/Columns/Board/PlayerSupport" to="." method="_on_target_dropped"]
+[connection signal="target_dropped" from="Margin/Columns/Board/PlayerArea/PlayerSupport" to="." method="_on_target_dropped"]
+[connection signal="pressed" from="Margin/Columns/Board/PlayerBar/CancelButton" to="." method="_on_cancel_pressed"]
+[connection signal="pressed" from="Margin/Columns/Board/PlayerBar/ConfirmButton" to="." method="_on_confirm_pressed"]
 [connection signal="pressed" from="Margin/Columns/Board/PlayerBar/EndTurnButton" to="." method="_on_end_turn_pressed"]

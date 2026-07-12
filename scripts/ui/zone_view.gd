@@ -12,6 +12,7 @@ const CardViewScene = preload("res://scenes/ui/card_view.tscn")
 @export var slot_count := 4
 var highlighted_slots: Array = []
 var highlighted_targets: Array = []
+var input_locked := false
 
 func render(cards: Array, hidden := false) -> void:
 	for child in get_children():
@@ -21,6 +22,8 @@ func render(cards: Array, hidden := false) -> void:
 		slot.custom_minimum_size = Vector2(90, 124)
 		slot.zone = zone_name
 		slot.slot_index = index
+		slot.input_locked = input_locked
+		slot.disabled = input_locked
 		slot.pressed.connect(func() -> void: slot_pressed.emit(zone_name, index))
 		slot.card_dropped.connect(func(instance_id: String) -> void: card_dropped.emit(instance_id, zone_name, index))
 		add_child(slot)
@@ -29,9 +32,19 @@ func render(cards: Array, hidden := false) -> void:
 			var card = CardViewScene.instantiate()
 			slot.add_child(card)
 			card.bind(card_data, "hidden" if hidden else "battlefield")
+			card.disabled = input_locked
+			card.set_meta("owner_id", str(card_data.get("owner_id", "")))
 			card.card_pressed.connect(func(instance_id: String) -> void: card_pressed.emit(instance_id))
 			card.card_dropped.connect(func(source_id: String, target_id: Variant) -> void: target_dropped.emit(source_id, str(target_id)))
 	_apply_highlights()
+
+func set_input_locked(locked: bool) -> void:
+	input_locked = locked
+	for slot in get_children():
+		slot.input_locked = locked
+		slot.disabled = locked
+		if slot.get_child_count() > 0:
+			slot.get_child(0).disabled = locked
 
 func set_highlights(slots: Array, targets: Array) -> void:
 	highlighted_slots = slots.duplicate()
@@ -44,15 +57,17 @@ func _apply_highlights() -> void:
 		slot.modulate = Color("d8bd58") if index in highlighted_slots else Color.WHITE
 		if slot.get_child_count() > 0:
 			var card = slot.get_child(0)
-			card.modulate = Color("d8bd58") if str(card.card_data.get("instance_id", "")) in highlighted_targets else Color.WHITE
+			var owner_color := Color("b9d8e8") if str(card.get_meta("owner_id", "")) == "player" else Color("e8b9b9")
+			card.modulate = Color("f2d66d") if str(card.card_data.get("instance_id", "")) in highlighted_targets else owner_color
 
 class _DropSlot:
 	extends Button
 	signal card_dropped(instance_id: String)
 	var zone := ""
 	var slot_index := -1
+	var input_locked := false
 	func _can_drop_data(_position: Vector2, data: Variant) -> bool:
-		return data is Dictionary and not str(data.get("instance_id", "")).is_empty()
+		return not input_locked and data is Dictionary and not str(data.get("instance_id", "")).is_empty()
 	func _drop_data(_position: Vector2, data: Variant) -> void:
 		if _can_drop_data(_position, data):
 			card_dropped.emit(str(data.instance_id))

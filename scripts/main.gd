@@ -69,6 +69,7 @@ func show_screen(screen_name: String, payload: Dictionary = {}) -> void:
 	if screen_name == "match" and current_screen.has_signal("action_requested"):
 		current_screen.action_requested.connect(submit_player_action)
 		_refresh_match_view()
+		call_deferred("start_match_turn_flow")
 
 
 func _on_play_requested(deck_id: String, selected_difficulty: String) -> void:
@@ -226,6 +227,23 @@ func submit_player_action(action: GameAction) -> void:
 	_render_match_result(result)
 	if result.accepted and not _route_match_result_if_complete():
 		await _drive_ai_turn(generation)
+	if generation == _match_generation and current_screen != null and current_screen.has_method("set_input_locked"):
+		_refresh_match_view()
+		current_screen.set_input_locked(false)
+	_match_submission_active = false
+
+
+func start_match_turn_flow() -> void:
+	if _match_submission_active or controller == null or ai == null or current_screen == null:
+		return
+	if controller.state.phase != "action" or controller.state.active_player_id != "opponent":
+		return
+	_match_submission_active = true
+	_match_generation += 1
+	var generation := _match_generation
+	if current_screen.has_method("set_input_locked"):
+		current_screen.set_input_locked(true)
+	await _drive_ai_turn(generation)
 	if generation == _match_generation and current_screen != null and current_screen.has_method("set_input_locked"):
 		_refresh_match_view()
 		current_screen.set_input_locked(false)

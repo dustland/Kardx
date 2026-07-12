@@ -13,6 +13,9 @@ const MulliganScene = preload("res://scenes/ui/mulligan_view.tscn")
 const ActionResult = preload("res://scripts/core/action_result.gd")
 const MatchViewScript = preload("res://scripts/ui/match_view.gd")
 const MatchViewScene = preload("res://scenes/ui/match_view.tscn")
+const CardInstanceScript = preload("res://scripts/core/card_instance.gd")
+const CoreCards = preload("res://tests/fixtures/core_cards.gd")
+const AIPlayerScript = preload("res://scripts/ai/ai_player.gd")
 
 
 class TestScreen:
@@ -61,8 +64,15 @@ static func run(t) -> void:
 
 static func run_task5(t) -> void:
 	_test_match_selection_builds_only_legal_actions(t)
+	_test_match_selection_filters_compound_candidates(t)
 	_test_match_selection_cancels_and_reports_rejection(t)
+	_test_public_cards_expose_only_safe_ownership(t)
 	await _test_match_scene_contract_and_responsive_layout(t)
+	await _test_match_hq_signals_lock_and_drop_parity(t)
+	await _test_match_compound_signals_require_confirmation(t)
+	await _test_main_rejection_recovers_fresh_actions(t)
+	await _test_main_drives_opponent_first_without_reentrancy(t)
+	_test_main_routes_terminal_payload(t)
 
 
 static func _test_match_selection_builds_only_legal_actions(t) -> void:
@@ -77,6 +87,34 @@ static func _test_match_selection_builds_only_legal_actions(t) -> void:
 	t.assert_eq(model.choose_target("o-hq").type, "attack_hq", "HQ attack preserves controller action type")
 
 
+static func _test_match_selection_filters_compound_candidates(t) -> void:
+	var model := MatchViewScript.MatchInteractionModel.new()
+	var order_ab = GameAction.create("play_order", "player", "p-order", ["a", "b"], {}, 20)
+	var order_ba = GameAction.create("play_order", "player", "p-order", ["b", "a"], {}, 20)
+	model.set_legal_actions([order_ab, order_ba])
+	model.select_source("p-order")
+	t.assert_eq(model.choose_target("b"), null, "first target never chooses an unspecified candidate")
+	t.assert_eq(model.highlighted_targets(), ["a"], "next target follows selected target order")
+	t.assert_eq(model.choose_target("a"), null, "multi-target order waits for confirmation")
+	t.assert_eq(model.confirm_action(), order_ba, "confirmation returns the fully specified ordered action")
+
+	var deploy_plain = ActionBuilder.deploy("p-unit", 2, "player", 21)
+	var deploy_targeted = GameAction.create("deploy_unit", "player", "p-unit", ["ally"], {"support_slot": 2}, 21)
+	model.set_legal_actions([deploy_plain, deploy_targeted])
+	model.select_source("p-unit")
+	t.assert_eq(model.choose_slot("support", 2), null, "compound deploy does not choose an unspecified target variant")
+	t.assert_eq(model.highlighted_targets(), ["ally"], "remaining deploy target is explicit")
+	t.assert_eq(model.choose_target("ally"), null, "targeted deploy waits for confirmation")
+	t.assert_eq(model.confirm_action(), deploy_targeted, "compound deploy confirms exact legal action")
+	var deploy_slot_one = ActionBuilder.deploy("p-unit", 1, "player", 22)
+	var deploy_slot_three = ActionBuilder.deploy("p-unit", 3, "player", 22)
+	model.set_legal_actions([deploy_slot_one, deploy_slot_three])
+	model.select_source("p-unit")
+	model.choose_slot("support", 3)
+	t.assert_eq(model.highlighted_slots("support"), [3], "chosen slot filters remaining candidates")
+	t.assert_eq(model.confirm_action(), deploy_slot_three, "slot confirmation never chooses another legal slot")
+
+
 static func _test_match_selection_cancels_and_reports_rejection(t) -> void:
 	var model := MatchViewScript.MatchInteractionModel.new()
 	model.set_legal_actions([ActionBuilder.deploy("p-card", 2, "player", 9)])
@@ -84,6 +122,7 @@ static func _test_match_selection_cancels_and_reports_rejection(t) -> void:
 	t.assert_eq(model.highlighted_slots("support"), [2], "deploy slots exposed")
 	model.cancel()
 	t.assert_eq(model.selected_source_id, "", "cancel clears source")
+	t.assert_eq(model.selected_targets, [], "cancel clears progressive targets")
 	model.apply_rejection("insufficient_credit", "Not enough Credit")
 	t.assert_eq(model.status_message, "Not enough Credit", "rejection visible")
 
@@ -95,23 +134,170 @@ static func _test_match_scene_contract_and_responsive_layout(t) -> void:
 		Engine.get_main_loop().root.add_child(root_control)
 		var view = MatchViewScene.instantiate()
 		root_control.add_child(view)
-		view.render_snapshot(_match_snapshot())
+		view.render_snapshot(_match_snapshot(8))
+		await Engine.get_main_loop().process_frame
 		await Engine.get_main_loop().process_frame
 		t.assert_true(view.has_node("%OpponentSupport"), "opponent support exists")
 		t.assert_true(view.has_node("%Frontline"), "shared frontline exists")
 		t.assert_true(view.has_node("%PlayerSupport"), "player support exists")
 		t.assert_true(view.has_node("%PlayerHand"), "player hand exists")
 		t.assert_true(view.has_node("%Timeline"), "timeline exists")
+		t.assert_true(view.has_node("%OpponentHQ"), "opponent HQ target exists")
+		t.assert_true(view.has_node("%PlayerHQ"), "player HQ target exists")
+		t.assert_true(view.has_node("%HandScroll"), "populated hand is scroll bounded")
 		t.assert_eq(view.get_node("%Frontline").get_child_count(), 5, "frontline reserves five slots")
 		t.assert_eq(view.get_node("%OpponentSupport").get_child_count(), 4, "opponent reserves four slots")
 		t.assert_eq(view.get_node("%PlayerSupport").get_child_count(), 4, "player reserves four slots")
-		t.assert_true(view.size.x <= viewport_size.x, "match fits viewport width")
+		var player_front = view.get_node("%Frontline").get_child(0).get_child(0)
+		var opponent_front = view.get_node("%Frontline").get_child(1).get_child(0)
+		t.assert_true(player_front.modulate != opponent_front.modulate, "frontline ownership has clear opposing styles")
+		t.assert_eq(view.size, viewport_size, "match root exactly fits viewport")
+		var board_rect: Rect2 = view.get_node("%Board").get_global_rect()
+		var timeline_rect: Rect2 = view.get_node("%TimelinePanel").get_global_rect()
+		t.assert_true(not board_rect.intersects(timeline_rect), "timeline does not overlap board")
+		var hand_width: float = view.get_node("%PlayerHand").get_combined_minimum_size().x
+		var hand_viewport_width: float = view.get_node("%HandScroll").size.x
+		if viewport_size.x == 1024.0:
+			t.assert_true(hand_width > hand_viewport_width, "eight cards use horizontal scrolling at genuine 1024 width")
 		root_control.free()
 
 
-static func _match_snapshot() -> Dictionary:
-	var hq := {"instance_id": "p-hq", "title": "HQ", "category": "Headquarters", "attack": 0, "defense": 20, "deployment_cost": 0, "operation_cost": 0}
-	return {"players": {"player": {"id": "player", "nation": "US", "headquarters": hq, "hq_defense": 20, "deck_count": 34, "hand": [], "support_line": [null, null, null, null], "credit": 3, "credit_slots": 3}, "opponent": {"id": "opponent", "nation": "SU", "headquarters": hq.merged({"instance_id": "o-hq"}, true), "hq_defense": 20, "deck_count": 34, "hand": [{"instance_id": "o-hidden", "hidden": true}], "support_line": [null, null, null, null], "credit": 3, "credit_slots": 3}}, "frontline": [null, null, null, null, null], "active_player_id": "player", "turn": 1, "phase": "action", "sequence": 5, "winner_id": ""}
+static func _match_snapshot(hand_count := 0) -> Dictionary:
+	var hq := _ui_card("p-hq", "player", "Headquarters")
+	var hand: Array = []
+	for index in range(hand_count): hand.append(_ui_card("p-hand-%d" % index, "player", "Unit"))
+	var player_front := _ui_card("p-front", "player", "Unit")
+	var opponent_front := _ui_card("o-front", "opponent", "Unit")
+	return {"players": {"player": {"id": "player", "nation": "US", "headquarters": hq, "hq_defense": 20, "deck_count": 34, "hand": hand, "support_line": [null, null, null, null], "credit": 3, "credit_slots": 3}, "opponent": {"id": "opponent", "nation": "SU", "headquarters": hq.merged({"instance_id": "o-hq", "owner_id": "opponent"}, true), "hq_defense": 20, "deck_count": 34, "hand": [{"instance_id": "o-hidden", "hidden": true}], "support_line": [null, null, null, null], "credit": 3, "credit_slots": 3}}, "frontline": [player_front, opponent_front, null, null, null], "active_player_id": "player", "turn": 1, "phase": "action", "sequence": 5, "winner_id": ""}
+
+
+static func _ui_card(instance_id: String, owner_id: String, category: String) -> Dictionary:
+	return {"instance_id": instance_id, "owner_id": owner_id, "title": category, "category": category, "unit_type": "Infantry", "attack": 1, "defense": 20 if category == "Headquarters" else 2, "deployment_cost": 1, "operation_cost": 1, "keywords": []}
+
+
+static func _test_public_cards_expose_only_safe_ownership(t) -> void:
+	var definition := _ui_card("definition", "", "Unit")
+	definition["id"] = "unit"
+	var card = CardInstanceScript.from_definition(definition, "player", "p-unit")
+	t.assert_eq(card.to_public_dict(true).get("owner_id"), "player", "revealed public battlefield card exposes owner")
+	t.assert_true(not card.to_public_dict(false).has("owner_id"), "hidden card does not expose owner")
+
+
+static func _test_match_hq_signals_lock_and_drop_parity(t) -> void:
+	var view = MatchViewScene.instantiate()
+	Engine.get_main_loop().root.add_child(view)
+	view.render_snapshot(_match_snapshot())
+	var attack = GameAction.create("attack_hq", "player", "p-front", ["o-hq"], {"target_player_id": "opponent"}, 5)
+	view.set_legal_actions([attack])
+	var emitted: Array = []
+	view.action_requested.connect(func(action) -> void: emitted.append(action))
+	view.get_node("%Frontline").get_child(0).get_child(0).card_pressed.emit("p-front")
+	view.get_node("%OpponentHQ").card_pressed.emit("o-hq")
+	t.assert_eq(emitted, [attack], "HQ click submits exact legal attack")
+	view.set_legal_actions([attack])
+	view.get_node("%OpponentHQ").card_dropped.emit("p-front", "o-hq")
+	t.assert_eq(emitted, [attack, attack], "HQ drop has click parity")
+	view.set_input_locked(true)
+	view._on_target_dropped("p-front", "o-hq")
+	view._on_slot_pressed("frontline", 0)
+	view._on_end_turn_pressed()
+	t.assert_eq(emitted.size(), 2, "all target slot and command handlers honor lock")
+	t.assert_eq(view.get_node("%StatusLabel").text, "Wait for the opponent action to finish.", "locked handler explains rejection")
+	t.assert_true(view.get_node("%OpponentHQ").disabled, "locked HQ rejects click and drop")
+	t.assert_true(view.get_node("%Frontline").get_child(0).disabled, "locked slot rejects drops")
+	view.free()
+
+
+static func _test_match_compound_signals_require_confirmation(t) -> void:
+	var view = MatchViewScene.instantiate()
+	Engine.get_main_loop().root.add_child(view)
+	view.render_snapshot(_match_snapshot(1))
+	var deploy = GameAction.create("deploy_unit", "player", "p-hand-0", ["p-front"], {"support_slot": 0}, 5)
+	view.set_legal_actions([deploy])
+	var emitted: Array = []
+	view.action_requested.connect(func(action) -> void: emitted.append(action))
+	view.get_node("%PlayerSupport").card_dropped.emit("p-hand-0", "support", 0)
+	view.get_node("%Frontline").get_child(0).get_child(0).card_pressed.emit("p-front")
+	t.assert_eq(emitted, [], "compound drop path waits for explicit confirmation")
+	view.get_node("%ConfirmButton").pressed.emit()
+	t.assert_eq(emitted, [deploy], "compound drop path confirms exact action")
+	view.set_legal_actions([deploy])
+	view.get_node("%PlayerHand").get_child(0).card_pressed.emit("p-hand-0")
+	view.get_node("%PlayerSupport").slot_pressed.emit("support", 0)
+	view.get_node("%Frontline").get_child(0).get_child(0).card_pressed.emit("p-front")
+	view.get_node("%ConfirmButton").pressed.emit()
+	t.assert_eq(emitted, [deploy, deploy], "compound click and drop paths have parity")
+	view.free()
+
+
+static func _test_main_rejection_recovers_fresh_actions(t) -> void:
+	var controller = _started_controller_with_active("player")
+	var main := Main.new()
+	var host := Control.new()
+	main.screen_host = host
+	Engine.get_main_loop().root.add_child(host)
+	main.controller = controller
+	main.ai = AIPlayerScript.create("easy", 901)
+	main.screen_factory = func(path: String) -> Control: return MatchViewScene.instantiate() if path.ends_with("match_view.tscn") else TestScreen.new()
+	main.show_screen("match", {"snapshot": controller.state.snapshot_for("player")})
+	var stale = controller.legal_actions("player")[0]
+	stale.expected_sequence = controller.state.sequence + 99
+	main.submit_player_action(stale)
+	for frame in range(3): await Engine.get_main_loop().process_frame
+	var view = main.current_screen
+	t.assert_eq(view.get_node("%StatusLabel").text, "State changed", "rejection is visible through real orchestration")
+	for action in view.model._legal_actions:
+		t.assert_eq(action.expected_sequence, controller.state.sequence, "rejection refreshes legal actions to current sequence")
+	main.free()
+	host.free()
+
+
+static func _test_main_drives_opponent_first_without_reentrancy(t) -> void:
+	var controller = _started_controller_with_active("opponent")
+	var main := Main.new()
+	var host := Control.new()
+	main.screen_host = host
+	Engine.get_main_loop().root.add_child(host)
+	main.controller = controller
+	main.ai = AIPlayerScript.create("easy", 901)
+	main.screen_factory = func(path: String) -> Control: return MatchViewScene.instantiate() if path.ends_with("match_view.tscn") else TestScreen.new()
+	main.show_screen("match", {"snapshot": controller.state.snapshot_for("player")})
+	main.start_match_turn_flow()
+	main.start_match_turn_flow()
+	for frame in range(20): await Engine.get_main_loop().process_frame
+	t.assert_eq(controller.state.active_player_id, "player", "opponent-first initialization drains AI turn")
+	t.assert_true(not main._match_submission_active, "duplicate startup does not deadlock or retain guard")
+	main.free()
+	host.free()
+
+
+static func _test_main_routes_terminal_payload(t) -> void:
+	var controller = _started_controller_with_active("player")
+	controller.state.phase = "complete"
+	controller.state.winner_id = "player"
+	var main := Main.new()
+	var host := Control.new()
+	main.screen_host = host
+	main.controller = controller
+	main.screen_factory = func(_path: String) -> Control: return TestScreen.new()
+	t.assert_true(main._route_match_result_if_complete(), "terminal state routes immediately")
+	var payload: Dictionary = (main.current_screen as TestScreen).payload
+	t.assert_eq(payload.winner_id, "player", "result payload preserves winner")
+	t.assert_eq(payload.seed, controller.state.seed, "result payload preserves seed")
+	main.free()
+	host.free()
+
+
+static func _started_controller_with_active(actor_id: String):
+	var fixture := CoreCards.build_valid_fixture()
+	var controller = MatchController.create(fixture.definitions, fixture.player_deck, fixture.enemy_deck, 901)
+	for action in [GameAction.create("start_match", "system"), GameAction.create("mulligan", "player"), GameAction.create("mulligan", "opponent"), GameAction.create("confirm_mulligan", "player"), GameAction.create("confirm_mulligan", "opponent")]:
+		action.expected_sequence = controller.state.sequence
+		assert(controller.submit_action(action).accepted)
+	if controller.state.active_player_id != actor_id:
+		var end_turn = controller.legal_actions(controller.state.active_player_id).filter(func(candidate) -> bool: return candidate.type == "end_turn")[0]
+		assert(controller.submit_action(end_turn).accepted)
+	return controller
 
 
 static func run_task4(t) -> void:

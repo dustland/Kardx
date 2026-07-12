@@ -147,6 +147,7 @@ func to_public_dict(reveal: bool) -> Dictionary:
 		return {"hidden": true, "zone": zone}
 	return {
 		"instance_id": instance_id,
+		"owner_id": owner_id,
 		"definition_id": definition_id,
 		"title": title,
 		"category": category,
