@@ -14,12 +14,15 @@ static func run(t) -> void:
 	_test_ai_player_exposes_safe_chooser_contract(t)
 	_test_ai_choices_are_deterministic_legal_and_isolated(t)
 	_test_easy_seed_breaks_equal_action_ties(t)
+	_test_easy_samples_priority_buckets_before_budget(t)
 	_test_search_retains_negative_score_ties(t)
-	_test_standard_looks_ahead_for_a_tactical_sequence(t)
+	_test_standard_accumulates_sequence_scores(t)
+	_test_standard_prefers_cumulative_immediate_damage(t)
 	_test_standard_avoids_suicidal_attack_when_deployment_is_better(t)
 	_test_hard_takes_an_immediate_lethal(t)
 	_test_ai_end_turn_fallback_and_safe_null_cases(t)
 	_test_ai_respects_hidden_information_boundary(t)
+	_test_simulation_clone_anonymizes_hidden_state(t)
 	_test_rich_midgame_actions_are_complete_legal_and_stable(t)
 	_test_manual_adjacent_enemy_anchor_actions(t)
 	_test_action_keys_preserve_delimited_ids_and_typed_payloads(t)
@@ -82,6 +85,25 @@ static func _test_easy_seed_breaks_equal_action_ties(t) -> void:
 	t.assert_true(choices.size() > 1, "different easy seeds vary equal-priority choices")
 
 
+static func _test_easy_samples_priority_buckets_before_budget(t) -> void:
+	var controller := _easy_starvation_controller(727)
+	var actions := ActionGenerator.generate(controller, "player")
+	var earlier_variants := 0
+	for action in actions:
+		if action.type in ["attack_hq", "attack_unit", "activate_ability", "play_order"]:
+			earlier_variants += 1
+	t.assert_true(earlier_variants > 32, "fixture has more early-priority variants than Easy's budget")
+	var before_hash := controller.state_hash()
+	var first := AIPlayer.create("easy", 107)
+	var second := AIPlayer.create("easy", 107)
+	var action = first.choose_action(controller, "player")
+	var repeated = second.choose_action(controller, "player")
+	t.assert_eq(action.type, "deploy_unit", "Easy samples an affordable deployment despite earlier variants")
+	t.assert_eq(_action_data(action), _action_data(repeated), "Easy bucket sampling is deterministic for one seed")
+	t.assert_true(first.visited_nodes > 0 and first.visited_nodes <= 32, "Easy bucket sampling stays within its exact node budget")
+	t.assert_eq(controller.state_hash(), before_hash, "Easy bucket sampling does not mutate source state or RNG")
+
+
 static func _test_search_retains_negative_score_ties(t) -> void:
 	var ai := AIPlayer.create("standard", 100)
 	var best_nodes: Array[Dictionary] = []
@@ -92,11 +114,38 @@ static func _test_search_retains_negative_score_ties(t) -> void:
 	t.assert_eq(best_nodes.size(), 2, "search retains equal improvements even when their scores are negative")
 
 
-static func _test_standard_looks_ahead_for_a_tactical_sequence(t) -> void:
+static func _test_standard_accumulates_sequence_scores(t) -> void:
+	var score_controller := _cumulative_deployment_controller(728)
+	var score_ai := AIPlayer.create("standard", 1)
+	var first_action: GameAction
+	for candidate in ActionGenerator.generate(score_controller, "player"):
+		if candidate.type == "deploy_unit" and candidate.source_id == "high-value":
+			first_action = candidate
+			break
+	var first_node := score_ai._simulate(score_controller, "player", first_action)
+	var second_action: GameAction
+	for candidate in ActionGenerator.generate(first_node.controller, "player"):
+		if candidate.type == "deploy_unit" and candidate.source_id == "low-value":
+			second_action = candidate
+			break
+	var second_node := score_ai._simulate(first_node.controller, "player", second_action, float(first_node.score))
+	var second_evaluation := BoardEvaluator.score(second_node.snapshot, "player")
+	t.assert_eq(float(second_node.score), float(first_node.score) + second_evaluation, "each beam node carries its accumulated evaluator score")
+	for seed in range(1, 17):
+		var controller := _cumulative_deployment_controller(728)
+		var before_hash := controller.state_hash()
+		var ai := AIPlayer.create("standard", seed)
+		var action = ai.choose_action(controller, "player")
+		t.assert_eq(action.source_id, "high-value", "cumulative search keeps the stronger intermediate deployment first")
+		t.assert_true(ai.visited_nodes > 0 and ai.visited_nodes <= ai.node_budget, "cumulative search respects the Standard budget")
+		t.assert_eq(controller.state_hash(), before_hash, "cumulative search preserves source state and RNG")
+
+
+static func _test_standard_prefers_cumulative_immediate_damage(t) -> void:
 	var controller := _sequence_controller(722)
 	var action = AIPlayer.create("standard", 101).choose_action(controller, "player")
-	t.assert_eq(action.type, "activate_ability", "standard starts the sequence that creates a lethal attack")
-	t.assert_eq(action.source_id, "tactician", "standard chooses the tactical setup source")
+	t.assert_eq(action.type, "attack_hq", "standard prioritizes immediate Headquarters damage by cumulative score")
+	t.assert_eq(action.source_id, "striker", "standard selects the direct-damage source")
 
 
 static func _test_standard_avoids_suicidal_attack_when_deployment_is_better(t) -> void:
@@ -131,6 +180,51 @@ static func _test_ai_respects_hidden_information_boundary(t) -> void:
 	var original_action = AIPlayer.create("hard", 106).choose_action(visible, "player")
 	var substituted_action = AIPlayer.create("hard", 106).choose_action(substituted, "player")
 	t.assert_eq(_action_data(original_action), _action_data(substituted_action), "hidden enemy identities do not affect AI choice")
+
+
+static func _test_simulation_clone_anonymizes_hidden_state(t) -> void:
+	var repairs := _hidden_counter_controller(729, "repairs", false)
+	var maskirovka := _hidden_counter_controller(729, "maskirovka", true)
+	var repairs_before := repairs.state_hash()
+	var maskirovka_before := maskirovka.state_hash()
+	var repairs_clone = repairs.clone_for_simulation("player")
+	var maskirovka_clone = maskirovka.clone_for_simulation("player")
+
+	t.assert_eq(repairs_clone.state_hash(), maskirovka_clone.state_hash(), "hidden identities, IDs, deck order, and active Countermeasures produce identical simulations")
+	t.assert_eq(repairs_clone.state.players.opponent.active_countermeasures, [], "hidden active Countermeasure reservations are removed")
+	for card in repairs_clone.state.players.opponent.hand + repairs_clone.state.players.opponent.deck:
+		t.assert_eq([card.definition_id, card.title, card.category, card.abilities], ["", "", "", []], "hidden cards become neutral anonymous placeholders")
+		t.assert_true(not card.countermeasure_active and not card.face_down, "hidden placeholder has no activation identity")
+	t.assert_eq(
+		_card_public_state(repairs_clone.state.players.opponent.headquarters),
+		_card_public_state(repairs.state.players.opponent.headquarters),
+		"simulation preserves the opponent Headquarters"
+	)
+	t.assert_eq(
+		_card_public_state(repairs_clone.state.players.opponent.support_line[0]),
+		_card_public_state(repairs.state.players.opponent.support_line[0]),
+		"simulation preserves public battlefield cards"
+	)
+	t.assert_eq(
+		_card_public_state(repairs_clone.state.players.opponent.discard[0]),
+		_card_public_state(repairs.state.players.opponent.discard[0]),
+		"simulation preserves public discard cards"
+	)
+	t.assert_eq(_card_ids(repairs_clone.state.players.player.hand), _card_ids(repairs.state.players.player.hand), "simulation preserves actor-known hand identities")
+	t.assert_eq(_card_ids(repairs_clone.state.players.player.deck), _card_ids(repairs.state.players.player.deck), "simulation preserves actor-known deck order")
+	t.assert_eq([repairs_clone.state.rng_state, repairs_clone._rng.state], [repairs.state.rng_state, repairs._rng.state], "simulation preserves both RNG states")
+	t.assert_true(bool(repairs_clone._validate_invariants().valid), "anonymous simulation satisfies match invariants")
+	_assert_unique_card_graph(t, repairs_clone)
+
+	var repairs_action = AIPlayer.create("hard", 108).choose_action(repairs, "player")
+	var maskirovka_action = AIPlayer.create("hard", 108).choose_action(maskirovka, "player")
+	t.assert_eq(_action_data(repairs_action), _action_data(maskirovka_action), "AI choice is independent of hidden Countermeasure identity and deck order")
+	t.assert_eq(repairs_action.type, "attack_hq", "simulation still identifies the visible immediate lethal")
+	var real_result = repairs.submit_action(repairs_action)
+	t.assert_true(real_result.accepted, "the chosen real action remains legal")
+	t.assert_eq([repairs.state.winner_id, repairs.state.players.opponent.headquarters.current_defense], ["", 3], "the real hidden Emergency Repairs can still counter the action")
+	t.assert_eq(maskirovka.state_hash(), maskirovka_before, "AI choice leaves the alternate source state and RNG unchanged")
+	t.assert_true(repairs_before != repairs.state_hash(), "only submitting the chosen real action mutates its source match")
 
 
 static func _test_rich_midgame_actions_are_complete_legal_and_stable(t) -> void:
@@ -245,11 +339,12 @@ static func _test_generator_requires_exact_player_map(t) -> void:
 
 static func _test_simulation_clone_isolated_from_source(t) -> void:
 	var controller := _rich_controller(702)
+	var source_hash := controller.state_hash()
 	var clone = controller.clone_for_simulation("player")
 	t.assert_true(clone != controller, "simulation returns another controller")
 	t.assert_true(clone.state != controller.state, "simulation state is independent")
 	t.assert_true(clone.replay_log == null, "simulation disables replay logging")
-	t.assert_eq(clone.state_hash(), controller.state_hash(), "simulation preserves authoritative state and RNG")
+	t.assert_eq(controller.state_hash(), source_hash, "simulation cloning preserves source state and RNG")
 	clone.state.players.player.credit = 0
 	clone.state.players.player.hand[0].title = "changed only in simulation"
 	t.assert_true(controller.state.players.player.credit > 0, "simulation cannot mutate source player")
@@ -393,6 +488,101 @@ static func _tied_deployment_controller(seed: int) -> MatchController:
 	controller.state.players.player.credit = 3
 	_put_hand(controller, _card(definitions, "alpha", "player", "alpha"))
 	_put_hand(controller, _card(definitions, "beta", "player", "beta"))
+	return controller
+
+
+static func _cumulative_deployment_controller(seed: int) -> MatchController:
+	var definitions := {
+		"p-hq": _definition("p-hq", "Headquarters", 0, 20),
+		"o-hq": _definition("o-hq", "Headquarters", 0, 20),
+		"high-value": _definition("high-value", "Unit", 5, 5, 1),
+		"low-value": _definition("low-value", "Unit", 1, 1, 1),
+	}
+	var controller := _empty_action_controller_with_definitions(definitions, seed)
+	controller.state.players.player.credit = 2
+	_put_hand(controller, _card(definitions, "high-value", "player", "high-value"))
+	_put_hand(controller, _card(definitions, "low-value", "player", "low-value"))
+	return controller
+
+
+static func _easy_starvation_controller(seed: int) -> MatchController:
+	var definitions := {
+		"p-hq": _definition("p-hq", "Headquarters", 0, 20),
+		"o-hq": _definition("o-hq", "Headquarters", 0, 20),
+		"wide-order": _definition("wide-order", "Order", 0, 0, 0, 0, [
+			_ability("wide-hit", "play_order", {"selector": "enemy_unit_or_hq", "count": 2}, [{"type": "damage", "amount": 1}]),
+		]),
+		"deployment": _definition("deployment", "Unit", 2, 2, 1),
+		"target": _definition("target", "Unit", 1, 6),
+	}
+	var controller := _empty_action_controller_with_definitions(definitions, seed)
+	controller.state.players.player.credit = 1
+	_put_hand(controller, _card(definitions, "wide-order", "player", "wide-order"))
+	_put_hand(controller, _card(definitions, "deployment", "player", "deployment"))
+	for slot in range(GameConstants.SUPPORT_UNIT_SLOTS):
+		_place_support(controller, _card(definitions, "target", "opponent", "enemy-support-%d" % slot), slot)
+	for slot in range(GameConstants.FRONTLINE_SLOTS):
+		_place_frontline(controller, _card(definitions, "target", "opponent", "enemy-frontline-%d" % slot), slot)
+	return controller
+
+
+static func _hidden_counter_controller(seed: int, counter_id: String, reverse_deck: bool) -> MatchController:
+	var repairs_ability := {
+		"id": "repair-lethal-hq",
+		"trigger": "hq_lethal",
+		"conditions": {"enemy": true},
+		"target": {"selector": "friendly_hq", "count": 1},
+		"effects": [{"type": "repair", "amount": 3}],
+	}
+	var maskirovka_ability := {
+		"id": "mask-attacker",
+		"trigger": "attack",
+		"conditions": {"enemy": true, "target_owner": "owner", "target_category": "Unit"},
+		"target": {"selector": "action_targets"},
+		"effects": [{"type": "status", "status": "Ambush", "duration": "combat"}],
+	}
+	var definitions := {
+		"p-hq": _definition("p-hq", "Headquarters", 0, 20),
+		"o-hq": _definition("o-hq", "Headquarters", 0, 20),
+		"attacker": _definition("attacker", "Unit", 20, 5),
+		"public-unit": _definition("public-unit", "Unit", 2, 4),
+		"hidden-a": _definition("hidden-a", "Unit", 7, 1),
+		"hidden-b": _definition("hidden-b", "Order", 0, 0),
+		"repairs": _definition("repairs", "Countermeasure", 0, 0, 2, 0, [repairs_ability]),
+		"maskirovka": _definition("maskirovka", "Countermeasure", 0, 0, 2, 0, [maskirovka_ability]),
+	}
+	var controller := _empty_action_controller_with_definitions(definitions, seed)
+	controller.state.players.player.credit = 4
+	controller.state.players.opponent.credit = 4
+	var attacker := _card(definitions, "attacker", "player", "visible-attacker")
+	_place_frontline(controller, attacker, 0)
+	_ready(controller, attacker)
+	var public_support := _card(definitions, "public-unit", "opponent", "public-support")
+	_place_support(controller, public_support, 0)
+	var public_discard := _card(definitions, "public-unit", "opponent", "public-discard")
+	public_discard.zone = "discard"
+	controller.state.players.opponent.discard.append(public_discard)
+	var hidden_prefix := "alternate" if reverse_deck else "original"
+	var counter := _card(definitions, counter_id, "opponent", "%s-counter" % hidden_prefix)
+	_put_hand(controller, counter)
+	counter.countermeasure_active = true
+	counter.countermeasure_activation_cost = 2
+	counter.face_down = true
+	controller.state.players.opponent.active_countermeasures.append(counter)
+	_put_hand(controller, _card(definitions, "hidden-a" if reverse_deck else "hidden-b", "opponent", "%s-hand" % hidden_prefix))
+	var deck_cards := [
+		_card(definitions, "hidden-a", "opponent", "%s-deck-a" % hidden_prefix),
+		_card(definitions, "hidden-b", "opponent", "%s-deck-b" % hidden_prefix),
+	]
+	if reverse_deck:
+		deck_cards.reverse()
+	for card in deck_cards:
+		card.zone = "deck"
+		controller.state.players.opponent.deck.append(card)
+	var known_deck := _card(definitions, "hidden-a", "player", "known-player-deck")
+	known_deck.zone = "deck"
+	controller.state.players.player.deck.append(known_deck)
+	_put_hand(controller, _card(definitions, "hidden-b", "player", "known-player-hand"))
 	return controller
 
 
@@ -569,3 +759,44 @@ static func _action_data(action: GameAction) -> Dictionary:
 		"payload": action.payload.duplicate(true),
 		"expected_sequence": action.expected_sequence,
 	}
+
+
+static func _card_ids(cards: Array) -> Array:
+	var ids: Array = []
+	for card in cards:
+		ids.append(card.instance_id if card != null else null)
+	return ids
+
+
+static func _card_public_state(card: CardInstance) -> Dictionary:
+	return {
+		"definition_id": card.definition_id,
+		"instance_id": card.instance_id,
+		"owner_id": card.owner_id,
+		"title": card.title,
+		"category": card.category,
+		"attack": card.current_attack,
+		"defense": card.current_defense,
+		"zone": card.zone,
+		"slot": card.slot,
+	}
+
+
+static func _assert_unique_card_graph(t, controller: MatchController) -> void:
+	var cards: Array = []
+	for player in controller.state.players.values():
+		cards.append(player.headquarters)
+		for collection in [player.deck, player.hand, player.support_line, player.discard]:
+			for card in collection:
+				if card != null:
+					cards.append(card)
+	for card in controller.state.frontline:
+		if card != null:
+			cards.append(card)
+	var references := {}
+	var ids := {}
+	for card in cards:
+		references[card] = true
+		ids[card.instance_id] = true
+	t.assert_eq(references.size(), cards.size(), "simulation graph has one object per primary card location")
+	t.assert_eq(ids.size(), cards.size(), "simulation graph has globally unique instance IDs")

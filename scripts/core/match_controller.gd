@@ -83,6 +83,8 @@ func legal_actions(actor_id: String) -> Array[GameAction]:
 	return ActionGenerator.generate(self, actor_id)
 
 func clone_for_simulation(perspective_id: String) -> MatchController:
+	if perspective_id not in ["player", "opponent"] or state == null or not state.players.has(perspective_id):
+		return null
 	var clone := MatchController.create(
 		card_definitions.duplicate(true),
 		initial_deck_ids.get("player", []).duplicate(),
@@ -90,12 +92,102 @@ func clone_for_simulation(perspective_id: String) -> MatchController:
 		state.seed
 	)
 	clone.initial_deck_ids = initial_deck_ids.duplicate(true)
-	clone.event_history = event_history.duplicate(true)
+	var hidden_player_id := _other_player_id(perspective_id)
+	clone.initial_deck_ids[hidden_player_id] = _anonymous_definition_ids(
+		(initial_deck_ids.get(hidden_player_id, []) as Array).size()
+	)
+	clone.event_history = []
 	clone.invalid_diagnostics = invalid_diagnostics.duplicate(true)
 	clone._simulation_mode = true
 	clone.replay_log = null
-	clone._restore_simulation_snapshot(_invalid_replay_snapshot())
+	clone._restore_simulation_snapshot(_simulation_snapshot_for(perspective_id))
 	return clone
+
+func _simulation_snapshot_for(perspective_id: String) -> Dictionary:
+	var snapshot := _invalid_replay_snapshot()
+	var hidden_player_id := _other_player_id(perspective_id)
+	var hidden_player: Dictionary = snapshot.players[hidden_player_id]
+	var active_ids := {}
+	for card_id in hidden_player.active_countermeasures:
+		active_ids[card_id] = true
+	var hidden_ids := {}
+	for card_id in hidden_player.deck:
+		hidden_ids[card_id] = true
+	for card_id in hidden_player.hand:
+		var card: Dictionary = snapshot.cards[card_id]
+		if active_ids.has(card_id) or not bool((card.revealed_to as Dictionary).get(perspective_id, false)):
+			hidden_ids[card_id] = true
+	for card_id in hidden_ids:
+		snapshot.cards.erase(card_id)
+	hidden_player.deck = _anonymous_zone_cards(snapshot.cards, hidden_player_id, "deck", hidden_player.deck.size())
+	var anonymous_hand: Array = []
+	var hidden_hand_index := 0
+	for card_id in (snapshot.players[hidden_player_id] as Dictionary).hand:
+		if hidden_ids.has(card_id):
+			var anonymous_id := _unique_anonymous_id(snapshot.cards, hidden_player_id, "hand", hidden_hand_index)
+			hidden_hand_index += 1
+			snapshot.cards[anonymous_id] = _anonymous_card_state(hidden_player_id, anonymous_id, "hand")
+			anonymous_hand.append(anonymous_id)
+		else:
+			anonymous_hand.append(card_id)
+	hidden_player.hand = anonymous_hand
+	hidden_player.active_countermeasures = []
+	snapshot.players[hidden_player_id] = hidden_player
+	return snapshot
+
+func _anonymous_zone_cards(cards: Dictionary, owner_id: String, zone: String, count: int) -> Array:
+	var ids: Array = []
+	for index in range(count):
+		var instance_id := _unique_anonymous_id(cards, owner_id, zone, index)
+		cards[instance_id] = _anonymous_card_state(owner_id, instance_id, zone)
+		ids.append(instance_id)
+	return ids
+
+func _unique_anonymous_id(cards: Dictionary, owner_id: String, zone: String, index: int) -> String:
+	var base := "__simulation_%s_%s_%03d" % [owner_id, zone, index]
+	var instance_id := base
+	var suffix := 0
+	while cards.has(instance_id):
+		suffix += 1
+		instance_id = "%s_%d" % [base, suffix]
+	return instance_id
+
+func _anonymous_card_state(owner_id: String, instance_id: String, zone: String) -> Dictionary:
+	return {
+		"definition_id": "",
+		"instance_id": instance_id,
+		"owner_id": owner_id,
+		"title": "",
+		"category": "",
+		"unit_type": "",
+		"base_attack": 0,
+		"current_attack": 0,
+		"base_defense": 0,
+		"current_defense": 0,
+		"deployment_cost": 0,
+		"operation_cost": 0,
+		"keywords": [],
+		"abilities": [],
+		"zone": zone,
+		"slot": -1,
+		"operations_used": 0,
+		"operation_chain": 0,
+		"smokescreen_revealed": false,
+		"deployed_turn": -1,
+		"modifiers": [],
+		"statuses": {},
+		"temporary_statuses": [],
+		"revealed_to": {},
+		"face_down": false,
+		"countermeasure_active": false,
+		"countermeasure_activation_cost": 0,
+	}
+
+func _anonymous_definition_ids(count: int) -> Array:
+	var ids: Array = []
+	ids.resize(count)
+	ids.fill("")
+	return ids
 
 func _restore_simulation_snapshot(snapshot: Dictionary) -> void:
 	var cards := {}

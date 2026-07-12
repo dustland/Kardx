@@ -48,9 +48,10 @@ func choose_action(controller, actor_id: String) -> GameAction:
 	if actions.is_empty():
 		return _null_action()
 	var end_turn := _end_turn_action(actions)
-	var lethal := _confirmed_immediate_lethal(controller, actor_id, snapshot, actions)
-	if not lethal.is_empty():
-		return _choose_tied_nodes(lethal).first_action
+	if difficulty != "easy":
+		var lethal := _confirmed_immediate_lethal(controller, actor_id, snapshot, actions)
+		if not lethal.is_empty():
+			return _choose_tied_nodes(lethal).first_action
 	var baseline := BoardEvaluator.score(snapshot, actor_id)
 	var selected: GameAction = _choose_easy(controller, actor_id, baseline, actions) if difficulty == "easy" else _choose_beam(controller, actor_id, baseline, actions)
 	if not selected.type.is_empty():
@@ -60,9 +61,7 @@ func choose_action(controller, actor_id: String) -> GameAction:
 
 func _choose_easy(controller, actor_id: String, baseline: float, actions: Array[GameAction]) -> GameAction:
 	var candidates: Array[Dictionary] = []
-	for action in _ordered_actions(actions):
-		if action.type == "end_turn":
-			continue
+	for action in _easy_sample_actions(actions):
 		var node := _simulate(controller, actor_id, action)
 		if node.is_empty():
 			break
@@ -89,6 +88,43 @@ func _choose_easy(controller, actor_id: String, baseline: float, actions: Array[
 	return _choose_tied_nodes(tied).first_action
 
 
+func _easy_sample_actions(actions: Array[GameAction]) -> Array[GameAction]:
+	var buckets := {}
+	for action in _ordered_actions(actions):
+		if action.type == "end_turn":
+			continue
+		var rank := _action_rank(action)
+		if not buckets.has(rank):
+			buckets[rank] = []
+		buckets[rank].append(action)
+	var ranks: Array = buckets.keys()
+	ranks.sort()
+	for rank in ranks:
+		_shuffle_actions(buckets[rank])
+	var samples: Array[GameAction] = []
+	while samples.size() < node_budget:
+		var sampled := false
+		for rank in ranks:
+			var bucket: Array = buckets[rank]
+			if bucket.is_empty():
+				continue
+			samples.append(bucket.pop_front())
+			sampled = true
+			if samples.size() >= node_budget:
+				break
+		if not sampled:
+			break
+	return samples
+
+
+func _shuffle_actions(actions: Array) -> void:
+	for index in range(actions.size() - 1, 0, -1):
+		var swap_index := _rng.randi_range(0, index)
+		var action = actions[index]
+		actions[index] = actions[swap_index]
+		actions[swap_index] = action
+
+
 func _choose_beam(controller, actor_id: String, baseline: float, actions: Array[GameAction]) -> GameAction:
 	var best_nodes: Array[Dictionary] = []
 	var best_score := baseline
@@ -110,10 +146,12 @@ func _choose_beam(controller, actor_id: String, baseline: float, actions: Array[
 		for parent in frontier:
 			var branch_actions: Array[GameAction] = ActionGenerator.generate(parent.controller, actor_id)
 			for action in _ordered_actions(branch_actions):
-				var node := _simulate(parent.controller, actor_id, action)
+				var node := _simulate(parent.controller, actor_id, action, float(parent.score))
 				if node.is_empty():
 					break
 				node["first_action"] = parent.first_action
+				if str((node.snapshot as Dictionary).get("winner_id", "")) == actor_id:
+					return node.first_action
 				best_score = _record_best(node, best_score, best_nodes)
 				if bool(node.continues):
 					next_frontier.append(node)
@@ -151,7 +189,7 @@ func _confirmed_immediate_lethal(controller, actor_id: String, snapshot: Diction
 	return lethal
 
 
-func _simulate(controller, actor_id: String, action: GameAction) -> Dictionary:
+func _simulate(controller, actor_id: String, action: GameAction, accumulated_score: float = 0.0) -> Dictionary:
 	if visited_nodes >= node_budget or not (controller is Object) or not controller.has_method("clone_for_simulation"):
 		return {}
 	visited_nodes += 1
@@ -168,7 +206,7 @@ func _simulate(controller, actor_id: String, action: GameAction) -> Dictionary:
 	return {
 		"controller": clone,
 		"first_action": action,
-		"score": BoardEvaluator.score(snapshot, actor_id),
+		"score": accumulated_score + BoardEvaluator.score(snapshot, actor_id),
 		"snapshot": snapshot,
 		"continues": not terminal and action.type != "end_turn" and _is_action_turn(snapshot, actor_id),
 	}
