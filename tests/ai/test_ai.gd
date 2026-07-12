@@ -10,9 +10,13 @@ const MatchController = preload("res://scripts/core/match_controller.gd")
 
 static func run(t) -> void:
 	_test_rich_midgame_actions_are_complete_legal_and_stable(t)
+	_test_manual_adjacent_enemy_anchor_actions(t)
+	_test_action_keys_preserve_delimited_ids_and_typed_payloads(t)
 	_test_generator_rejects_wrong_actor_and_terminal_states(t)
+	_test_malformed_generator_inputs_are_safe(t)
 	_test_simulation_clone_isolated_from_source(t)
 	_test_evaluator_respects_information_boundary(t)
+	_test_evaluator_handles_malformed_snapshots(t)
 
 
 static func _test_rich_midgame_actions_are_complete_legal_and_stable(t) -> void:
@@ -46,6 +50,46 @@ static func _test_rich_midgame_actions_are_complete_legal_and_stable(t) -> void:
 	t.assert_eq(controller.replay_log.to_dict(), before_replay, "generation does not write source replay")
 
 
+static func _test_manual_adjacent_enemy_anchor_actions(t) -> void:
+	var controller := _rich_controller(704)
+	var source := _card(controller.card_definitions, "adjacent-source", "player", "adjacent-source")
+	_place_support(controller, source, 2)
+	var anchor := _card(controller.card_definitions, "enemy-support", "opponent", "enemy-anchor")
+	_place_support(controller, anchor, 1)
+	var actions: Array = ActionGenerator.generate(controller, "player")
+	t.assert_true(
+		_has_action(actions, "activate_ability", "adjacent-source", ["enemy-anchor"]),
+		"manual adjacent-enemy ability includes each accepted enemy anchor"
+	)
+	for action in actions.filter(func(action): return action.source_id == "adjacent-source"):
+		var clone = controller.clone_for_simulation("player")
+		t.assert_true(clone.submit_action(action).accepted, "adjacent anchor action is legal on a clone")
+
+
+static func _test_action_keys_preserve_delimited_ids_and_typed_payloads(t) -> void:
+	var controller := _collision_controller(705)
+	var actions: Array = ActionGenerator.generate(controller, "player")
+	t.assert_true(
+		_has_action(actions, "activate_ability", "a", ["b|c,d"]),
+		"delimited source and target IDs remain distinct"
+	)
+	t.assert_true(
+		_has_action(actions, "activate_ability", "a|b", ["c,d"]),
+		"delimiter collision does not deduplicate another legal action"
+	)
+	var typed_payloads: Array[GameAction] = [
+		GameAction.create("activate_ability", "player", "source", [], {1: "value"}),
+		GameAction.create("activate_ability", "player", "source", [], {"1": "value"}),
+	]
+	var deduplicated := ActionGenerator._deduplicate_and_sort(typed_payloads)
+	t.assert_eq(deduplicated.size(), 2, "typed payload keys remain distinct")
+	t.assert_eq(
+		_action_dicts(deduplicated),
+		_action_dicts(ActionGenerator._deduplicate_and_sort(typed_payloads)),
+		"typed action sort is stable"
+	)
+
+
 static func _test_generator_rejects_wrong_actor_and_terminal_states(t) -> void:
 	var controller := _rich_controller(701)
 	t.assert_eq(ActionGenerator.generate(controller, "opponent").size(), 0, "inactive actor has no actions")
@@ -54,6 +98,19 @@ static func _test_generator_rejects_wrong_actor_and_terminal_states(t) -> void:
 	controller.state.winner_id = "player"
 	t.assert_eq(ActionGenerator.generate(controller, "player").size(), 0, "terminal match has no actions")
 	t.assert_eq(controller.legal_actions("player").size(), 0, "controller exposes no terminal actions")
+
+
+static func _test_malformed_generator_inputs_are_safe(t) -> void:
+	t.assert_eq(ActionGenerator.generate(null, "player"), [], "null controller has no actions")
+	t.assert_eq(ActionGenerator.generate({}, "player"), [], "non-controller has no actions")
+	var missing_state := MatchController.new()
+	t.assert_eq(ActionGenerator.generate(missing_state, "player"), [], "missing state has no actions")
+	var malformed_players := _rich_controller(706)
+	malformed_players.state.players = {"player": null}
+	t.assert_eq(ActionGenerator.generate(malformed_players, "player"), [], "malformed players have no actions")
+	var malformed_hand := _rich_controller(707)
+	malformed_hand.state.players.player.hand = [null, {}]
+	t.assert_eq(ActionGenerator.generate(malformed_hand, "player"), [], "malformed card entries have no actions")
 
 
 static func _test_simulation_clone_isolated_from_source(t) -> void:
@@ -95,6 +152,25 @@ static func _test_evaluator_respects_information_boundary(t) -> void:
 	t.assert_eq(BoardEvaluator.score(balanced, "player"), -BoardEvaluator.score(balanced, "opponent"), "symmetric visible state is antisymmetric")
 
 
+static func _test_evaluator_handles_malformed_snapshots(t) -> void:
+	t.assert_eq(BoardEvaluator.score(null, "player"), 0.0, "null snapshot is neutral")
+	t.assert_eq(BoardEvaluator.score([], "player"), 0.0, "non-dictionary snapshot is neutral")
+	t.assert_eq(BoardEvaluator.score({"players": []}, "player"), 0.0, "non-dictionary players are neutral")
+	t.assert_eq(BoardEvaluator.score({
+		"players": {"player": [], "opponent": {}},
+		"frontline": "not-an-array",
+	}, "player"), 0.0, "non-dictionary player snapshot is neutral")
+	var partial := BoardEvaluator.score({
+		"players": {
+			"player": {"hq_defense": "wrong", "hand": "wrong", "credit": 3, "support_line": "wrong"},
+			"opponent": {"hq_defense": 4, "hand_count": "wrong", "credit": "wrong", "support_line": []},
+		},
+		"frontline": [{"category": "Unit", "attack": "wrong", "defense": 2}],
+		"frontline_controller_id": "player",
+	}, "player")
+	t.assert_eq(partial, -19.25, "malformed nested values receive a stable partial score")
+
+
 static func _rich_controller(seed: int) -> MatchController:
 	var definitions := {
 		"p-hq": _definition("p-hq", "Headquarters", 0, 20),
@@ -105,6 +181,7 @@ static func _rich_controller(seed: int) -> MatchController:
 		"mover": _definition("mover", "Unit", 2, 4, 1, 1),
 		"attacker": _definition("attacker", "Unit", 3, 5, 1, 1),
 		"manual-source": _definition("manual-source", "Unit", 1, 5, 1, 0, [_ability("manual-buff", "manual", {"selector": "friendly_unit", "count": 1}, [{"type": "buff", "attack": 1, "defense": 0}])]),
+		"adjacent-source": _definition("adjacent-source", "Unit", 1, 5, 1, 0, [_ability("adjacent-hit", "manual", {"selector": "adjacent_enemy_units"}, [{"type": "damage", "amount": 1}])]),
 		"enemy-support": _definition("enemy-support", "Unit", 1, 5, 1, 1),
 	}
 	var controller := MatchController.create(definitions, ["p-hq"], ["o-hq"], seed)
@@ -137,6 +214,26 @@ static func _rich_controller(seed: int) -> MatchController:
 	_place_support(controller, enemy, 0)
 	_ready(controller, enemy)
 	_put_hand(controller, _card(definitions, "enemy-support", "opponent", "enemy-hidden"))
+	return controller
+
+
+static func _collision_controller(seed: int) -> MatchController:
+	var definitions := {
+		"p-hq": _definition("p-hq", "Headquarters", 0, 20),
+		"o-hq": _definition("o-hq", "Headquarters", 0, 20),
+		"manual-target": _definition("manual-target", "Unit", 1, 5, 0, 0, [_ability("same", "manual", {"selector": "friendly_unit", "count": 1}, [{"type": "buff", "attack": 1, "defense": 0}])]),
+		"plain": _definition("plain", "Unit", 1, 5),
+	}
+	var controller := MatchController.create(definitions, ["p-hq"], ["o-hq"], seed)
+	controller.state.phase = "action"
+	controller.state.active_player_id = "player"
+	controller.state.starting_player_id = "player"
+	controller.state.turn = 5
+	controller.state.players.player.credit = 10
+	_place_support(controller, _card(definitions, "manual-target", "player", "a"), 0)
+	_place_support(controller, _card(definitions, "manual-target", "player", "a|b"), 1)
+	_place_support(controller, _card(definitions, "plain", "player", "b|c,d"), 2)
+	_place_support(controller, _card(definitions, "plain", "player", "c,d"), 3)
 	return controller
 
 
