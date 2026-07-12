@@ -20,6 +20,7 @@ expect_rejected() {
 
 sh "$validator"
 expect_rejected trigger 'branches: \[main\]' 'branches: [develop]'
+expect_rejected build_pages_permission 'pages: read' 'pages: none'
 expect_rejected editor_hash '0b1a6c54c2c619c12e169fe9241edda4b81080b519451cec2984bf0d2c6cb73c' 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 expect_rejected deploy_action 'actions/deploy-pages@v4' 'actions/deploy-pages@v3'
 expect_rejected artifact 'test -s builds/web/index.wasm' 'test -f builds/web/*.wasm'

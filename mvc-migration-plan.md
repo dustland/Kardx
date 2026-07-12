@@ -1,8 +1,8 @@
-# MVC Migration Plan for OpenCards
+# Archived Unity MVC Migration Plan
 
-> **Status: Completed.** The codebase now follows the structure below. This document is kept as a historical reference and onboarding map.
+> **Archived historical document.** This plan describes the retired Unity codebase and is not current implementation or onboarding guidance. OpenCards now uses Godot 4.7; see the root `README.md` for current development instructions and `Docs/README.md` for documentation status.
 
-## Current Folder Structure
+## Historical Folder Structure
 
 ```
 /Assets/Scripts/
@@ -26,7 +26,7 @@
 
 ## Namespace Map
 
-| Legacy | Current |
+| Earlier name | Migrated Unity name |
 | --- | --- |
 | `OpenCards.Core` | `OpenCards.Models` |
 | `OpenCards.UI` | `OpenCards.Views` |
@@ -41,17 +41,13 @@ The original plan assumed separate `Models/Players` and `Models/Game` folders. T
 
 Legacy per-action drag handlers (`UnitDeployDragHandler`, `OrderDeployDragHandler`, `AbilityDragHandler`) were replaced by a single `CardDragController` with mode resolution in `CardDragCapability`.
 
-## Key Post-Migration Conventions
+## Historical Post-Migration Conventions
 
 1. **Zone changes** go through `CardCollection.AddCard` / `RemoveCard`, including `Battlefield` slot operations.
 2. **Combat validation** lives in `CombatRules`; `MatchManager` adds credit checks and orchestrates resolution.
 3. **UI updates** subscribe to `MatchManager` events; views do not mutate model state directly.
 4. **Card views** are tracked by `ViewRegistry` and created through `ViewManager`.
 
-## Testing Checklist
+## Historical Testing Notes
 
-After structural changes:
-
-1. Fix missing references or imports
-2. Compile in Unity
-3. Playtest deploy, move, attack, order play, and countermeasure flows in `BattleScene`
+The former Unity validation checklist is obsolete. Use the Godot validation and export commands in the root `README.md`.

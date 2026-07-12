@@ -49,7 +49,8 @@ jobs = workflow["jobs"]
 fail_validation("jobs must be exactly build and deploy") unless jobs.is_a?(Hash) && jobs.keys.sort == %w[build deploy]
 build = jobs["build"]
 deploy = jobs["deploy"]
-fail_validation("build permissions must be exactly contents: read") unless build["permissions"] == { "contents" => "read" }
+expected_build_permissions = { "contents" => "read", "pages" => "read" }
+fail_validation("build permissions must be contents: read and pages: read") unless build["permissions"] == expected_build_permissions
 expected_deploy_permissions = { "pages" => "write", "id-token" => "write" }
 fail_validation("deploy permissions must be pages: write and id-token: write") unless deploy["permissions"] == expected_deploy_permissions
 fail_validation("deploy must need build") unless deploy["needs"] == "build"
