@@ -8,7 +8,7 @@ const GameAction = preload("res://scripts/core/game_action.gd")
 const MatchController = preload("res://scripts/core/match_controller.gd")
 const ReplayLog = preload("res://scripts/core/replay_log.gd")
 
-const MAX_ACTIONS_PER_TURN := 2
+const MAX_PROGRESSING_ACTIONS_PER_TURN := 64
 const SEARCH_METRIC_FIELDS := ["action_lists", "candidate_actions", "simulation_attempts", "rejected_simulations"]
 
 
@@ -43,15 +43,11 @@ static func run_match(seed: int, player_difficulty: String, opponent_difficulty:
 		"opponent": AIPlayer.create(opponent_difficulty, seed ^ 0x2468ace0),
 	}
 	var current_turn := controller.state.turn
-	var hashes_this_turn := {controller.state_hash(): true}
+	var hashes_this_turn := {_progress_state_hash(controller): true}
 	var actions_this_turn := 0
 	var force_end_turn := false
-	var action_limit := maxi(max_turns, 1) * MAX_ACTIONS_PER_TURN
 
 	while controller.state.phase == "action":
-		if result.action_count >= action_limit:
-			result.final_reason = "action_limit"
-			break
 		var actor_id: String = controller.state.active_player_id
 		var action: GameAction = null
 		if force_end_turn:
@@ -75,6 +71,7 @@ static func run_match(seed: int, player_difficulty: String, opponent_difficulty:
 
 		if action.type == "end_turn" and controller.state.turn >= max_turns:
 			result.final_reason = "turn_limit"
+			result.diagnostics.append(_limit_diagnostic(result, "turn_limit", {"turn": controller.state.turn}))
 			break
 		if not _submit(controller, action, result):
 			controller.abort_invalid("ai_action_rejected", result.diagnostics.back())
@@ -85,19 +82,25 @@ static func run_match(seed: int, player_difficulty: String, opponent_difficulty:
 
 		if controller.state.turn != current_turn:
 			current_turn = controller.state.turn
-			hashes_this_turn = {controller.state_hash(): true}
+			hashes_this_turn = {_progress_state_hash(controller): true}
 			actions_this_turn = 0
 			continue
 		actions_this_turn += 1
-		var current_hash := controller.state_hash()
+		var current_hash := _progress_state_hash(controller)
 		if hashes_this_turn.has(current_hash):
+			result.diagnostics.append(_limit_diagnostic(result, "no_progress_limit", {
+				"turn": current_turn,
+				"state_hash": current_hash,
+			}))
 			force_end_turn = true
-			result.diagnostics.append({"code": "repeated_state_hash", "turn": current_turn, "state_hash": current_hash})
 		else:
 			hashes_this_turn[current_hash] = true
-		if actions_this_turn >= MAX_ACTIONS_PER_TURN:
+		if actions_this_turn >= MAX_PROGRESSING_ACTIONS_PER_TURN:
+			result.diagnostics.append(_limit_diagnostic(result, "action_limit", {
+				"turn": current_turn,
+				"actions_this_turn": actions_this_turn,
+			}))
 			force_end_turn = true
-			result.diagnostics.append({"code": "action_guard", "turn": current_turn})
 
 	if result.final_reason.is_empty():
 		result.final_reason = "complete" if controller.state.phase == "complete" else "invalid"
@@ -120,6 +123,7 @@ static func _new_result(
 		"illegal_actions": 0,
 		"state_hash": "",
 		"replay": {},
+		"replay_path": "",
 		"replay_integrity_hash": "",
 		"replay_terminal_hash": "",
 		"replay_matches": false,
@@ -212,6 +216,19 @@ static func _empty_search_metrics() -> Dictionary:
 	return metrics
 
 
+static func _progress_state_hash(controller: MatchController) -> String:
+	var snapshot: Dictionary = controller.state.snapshot_for("system")
+	snapshot.erase("sequence")
+	return JSON.stringify(snapshot).sha256_text()
+
+
+static func _limit_diagnostic(result: Dictionary, code: String, details: Dictionary) -> Dictionary:
+	var diagnostic := details.duplicate(true)
+	diagnostic["code"] = code
+	diagnostic["replay_path"] = _replay_path(result)
+	return diagnostic
+
+
 static func _finish(controller: MatchController, result: Dictionary) -> Dictionary:
 	result.completed = controller.state.phase == "complete"
 	result.phase = controller.state.phase
@@ -222,12 +239,37 @@ static func _finish(controller: MatchController, result: Dictionary) -> Dictiona
 	if not controller.invalid_diagnostics.is_empty():
 		result.diagnostics.append({"code": "controller_invalid", "details": controller.invalid_diagnostics.duplicate(true)})
 	var replay_data: Dictionary = controller.replay_log.to_dict()
+	result.replay_path = _persist_replay(result, replay_data)
 	var replayed = ReplayLog.from_dict(replay_data).replay(controller.card_definitions)
 	result.replay = replay_data
 	result.replay_integrity_hash = str(replay_data.get("integrity_hash", ""))
 	result.replay_terminal_hash = replayed.state_hash()
 	result.replay_matches = replayed.state_hash() == result.state_hash and replayed.state.winner_id == controller.state.winner_id
 	return result
+
+
+static func _replay_path(result: Dictionary) -> String:
+	return "user://ai_match_replays/seed-%d-%s-vs-%s-turns-%d.json" % [
+		int(result.get("seed", 0)),
+		str(result.get("player_difficulty", "standard")),
+		str(result.get("opponent_difficulty", "standard")),
+		int(result.get("max_turns", 0)),
+	]
+
+
+static func _persist_replay(result: Dictionary, replay_data: Dictionary) -> String:
+	var replay_path := _replay_path(result)
+	var directory_error := DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(replay_path.get_base_dir()))
+	if directory_error != OK:
+		result.diagnostics.append({"code": "replay_persist_failed", "replay_path": replay_path, "error": directory_error})
+		return replay_path
+	var file := FileAccess.open(replay_path, FileAccess.WRITE)
+	if file == null:
+		result.diagnostics.append({"code": "replay_persist_failed", "replay_path": replay_path, "error": FileAccess.get_open_error()})
+		return replay_path
+	file.store_string(JSON.stringify(replay_data))
+	file.close()
+	return replay_path
 
 
 static func _action_data(action: GameAction) -> Dictionary:

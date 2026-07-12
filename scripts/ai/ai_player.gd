@@ -204,6 +204,7 @@ func _confirmed_immediate_lethal(controller, actor_id: String, snapshot: Diction
 func _simulate(controller, actor_id: String, action: GameAction, accumulated_score: float = 0.0) -> Dictionary:
 	if visited_nodes >= node_budget or not (controller is Object) or not controller.has_method("clone_for_simulation"):
 		return {}
+	visited_nodes += 1
 	search_metrics["simulation_attempts"] = int(search_metrics.get("simulation_attempts", 0)) + 1
 	var workspace = _validation_workspace_for(controller, actor_id)
 	if not (workspace is Object) or not workspace.has_method("simulate_action_clone"):
@@ -213,7 +214,6 @@ func _simulate(controller, actor_id: String, action: GameAction, accumulated_sco
 	if not (clone is Object):
 		search_metrics["rejected_simulations"] = int(search_metrics.get("rejected_simulations", 0)) + 1
 		return {}
-	visited_nodes += 1
 	var snapshot := _snapshot_for(clone, actor_id)
 	if snapshot.is_empty():
 		return {}

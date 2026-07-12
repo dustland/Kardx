@@ -6,6 +6,8 @@ static func run(t) -> void:
 	_test_difficulty_paths_and_reproducibility(t)
 	_test_runner_reports_search_profile(t)
 	_test_search_skips_rejected_candidates(t)
+	_test_turn_limit_allows_legal_multi_action_progress(t)
+	_test_limit_diagnostics_name_replay_artifacts(t)
 
 
 static func _test_standard_fixtures_complete_and_replay(t) -> void:
@@ -70,10 +72,36 @@ static func _test_search_skips_rejected_candidates(t) -> void:
 			"%s searches past rejected generated candidates" % actor_id
 		)
 		t.assert_eq(
-			int(metrics.get("simulation_attempts", 0)) - int(metrics.get("rejected_simulations", 0)),
+			int(metrics.get("simulation_attempts", 0)),
 			int(result.total_visited_nodes.get(actor_id, -1)),
-			"%s counts only accepted simulations against its node budget" % actor_id
+			"%s counts rejected and accepted simulations against its node budget" % actor_id
 		)
+
+
+static func _test_turn_limit_allows_legal_multi_action_progress(t) -> void:
+	var runner_script = load("res://scripts/ai/ai_match_runner.gd")
+	if runner_script == null:
+		return
+	var max_turns := 3
+	var result: Dictionary = runner_script.run_match(42, "easy", "easy", max_turns)
+	t.assert_eq(result.final_reason, "turn_limit", "short match stops at the turn limit instead of the action limit")
+	t.assert_true(
+		int(result.action_count) > max_turns * 2,
+		"legal setup and multi-action turns exceed the retired two-actions-per-turn global limit"
+	)
+	t.assert_true(not bool(result.completed), "short turn-limited match is not reported as complete")
+
+
+static func _test_limit_diagnostics_name_replay_artifacts(t) -> void:
+	var runner_script = load("res://scripts/ai/ai_match_runner.gd")
+	if runner_script == null:
+		return
+	var result: Dictionary = runner_script.run_match(7, "easy", "easy", 1)
+	for code in ["turn_limit", "action_limit", "no_progress_limit"]:
+		var diagnostic: Dictionary = runner_script._limit_diagnostic(result, code, {})
+		var replay_path := str(diagnostic.get("replay_path", ""))
+		t.assert_true(not replay_path.is_empty(), "%s diagnostic names its replay artifact" % code)
+		t.assert_true(FileAccess.file_exists(replay_path), "%s replay artifact is persisted" % code)
 
 
 static func _run_match_with_progress(runner_script, seed: int, player_difficulty: String, opponent_difficulty: String) -> Dictionary:

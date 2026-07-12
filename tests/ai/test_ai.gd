@@ -26,6 +26,7 @@ static func run(t) -> void:
 	_test_raw_search_candidates_preserve_legal_actions(t)
 	_test_simulation_preflight_matches_clone_submission(t)
 	_test_simulation_workspace_returns_matching_child_clone(t)
+	_test_rejected_simulations_consume_configured_budget(t)
 	_test_rich_midgame_actions_are_complete_legal_and_stable(t)
 	_test_manual_adjacent_enemy_anchor_actions(t)
 	_test_action_keys_preserve_delimited_ids_and_typed_payloads(t)
@@ -269,6 +270,26 @@ static func _test_simulation_workspace_returns_matching_child_clone(t) -> void:
 		if actual != null:
 			t.assert_eq(actual.state_hash(), expected.state_hash(), "simulation workspace child state matches cloned submission")
 		t.assert_eq(workspace.state_hash(), before_hash, "simulation workspace restores after producing a child clone")
+
+
+static func _test_rejected_simulations_consume_configured_budget(t) -> void:
+	var controller := _empty_action_controller(733)
+	var rejected_action := GameAction.create(
+		"deploy_unit", "player", "missing", [], {"support_slot": 0}, controller.state.sequence
+	)
+	for difficulty_name in ["easy", "standard", "hard"]:
+		var ai := AIPlayer.create(difficulty_name, 733)
+		for _attempt in range(ai.node_budget + 1):
+			ai._simulate(controller, "player", rejected_action)
+		t.assert_eq(ai.visited_nodes, ai.node_budget, "%s rejected candidates consume the strict node budget" % difficulty_name)
+		t.assert_eq(
+			int(ai.search_metrics.get("simulation_attempts", -1)), ai.node_budget,
+			"%s rejected candidates consume the strict attempt budget" % difficulty_name
+		)
+		t.assert_eq(
+			int(ai.search_metrics.get("rejected_simulations", -1)), ai.node_budget,
+			"%s records every budgeted rejection" % difficulty_name
+		)
 
 
 static func _test_rich_midgame_actions_are_complete_legal_and_stable(t) -> void:
