@@ -11,6 +11,7 @@ const AIPlayer = preload("res://scripts/ai/ai_player.gd")
 
 static func run(t) -> void:
 	_test_coach_priority_and_exact_copy(t)
+	_test_milestone_objective_progression(t)
 	_test_real_first_turn_credit_fixture(t)
 	_test_real_active_countermeasure_is_legal(t)
 	_test_source_reasons(t)
@@ -138,11 +139,6 @@ static func _test_match_coach_and_card_states(t) -> void:
 	view.show_rejection("stale_action", "That action is no longer legal.")
 	t.assert_eq(view.get_node("%CoachObjective").text, "That action is no longer legal.", "rejection takes coach precedence")
 	t.assert_eq((view.get_node("%CoachObjective") as Control).size.y, objective_height, "rejection does not resize coach strip")
-	view.set_legal_actions([_action("deploy_unit", "one-cost", [], {"support_slot": 0}), _action("move_unit", "support-unit", [], {"zone": "frontline", "slot": 0}), _action("end_turn")])
-	view._on_cancel_pressed()
-	view.set_onboarding_state({"deployed_unit": true, "moved_to_frontline": true, "completed_attack": true})
-	t.assert_eq(view.get_node("%CoachObjective").text, "Select a highlighted card to deploy. You have 1 Credit.", "milestones do not hide currently possible actions")
-	t.assert_true(not view._coach_state.end_turn_only, "milestones never make End Turn appear sole while other actions exist")
 	view.queue_free()
 	await Engine.get_main_loop().process_frame
 
@@ -353,6 +349,42 @@ static func _test_coach_priority_and_exact_copy(t) -> void:
 	_assert_coach(t, snapshot, [end], {},
 		"No other actions are available. End the turn to gain another Credit slot.", [], "end_turn")
 	_assert_coach(t, snapshot, [], {}, "No legal action is available.", [], "none")
+
+
+static func _test_milestone_objective_progression(t) -> void:
+	var snapshot := _snapshot()
+	var actions := [
+		_action("deploy_unit", "one-cost", [], {"support_slot": 0}),
+		_action("move_unit", "support-unit", [], {"zone": "frontline", "slot": 0}),
+		_action("attack_unit", "front-unit", ["enemy-unit"]),
+		_action("end_turn"),
+	]
+	var onboarding := OnboardingStore.defaults()
+	var expected_sources := ["front-unit", "one-cost", "support-unit"]
+	var result := MatchCoachModel.derive(snapshot, actions, {}, onboarding)
+	var expected_reasons: Dictionary = result.source_reasons.duplicate(true)
+	t.assert_eq(result.next_kind, "deploy", "first incomplete milestone teaches deploy")
+	t.assert_eq(result.legal_source_ids, expected_sources, "deploy teaching keeps every legal source")
+	t.assert_true(not result.end_turn_only, "combined legal fixture is never End-Turn-only")
+	onboarding.deployed_unit = true
+	result = MatchCoachModel.derive(snapshot, actions, {}, onboarding)
+	t.assert_eq(result.next_kind, "move", "completed deploy advances objective to move")
+	t.assert_eq(result.legal_source_ids, expected_sources, "move teaching keeps every legal source")
+	t.assert_eq(result.source_reasons, expected_reasons, "move teaching keeps complete-list source reasons")
+	t.assert_true(not result.end_turn_only, "move teaching keeps complete-list End Turn semantics")
+	onboarding.moved_to_frontline = true
+	result = MatchCoachModel.derive(snapshot, actions, {}, onboarding)
+	t.assert_eq(result.next_kind, "attack", "completed move advances objective to attack")
+	t.assert_eq(result.legal_source_ids, expected_sources, "attack teaching keeps every legal source")
+	t.assert_eq(result.source_reasons, expected_reasons, "attack teaching keeps complete-list source reasons")
+	t.assert_true(not result.end_turn_only, "attack teaching keeps complete-list End Turn semantics")
+	onboarding.completed_attack = true
+	result = MatchCoachModel.derive(snapshot, actions, {}, onboarding)
+	t.assert_eq(result.next_kind, "deploy", "completed milestones fall back to truthful normal priority")
+	t.assert_eq(result.objective, "Select a highlighted card to deploy. You have 1 Credit.", "fallback objective describes an available action")
+	t.assert_eq(result.legal_source_ids, expected_sources, "fallback keeps every legal source")
+	t.assert_eq(result.source_reasons, expected_reasons, "fallback keeps complete-list source reasons")
+	t.assert_true(not result.end_turn_only, "fallback keeps complete-list End Turn semantics")
 
 
 static func _test_real_first_turn_credit_fixture(t) -> void:

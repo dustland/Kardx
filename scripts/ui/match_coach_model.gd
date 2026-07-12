@@ -47,7 +47,7 @@ static func derive(snapshot: Dictionary, legal_actions: Array, selection: Dictio
 			result.next_kind = "target"
 			return result
 
-	var next_type := _highest_priority_type(legal_actions)
+	var next_type := _objective_priority_type(legal_actions, onboarding)
 	match next_type:
 		"deploy_unit":
 			var credit := int(_player(snapshot).get("credit", 0))
@@ -161,6 +161,21 @@ static func _highest_priority_type(actions: Array) -> String:
 		if _action_type(action) == "end_turn":
 			return "end_turn"
 	return ""
+
+
+static func _objective_priority_type(actions: Array, onboarding: Dictionary) -> String:
+	var teaching_actions := actions.filter(func(action: Variant) -> bool:
+		match _action_type(action):
+			"deploy_unit":
+				return not bool(onboarding.get("deployed_unit", false))
+			"move_unit":
+				return not bool(onboarding.get("moved_to_frontline", false))
+			"attack_unit", "attack_hq":
+				return not bool(onboarding.get("completed_attack", false))
+		return false
+	)
+	var teaching_type := _highest_priority_type(teaching_actions)
+	return teaching_type if not teaching_type.is_empty() else _highest_priority_type(actions)
 
 
 static func _action_type(action: Variant) -> String:
