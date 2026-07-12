@@ -6,6 +6,7 @@ const OnboardingStore = preload("res://scripts/ui/onboarding_store.gd")
 const ContentCatalog = preload("res://scripts/content/content_catalog.gd")
 const DeckBuilderScene = preload("res://scenes/ui/deck_builder_view.tscn")
 const MatchViewScene = preload("res://scenes/ui/match_view.tscn")
+const AIPlayer = preload("res://scripts/ai/ai_player.gd")
 
 
 static func run(t) -> void:
@@ -20,9 +21,11 @@ static func run(t) -> void:
 	await _test_deck_builder_edited_validation_and_restoration(t)
 	await _test_deck_builder_readiness_containment(t)
 	await _test_match_coach_and_card_states(t)
+	await _test_rejection_refresh_ordering(t)
+	await _test_end_turn_semantic_states(t)
 	await _test_unavailable_card_does_not_submit(t)
 	await _test_target_highlights_preserve_geometry(t)
-	_test_accepted_action_milestones(t)
+	await _test_real_main_milestone_submissions(t)
 
 
 static func _test_deck_builder_starter_readiness(t) -> void:
@@ -135,10 +138,64 @@ static func _test_match_coach_and_card_states(t) -> void:
 	view.show_rejection("stale_action", "That action is no longer legal.")
 	t.assert_eq(view.get_node("%CoachObjective").text, "That action is no longer legal.", "rejection takes coach precedence")
 	t.assert_eq((view.get_node("%CoachObjective") as Control).size.y, objective_height, "rejection does not resize coach strip")
-	view.model.cancel()
 	view.set_legal_actions([_action("deploy_unit", "one-cost", [], {"support_slot": 0}), _action("move_unit", "support-unit", [], {"zone": "frontline", "slot": 0}), _action("end_turn")])
-	view.set_onboarding_state({"deployed_unit": true, "moved_to_frontline": false, "completed_attack": false})
-	t.assert_eq(view.get_node("%CoachObjective").text, "Select a ready unit, then choose a highlighted Frontline slot.", "completed deploy prompt yields to unfinished move lesson")
+	view._on_cancel_pressed()
+	view.set_onboarding_state({"deployed_unit": true, "moved_to_frontline": true, "completed_attack": true})
+	t.assert_eq(view.get_node("%CoachObjective").text, "Select a highlighted card to deploy. You have 1 Credit.", "milestones do not hide currently possible actions")
+	t.assert_true(not view._coach_state.end_turn_only, "milestones never make End Turn appear sole while other actions exist")
+	view.queue_free()
+	await Engine.get_main_loop().process_frame
+
+
+static func _test_rejection_refresh_ordering(t) -> void:
+	var view = MatchViewScene.instantiate()
+	Engine.get_main_loop().root.add_child(view)
+	var snapshot := _snapshot().merged({"sequence": 12}, true)
+	var actions := [_action("deploy_unit", "one-cost", [], {"support_slot": 0}), _action("end_turn")]
+	view.render_snapshot(snapshot)
+	view.set_legal_actions(actions)
+	view.show_rejection("stale_action", "State changed")
+	view.set_legal_actions(actions)
+	t.assert_eq(view.get_node("%CoachObjective").text, "State changed", "legal refresh does not erase rejection")
+	view.render_snapshot(snapshot)
+	t.assert_eq(view.get_node("%CoachObjective").text, "State changed", "same-sequence rerender does not erase rejection")
+	var advanced := snapshot.duplicate(true)
+	advanced.sequence = 13
+	view.render_snapshot(advanced)
+	t.assert_eq(view.get_node("%CoachObjective").text, "Select a highlighted card to deploy. You have 1 Credit.", "authoritative sequence advance clears rejection")
+	t.assert_eq(view.get_node("%StatusLabel").text, "", "authoritative sequence advance clears rejection status")
+	view.show_rejection("stale_action", "State changed")
+	view._on_card_pressed("one-cost")
+	t.assert_eq(view.get_node("%CoachObjective").text, "Choose a highlighted Support Line slot.", "selection change clears rejection")
+	view.show_rejection("stale_action", "State changed")
+	view._on_cancel_pressed()
+	t.assert_eq(view.get_node("%CoachObjective").text, "Select a highlighted card to deploy. You have 1 Credit.", "cancellation clears rejection")
+	view.queue_free()
+	await Engine.get_main_loop().process_frame
+
+
+static func _test_end_turn_semantic_states(t) -> void:
+	var view = MatchViewScene.instantiate()
+	Engine.get_main_loop().root.add_child(view)
+	view.render_snapshot(_snapshot())
+	var button := view.get_node("%EndTurnButton") as Button
+	var end := _action("end_turn")
+	var deploy := _action("deploy_unit", "one-cost", [], {"support_slot": 0})
+	view.set_legal_actions([])
+	t.assert_true(button.disabled, "empty legal list disables End Turn")
+	t.assert_eq(button.get_meta("action_state", ""), "disabled", "empty legal list has disabled semantics")
+	view.set_legal_actions([deploy])
+	t.assert_true(button.disabled, "non-End-Turn legal list disables End Turn")
+	view.set_legal_actions([deploy, end])
+	t.assert_true(not button.disabled, "exact End Turn candidate enables command")
+	t.assert_eq(button.get_meta("action_state", ""), "normal", "mixed legal actions keep normal End Turn emphasis")
+	view.set_legal_actions([end, end])
+	t.assert_true(not button.disabled, "End Turn remains enabled whenever an exact candidate exists")
+	t.assert_eq(button.get_meta("action_state", ""), "normal", "duplicate candidates are not sole-action emphasis")
+	view.set_legal_actions([end])
+	t.assert_true(not button.disabled, "sole End Turn remains enabled")
+	t.assert_eq(button.get_meta("action_state", ""), "strong", "sole End Turn receives strong semantic emphasis")
+	t.assert_true(button.get_theme_stylebox("normal").get_border_width(SIDE_LEFT) >= 3, "strong End Turn state has visible border emphasis")
 	view.queue_free()
 	await Engine.get_main_loop().process_frame
 
@@ -174,13 +231,90 @@ static func _test_target_highlights_preserve_geometry(t) -> void:
 	await Engine.get_main_loop().process_frame
 
 
-static func _test_accepted_action_milestones(t) -> void:
-	t.assert_eq(Main.onboarding_milestone_for(_action("deploy_unit", "unit")), "deployed_unit", "accepted deploy maps to deploy milestone")
-	t.assert_eq(Main.onboarding_milestone_for(_action("move_unit", "unit", [], {"zone": "frontline", "slot": 0})), "moved_to_frontline", "frontline move maps to move milestone")
-	t.assert_eq(Main.onboarding_milestone_for(_action("move_unit", "unit", [], {"zone": "support", "slot": 0})), "", "support move does not map to milestone")
-	t.assert_eq(Main.onboarding_milestone_for(_action("attack_unit", "unit", ["enemy"])), "completed_attack", "unit attack maps to attack milestone")
-	t.assert_eq(Main.onboarding_milestone_for(_action("attack_hq", "unit", ["hq"])), "completed_attack", "HQ attack maps to attack milestone")
-	t.assert_eq(Main.onboarding_milestone_for(_action("end_turn")), "", "unrelated action has no milestone")
+static func _test_real_main_milestone_submissions(t) -> void:
+	var path := "user://test-onboarding-main-actions.json"
+	_cleanup(path)
+	var store = OnboardingStore.new(path)
+
+	var deploy_controller := _real_action_controller("player")
+	var deploy_action = _first_legal(deploy_controller, "player", "deploy_unit")
+	t.assert_true(deploy_action != null, "real controller exposes accepted deploy candidate")
+	var deploy_runtime := await _submit_through_main(deploy_controller, deploy_action, store)
+	t.assert_true(deploy_runtime.controller.state.players.player.support_line.any(func(card) -> bool: return card != null), "Main submits deploy through real controller")
+	t.assert_true(store.load().deployed_unit, "accepted Main deploy records milestone")
+	await _free_runtime(deploy_runtime)
+
+	var move_controller := _real_action_controller("player")
+	var moving = move_controller.state.players.player.hand.pop_front()
+	moving.zone = "support_line"
+	moving.slot = 0
+	moving.deployed_turn = move_controller.state.turn - 1
+	moving.operations_used = 0
+	move_controller.state.players.player.support_line[0] = moving
+	var move_action = _first_legal(move_controller, "player", "move_unit")
+	t.assert_true(move_action != null, "real controller exposes accepted Frontline move candidate")
+	if move_action != null:
+		var move_runtime := await _submit_through_main(move_controller, move_action, store)
+		t.assert_true(store.load().moved_to_frontline, "accepted Main Frontline move records milestone")
+		await _free_runtime(move_runtime)
+
+	var attack_controller := _real_action_controller("player")
+	var attacker = attack_controller.state.players.player.hand.pop_front()
+	attacker.zone = "frontline"
+	attacker.slot = 0
+	attacker.deployed_turn = attack_controller.state.turn - 1
+	attacker.operations_used = 0
+	attack_controller.state.frontline[0] = attacker
+	attack_controller.state.frontline_controller_id = "player"
+	var attack_action = _first_legal(attack_controller, "player", "attack_hq")
+	t.assert_true(attack_action != null, "real controller exposes accepted HQ attack candidate")
+	if attack_action != null:
+		var attack_runtime := await _submit_through_main(attack_controller, attack_action, store)
+		t.assert_true(store.load().completed_attack, "accepted Main attack records milestone")
+		await _free_runtime(attack_runtime)
+
+	var rejected_path := "user://test-onboarding-main-rejected.json"
+	_cleanup(rejected_path)
+	var rejected_store = OnboardingStore.new(rejected_path)
+	var rejected_controller := _real_action_controller("player")
+	var stale = _first_legal(rejected_controller, "player", "deploy_unit")
+	stale.expected_sequence += 99
+	var rejected_runtime := await _submit_through_main(rejected_controller, stale, rejected_store)
+	t.assert_eq(rejected_store.load(), OnboardingStore.defaults(), "rejected player submission records no milestone")
+	t.assert_eq(rejected_runtime.main.current_screen.get_node("%CoachObjective").text, "State changed", "rejection survives Main snapshot/legal/unlock refresh ordering")
+	var fresh_deploy = _first_legal(rejected_controller, "player", "deploy_unit")
+	rejected_runtime.main.submit_player_action(fresh_deploy)
+	for _frame in range(12):
+		await Engine.get_main_loop().process_frame
+		if not rejected_runtime.main._match_submission_active:
+			break
+	t.assert_true(rejected_runtime.main.current_screen.get_node("%CoachObjective").text != "State changed", "accepted state advance clears orchestrated rejection")
+	await _free_runtime(rejected_runtime)
+
+	var ai_path := "user://test-onboarding-main-ai.json"
+	_cleanup(ai_path)
+	var ai_store = OnboardingStore.new(ai_path)
+	var ai_controller := _real_action_controller("opponent")
+	var ai_runtime := _main_runtime(ai_controller, ai_store)
+	ai_runtime.main.ai = AIPlayer.create("easy", 811)
+	ai_runtime.main._match_generation = 1
+	await ai_runtime.main._drive_ai_turn(1)
+	t.assert_eq(ai_store.load(), OnboardingStore.defaults(), "accepted AI actions record no player milestones")
+	await _free_runtime(ai_runtime)
+
+	var reloaded = OnboardingStore.new(path)
+	t.assert_true(reloaded.load().deployed_unit and reloaded.load().moved_to_frontline and reloaded.load().completed_attack, "all accepted milestones survive store reload")
+	var rematch_controller := _real_action_controller("player")
+	var rematch_runtime := _main_runtime(rematch_controller, reloaded)
+	rematch_runtime.main.catalog = ContentCatalog.load_from_paths("res://data/cards.json", "res://data/abilities.json", "res://data/decks.json", "res://data/rules.json")
+	rematch_runtime.main.selected_player_deck = rematch_runtime.main.catalog.decks_by_id["us-starter"].duplicate(true)
+	rematch_runtime.main.difficulty = "easy"
+	rematch_runtime.main._on_rematch_requested()
+	t.assert_true(reloaded.load().deployed_unit and reloaded.load().moved_to_frontline and reloaded.load().completed_attack, "real rematch initialization preserves onboarding milestones")
+	await _free_runtime(rematch_runtime)
+	_cleanup(path)
+	_cleanup(rejected_path)
+	_cleanup(ai_path)
 
 
 static func _test_coach_priority_and_exact_copy(t) -> void:
@@ -393,6 +527,58 @@ static func _start_player_turn(controller: MatchController) -> void:
 		controller.submit_action(action)
 	if controller.state.active_player_id != "player":
 		controller.submit_action(_action("end_turn", "", [], {}, "opponent"))
+
+
+static func _real_action_controller(active_player_id: String) -> MatchController:
+	var fixture: Dictionary = CoreCards.build_valid_fixture()
+	var controller: MatchController = MatchController.create(fixture.definitions, fixture.player_deck, fixture.enemy_deck, 809)
+	_start_player_turn(controller)
+	if active_player_id == "opponent":
+		var end_action = _first_legal(controller, "player", "end_turn")
+		controller.submit_action(end_action)
+	return controller
+
+
+static func _first_legal(controller: MatchController, actor_id: String, action_type: String):
+	for action in controller.legal_actions(actor_id):
+		if action.type == action_type:
+			return action
+	return null
+
+
+static func _main_runtime(controller: MatchController, store) -> Dictionary:
+	var main := Main.new()
+	var host := Control.new()
+	Engine.get_main_loop().root.add_child(host)
+	var view = MatchViewScene.instantiate()
+	host.add_child(view)
+	main.screen_host = host
+	main.current_screen = view
+	main.controller = controller
+	main.ai = null
+	main.onboarding_store = store
+	view.render_snapshot(controller.state.snapshot_for("player"))
+	view.set_legal_actions(controller.legal_actions("player"))
+	view.set_onboarding_state(store.load())
+	return {"main": main, "host": host, "controller": controller}
+
+
+static func _submit_through_main(controller: MatchController, action, store) -> Dictionary:
+	var runtime := _main_runtime(controller, store)
+	runtime.main.submit_player_action(action)
+	for _frame in range(12):
+		await Engine.get_main_loop().process_frame
+		if not runtime.main._match_submission_active:
+			break
+	return runtime
+
+
+static func _free_runtime(runtime: Dictionary) -> void:
+	var main = runtime.main
+	var host = runtime.host
+	main.free()
+	host.queue_free()
+	await Engine.get_main_loop().process_frame
 
 
 static func _cleanup(path: String) -> void:

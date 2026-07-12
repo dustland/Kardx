@@ -161,6 +161,10 @@ func initialize(main: Main, payload: Dictionary) -> void:
 	render_snapshot(payload.get("snapshot", {}))
 
 func render_snapshot(next_snapshot: Dictionary) -> void:
+	var previous_state_key := _snapshot_state_key(snapshot)
+	var next_state_key := _snapshot_state_key(next_snapshot)
+	if not _rejection_message.is_empty() and not previous_state_key.is_empty() and next_state_key != previous_state_key:
+		_clear_rejection()
 	snapshot = next_snapshot.duplicate(true)
 	_sanitize_hidden_opponent_hand()
 	var players: Dictionary = snapshot.get("players", {})
@@ -176,7 +180,6 @@ func render_snapshot(next_snapshot: Dictionary) -> void:
 	%OpponentHQ.bind(opponent.get("headquarters", {}), "battlefield")
 	%PlayerHQ.bind(player.get("headquarters", {}), "battlefield")
 	_render_hand(player.get("hand", []))
-	%EndTurnButton.disabled = _input_locked or snapshot.get("active_player_id") != "player" or snapshot.get("phase") != "action"
 	_refresh_coach()
 
 
@@ -192,7 +195,6 @@ func render_events(events: Array) -> void:
 
 func set_legal_actions(actions: Array) -> void:
 	model.set_legal_actions(actions)
-	_rejection_message = ""
 	_refresh_coach()
 
 
@@ -323,6 +325,7 @@ func _reject_locked() -> bool:
 func _unhandled_key_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		model.cancel()
+		_clear_rejection()
 		%StatusLabel.text = ""
 		_refresh_coach()
 
@@ -336,6 +339,7 @@ func _refresh_highlights() -> void:
 	%ConfirmButton.disabled = _input_locked or not model.can_confirm()
 	%CancelButton.disabled = _input_locked or model.selected_source_id.is_empty()
 	_apply_hand_states()
+	_refresh_end_turn_state()
 	_refresh_coach_objective()
 
 
@@ -346,25 +350,26 @@ func _refresh_coach() -> void:
 		"selected_zone": model.selected_zone,
 		"selected_slot": model.selected_slot,
 	}, _onboarding_state)
-	if model.selected_source_id.is_empty():
-		var guidance := MatchCoachModelScript.derive(snapshot, _unfinished_guidance_actions(), {}, _onboarding_state)
-		_coach_state.objective = guidance.objective
-		_coach_state.next_kind = guidance.next_kind
-		_coach_state.end_turn_only = guidance.end_turn_only
 	_refresh_highlights()
 
 
-func _unfinished_guidance_actions() -> Array:
-	return model._legal_actions.filter(func(action) -> bool:
-		match action.type:
-			"deploy_unit":
-				return not bool(_onboarding_state.get("deployed_unit", false))
-			"move_unit":
-				return not bool(_onboarding_state.get("moved_to_frontline", false))
-			"attack_unit", "attack_hq":
-				return not bool(_onboarding_state.get("completed_attack", false))
-		return true
-	)
+func _refresh_end_turn_state() -> void:
+	var end_actions := model._legal_actions.filter(func(action) -> bool: return action.type == "end_turn")
+	var can_end: bool = not end_actions.is_empty() and str(snapshot.get("active_player_id", "")) == "player" and str(snapshot.get("phase", "")) == "action"
+	%EndTurnButton.disabled = _input_locked or not can_end
+	%EndTurnButton.remove_theme_stylebox_override("normal")
+	if not can_end:
+		%EndTurnButton.set_meta("action_state", "disabled")
+	elif bool(_coach_state.get("end_turn_only", false)):
+		%EndTurnButton.set_meta("action_state", "strong")
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color("2b2d24")
+		style.border_color = Color("f0cf55")
+		style.set_border_width_all(3)
+		style.set_corner_radius_all(4)
+		%EndTurnButton.add_theme_stylebox_override("normal", style)
+	else:
+		%EndTurnButton.set_meta("action_state", "normal")
 
 
 func _refresh_coach_objective() -> void:
@@ -388,3 +393,18 @@ func _apply_hand_states() -> void:
 
 func _clear_rejection() -> void:
 	_rejection_message = ""
+	model.rejection_code = ""
+	if is_node_ready():
+		%StatusLabel.text = ""
+
+
+func _snapshot_state_key(value: Dictionary) -> String:
+	if value.is_empty():
+		return ""
+	return "%s|%s|%s|%s|%s" % [
+		str(value.get("sequence", "")),
+		str(value.get("turn", "")),
+		str(value.get("phase", "")),
+		str(value.get("active_player_id", "")),
+		str(value.get("winner_id", "")),
+	]

@@ -71,14 +71,21 @@ func _run() -> void:
 	await _capture_current_screen(app, CAPTURES[3])
 	var player_actions: Array = app.controller.legal_actions("player")
 	var deploy_actions := player_actions.filter(func(action) -> bool: return action.type == "deploy_unit")
+	_check(not deploy_actions.is_empty(), "first-turn controller exposes a genuine deploy action")
 	if not deploy_actions.is_empty():
 		app.current_screen._on_card_pressed(deploy_actions[0].source_id)
 	await _frames(1)
 	await _capture_current_screen(app, CAPTURES[4])
 	app.current_screen._on_cancel_pressed()
-	app.current_screen.set_legal_actions([GameAction.create("end_turn", "player")])
-	app.current_screen.set_onboarding_state({"deployed_unit": true, "moved_to_frontline": true, "completed_attack": true})
-	await _frames(1)
+	if not deploy_actions.is_empty():
+		app.submit_player_action(deploy_actions[0])
+		for _frame in range(12):
+			await process_frame
+			if not app._match_submission_active:
+				break
+	var end_only_actions: Array = app.controller.legal_actions("player")
+	_check(end_only_actions.size() == 1 and end_only_actions[0].type == "end_turn", "capture controller exposes genuine sole End Turn state")
+	await _frames(2)
 	await _capture_current_screen(app, CAPTURES[5])
 
 	var terminal_controller: MatchController = CoreCards.scripted_full_match(CAPTURE_SEED)
