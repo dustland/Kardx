@@ -8,6 +8,7 @@ const CardViewScene = preload("res://scenes/ui/card_view.tscn")
 var _hand_ids: Array[String] = []
 var _selected: Dictionary = {}
 var _locked := false
+var _rendered_result := false
 
 
 func _init(instance_ids: Array[String] = []) -> void:
@@ -22,10 +23,11 @@ func initialize(_main, payload: Dictionary) -> void:
 	_hand_ids.clear()
 	_selected.clear()
 	_locked = false
+	_rendered_result = false
 	%ConfirmButton.disabled = false
+	%StatusLabel.text = ""
 	%DifficultyLabel.text = str(payload.get("difficulty", "standard")).to_upper()
-	for child in %HandRow.get_children():
-		child.queue_free()
+	_clear_hand()
 	for card_value in hand:
 		var card: Dictionary = card_value
 		var instance_id := str(card.get("instance_id", ""))
@@ -62,6 +64,32 @@ func lock() -> void:
 			card.disabled = true
 
 
+func recover_from_error(message: String) -> void:
+	_locked = false
+	%ConfirmButton.disabled = false
+	%StatusLabel.text = message
+	for card in %HandRow.get_children():
+		card.disabled = false
+
+
+func render_result(snapshot: Dictionary, events: Array) -> void:
+	_rendered_result = true
+	var players: Dictionary = snapshot.get("players", {})
+	var player: Dictionary = players.get("player", {})
+	var hand: Array = player.get("hand", [])
+	_clear_hand()
+	for card_value in hand:
+		var view = CardViewScene.instantiate()
+		view.disabled = true
+		%HandRow.add_child(view)
+		view.bind(card_value, "hand")
+	%StatusLabel.text = "Opening hand ready - %d cards replaced" % _replacement_count(events)
+
+
+func has_rendered_result() -> bool:
+	return _rendered_result
+
+
 func _on_card_pressed(instance_id: String) -> void:
 	toggle(instance_id)
 	for card in %HandRow.get_children():
@@ -86,3 +114,18 @@ func _selected_card_style() -> StyleBoxFlat:
 	style.set_border_width_all(4)
 	style.set_corner_radius_all(4)
 	return style
+
+
+func _replacement_count(events: Array) -> int:
+	var count := 0
+	for event_value in events:
+		if event_value is Dictionary and str(event_value.get("type", "")) == "card_returned" \
+			and str(event_value.get("player_id", "")) == "player":
+			count += 1
+	return count
+
+
+func _clear_hand() -> void:
+	for child in %HandRow.get_children():
+		%HandRow.remove_child(child)
+		child.queue_free()

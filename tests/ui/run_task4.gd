@@ -10,7 +10,7 @@ func _init() -> void:
 
 func _run() -> void:
 	var test_case := TestCase.new()
-	await UiContracts.run(test_case)
+	await UiContracts.run_task4(test_case)
 	var failures := test_case.finish()
 	if failures == 0:
 		print("PASS focused mulligan contracts")

@@ -35,6 +35,7 @@ var ai: AIPlayer
 var screen_factory: Callable
 var _match_rng := RandomNumberGenerator.new()
 var _mulligan_submitted := false
+var _mulligan_action_submitter: Callable
 
 
 func _ready() -> void:
@@ -124,28 +125,49 @@ func ai_mulligan_selection(snapshot: Dictionary) -> Array[String]:
 	return selected
 
 
+func set_mulligan_action_submitter(submitter: Callable) -> void:
+	_mulligan_action_submitter = submitter
+
+
 func _on_mulligan_confirmed(selected_ids: Array[String]) -> void:
 	if _mulligan_submitted or controller == null or ai == null or controller.state.phase != "mulligan":
 		return
+	var selection_error := _validate_mulligan_selection(selected_ids)
+	if not selection_error.is_empty():
+		_recover_mulligan(selection_error)
+		return
 	_mulligan_submitted = true
+	var candidate: MatchController = _fresh_started_controller()
+	if candidate == null:
+		_recover_mulligan("Could not prepare the match. Confirm your hand again.")
+		return
 	var rendered_events: Array = []
 	var no_targets: Array[String] = []
-	var ai_ids := ai_mulligan_selection(controller.state.snapshot_for("opponent"))
+	var ai_ids := ai_mulligan_selection(candidate.state.snapshot_for("opponent"))
 	var steps := [
 		["mulligan", "player", selected_ids],
 		["mulligan", "opponent", ai_ids],
 		["confirm_mulligan", "player", no_targets],
 		["confirm_mulligan", "opponent", no_targets],
 	]
-	for step in steps:
+	for step_index in range(steps.size()):
+		var step: Array = steps[step_index]
 		var targets: Array[String] = step[2]
-		var action = GameActionScript.create(str(step[0]), str(step[1]), "", targets, {}, controller.state.sequence)
-		var result = controller.submit_action(action)
+		var action = GameActionScript.create(str(step[0]), str(step[1]), "", targets, {}, candidate.state.sequence)
+		var result = _mulligan_action_submitter.call(candidate, action, step_index) \
+			if _mulligan_action_submitter.is_valid() else candidate.submit_action(action)
 		if not result.accepted:
+			_recover_mulligan(result.message if not result.message.is_empty() else "Confirm your opening hand again.")
 			return
 		rendered_events.append_array(result.events)
-	if controller.state.phase != "action":
+	if candidate.state.phase != "action":
+		_recover_mulligan("Match setup did not complete. Confirm your hand again.")
 		return
+	controller = candidate
+	if current_screen != null and current_screen.has_method("render_result"):
+		current_screen.render_result(controller.state.snapshot_for("player"), rendered_events)
+	await Engine.get_main_loop().process_frame
+	await Engine.get_main_loop().process_frame
 	show_screen("match", {
 		"controller": controller,
 		"ai": ai,
@@ -153,6 +175,37 @@ func _on_mulligan_confirmed(selected_ids: Array[String]) -> void:
 		"events": rendered_events,
 		"snapshot": controller.state.snapshot_for("player"),
 	})
+
+
+func _validate_mulligan_selection(selected_ids: Array[String]) -> String:
+	var hand_ids := {}
+	for card in controller.state.players.player.hand:
+		hand_ids[card.instance_id] = true
+	var seen := {}
+	for instance_id in selected_ids:
+		if seen.has(instance_id):
+			return "Select each opening card only once."
+		if not hand_ids.has(instance_id):
+			return "One selected card is no longer in your opening hand. Choose again."
+		seen[instance_id] = true
+	return ""
+
+
+func _fresh_started_controller() -> MatchController:
+	var candidate: MatchController = MatchControllerScript.create(
+		controller.card_definitions,
+		(controller.initial_deck_ids.player as Array).duplicate(),
+		(controller.initial_deck_ids.opponent as Array).duplicate(),
+		controller.state.seed,
+	)
+	var started = candidate.submit_action(GameActionScript.create("start_match", "system"))
+	return candidate if started.accepted and candidate.state.phase == "mulligan" else null
+
+
+func _recover_mulligan(message: String) -> void:
+	_mulligan_submitted = false
+	if current_screen != null and current_screen.has_method("recover_from_error"):
+		current_screen.recover_from_error(message)
 
 
 func _shipped_opponent_deck(player_deck_id: String) -> Dictionary:

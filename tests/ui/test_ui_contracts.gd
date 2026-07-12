@@ -10,6 +10,7 @@ const DeckBuilderScene = preload("res://scenes/ui/deck_builder_view.tscn")
 const DeckStore = preload("res://scripts/ui/deck_store.gd")
 const MulliganViewModel = preload("res://scripts/ui/mulligan_view.gd")
 const MulliganScene = preload("res://scenes/ui/mulligan_view.tscn")
+const ActionResult = preload("res://scripts/core/action_result.gd")
 
 
 class TestScreen:
@@ -53,6 +54,16 @@ static func run(t) -> void:
 	await _test_mulligan_scene_renders_and_confirms(t)
 	await _test_mulligan_layout_is_responsive(t)
 	await _test_main_completes_both_mulligans_and_routes(t)
+
+
+static func run_task4(t) -> void:
+	_test_mulligan_model_selection_and_lock(t)
+	_test_ai_mulligan_exact_fixture(t)
+	await _test_mulligan_scene_renders_and_confirms(t)
+	await _test_mulligan_layout_is_responsive(t)
+	await _test_mulligan_prevalidates_selection(t)
+	await _test_mulligan_rejections_are_transactional(t)
+	await _test_mulligan_renders_before_route(t)
 
 
 static func _test_theme_and_screen_contract(t) -> void:
@@ -302,6 +313,29 @@ static func _test_mulligan_model_selection_and_lock(t) -> void:
 	model.lock()
 	model.toggle("p-1")
 	t.assert_eq(model.selected_ids(), ["p-4"], "locked mulligan selection is immutable")
+	model.free()
+
+
+static func _test_ai_mulligan_exact_fixture(t) -> void:
+	var main := Main.new()
+	var ai_hand := [
+		{"instance_id": "o-low", "definition_id": "low", "deployment_cost": 2},
+		{"instance_id": "o-duplicate", "definition_id": "low", "deployment_cost": 2},
+		{"instance_id": "o-high", "definition_id": "high", "deployment_cost": 5},
+		{"instance_id": "o-keep", "definition_id": "keep", "deployment_cost": 3},
+	]
+	var snapshot := {"players": {"player": {"hand": [{"hidden": true}]}, "opponent": {"hand": ai_hand}}}
+	var selected: Array[String] = main.ai_mulligan_selection(snapshot)
+	t.assert_eq(selected, ["o-duplicate", "o-high"], "AI replaces exact duplicate and high-cost fixture cards")
+	var hand_ids: Array[String] = []
+	for card in ai_hand:
+		hand_ids.append(card.instance_id)
+	for instance_id in selected:
+		t.assert_true(instance_id in hand_ids, "AI replacement ID belongs to AI hand")
+	var changed_player_hand := snapshot.duplicate(true)
+	changed_player_hand.players.player.hand = [{"instance_id": "p-secret-a"}, {"instance_id": "p-secret-b"}]
+	t.assert_eq(main.ai_mulligan_selection(changed_player_hand), selected, "player hidden-hand variation cannot affect AI mulligan")
+	main.free()
 
 
 static func _test_mulligan_scene_renders_and_confirms(t) -> void:
@@ -321,7 +355,9 @@ static func _test_mulligan_scene_renders_and_confirms(t) -> void:
 	view.get_node("%ConfirmButton").pressed.emit()
 	t.assert_eq(confirmations, [["p-01"]], "confirm emits once with selected IDs")
 	t.assert_true(view.get_node("%ConfirmButton").disabled, "confirm locks input immediately")
-	view.free()
+	view.queue_free()
+	await Engine.get_main_loop().process_frame
+	await Engine.get_main_loop().process_frame
 
 
 static func _test_main_completes_both_mulligans_and_routes(t) -> void:
@@ -342,6 +378,8 @@ static func _test_main_completes_both_mulligans_and_routes(t) -> void:
 	var no_replacements: Array[String] = []
 	main.current_screen.confirm_requested.emit(no_replacements)
 	await Engine.get_main_loop().process_frame
+	await Engine.get_main_loop().process_frame
+	await Engine.get_main_loop().process_frame
 	t.assert_eq(main.controller.state.phase, "action", "both action-contract confirmations start match")
 	t.assert_true(main.controller.state.players.player.mulligan_used, "player mulligan action submitted")
 	t.assert_true(main.controller.state.players.opponent.mulligan_used, "AI mulligan action submitted")
@@ -353,6 +391,88 @@ static func _test_main_completes_both_mulligans_and_routes(t) -> void:
 	t.assert_eq(ai_action.type, "mulligan", "AI submits through mulligan action contract")
 	t.assert_eq(ai_action.target_ids, expected_ai_ids, "AI submits deterministic own-hand selections")
 	main.free()
+	host.free()
+
+
+static func _test_mulligan_rejections_are_transactional(t) -> void:
+	for rejected_step in range(4):
+		var harness := _task4_main()
+		var main: Main = harness.main
+		var player_deck: Dictionary = main.catalog.decks_by_id["us-starter"].duplicate(true)
+		main.start_mulligan(player_deck, "standard", 88)
+		await Engine.get_main_loop().process_frame
+		if not main.has_method("set_mulligan_action_submitter"):
+			t.assert_true(false, "main exposes injectable mulligan submission boundary")
+			await _free_task4_harness(harness)
+			return
+		var original_hash := main.controller.state_hash()
+		main.set_mulligan_action_submitter(func(candidate, action, step_index: int):
+			if step_index == rejected_step:
+				return ActionResult.reject("injected_rejection", "Choose a different opening hand")
+			return candidate.submit_action(action)
+		)
+		var no_replacements: Array[String] = []
+		main.current_screen.confirm_requested.emit(no_replacements)
+		await Engine.get_main_loop().process_frame
+		t.assert_eq(main.controller.state_hash(), original_hash, "step %d rejection preserves original controller" % rejected_step)
+		t.assert_eq(main.controller.state.phase, "mulligan", "step %d rejection remains in mulligan" % rejected_step)
+		t.assert_true(not main.current_screen.get_node("%ConfirmButton").disabled, "step %d rejection unlocks confirm" % rejected_step)
+		t.assert_true("Choose a different" in main.current_screen.get_node("%StatusLabel").text, "step %d rejection renders actionable error" % rejected_step)
+		await _free_task4_harness(harness)
+
+
+static func _test_mulligan_prevalidates_selection(t) -> void:
+	var harness := _task4_main()
+	var main: Main = harness.main
+	var player_deck: Dictionary = main.catalog.decks_by_id["us-starter"].duplicate(true)
+	main.start_mulligan(player_deck, "standard", 88)
+	await Engine.get_main_loop().process_frame
+	var original_hash := main.controller.state_hash()
+	var submit_calls := [0]
+	main.set_mulligan_action_submitter(func(candidate, action, step_index: int):
+		submit_calls[0] += 1
+		return candidate.submit_action(action)
+	)
+	var invalid_selection: Array[String] = ["p-not-in-hand"]
+	main.current_screen.confirm_requested.emit(invalid_selection)
+	await Engine.get_main_loop().process_frame
+	t.assert_eq(submit_calls[0], 0, "invalid player selection is rejected before setup actions")
+	t.assert_eq(main.controller.state_hash(), original_hash, "prevalidation preserves live controller")
+	t.assert_true(not main.current_screen.get_node("%ConfirmButton").disabled, "prevalidation failure unlocks view")
+	t.assert_true("opening hand" in main.current_screen.get_node("%StatusLabel").text, "prevalidation gives actionable error")
+	await _free_task4_harness(harness)
+
+
+static func _test_mulligan_renders_before_route(t) -> void:
+	var harness := _task4_main()
+	var main: Main = harness.main
+	var mulligan_view := [null]
+	var rendered_before_route := [false]
+	main.screen_factory = func(path: String) -> Control:
+		if path.ends_with("mulligan_view.tscn"):
+			mulligan_view[0] = MulliganScene.instantiate()
+			return mulligan_view[0]
+		rendered_before_route[0] = mulligan_view[0] != null and mulligan_view[0].has_rendered_result()
+		return TestScreen.new()
+	var player_deck: Dictionary = main.catalog.decks_by_id["us-starter"].duplicate(true)
+	main.start_mulligan(player_deck, "hard", 88)
+	await Engine.get_main_loop().process_frame
+	var no_replacements: Array[String] = []
+	main.current_screen.confirm_requested.emit(no_replacements)
+	t.assert_true(main.current_screen == mulligan_view[0], "mulligan remains visible immediately after confirm")
+	if mulligan_view[0] == null or not mulligan_view[0].has_method("has_rendered_result"):
+		t.assert_true(false, "mulligan exposes rendered-result state")
+		await _free_task4_harness(harness)
+		return
+	await Engine.get_main_loop().process_frame
+	t.assert_true(mulligan_view[0].has_rendered_result(), "result state renders before route")
+	t.assert_true("Opening hand ready" in mulligan_view[0].get_node("%StatusLabel").text, "rendered event summary is visible before route")
+	t.assert_true(mulligan_view[0].get_node("%HandRow").get_child_count() in [4, 5], "resulting hand state renders before route")
+	await Engine.get_main_loop().process_frame
+	await Engine.get_main_loop().process_frame
+	t.assert_true(rendered_before_route[0], "route observes rendered mulligan result")
+	t.assert_true(main.current_screen is TestScreen, "route occurs after visible result frame")
+	await _free_task4_harness(harness)
 
 
 static func _test_mulligan_layout_is_responsive(t) -> void:
@@ -372,7 +492,30 @@ static func _test_mulligan_layout_is_responsive(t) -> void:
 		for card in view.get_node("%HandRow").get_children():
 			t.assert_true(panel_rect.encloses(card.get_global_rect()), "%s mulligan card stays inside hand panel" % viewport_size.x)
 			t.assert_true(not card.get_global_rect().intersects(footer_rect), "%s mulligan card avoids commands" % viewport_size.x)
-		view.free()
+		view.queue_free()
+		await Engine.get_main_loop().process_frame
+		await Engine.get_main_loop().process_frame
+
+
+static func _task4_main() -> Dictionary:
+	var main := Main.new()
+	var host := Control.new()
+	main.screen_host = host
+	main.catalog = ContentCatalog.load_from_paths("res://data/cards.json", "res://data/abilities.json", "res://data/decks.json", "res://data/rules.json")
+	main.screen_factory = func(path: String) -> Control:
+		return MulliganScene.instantiate() if path.ends_with("mulligan_view.tscn") else TestScreen.new()
+	Engine.get_main_loop().root.add_child(host)
+	return {"main": main, "host": host}
+
+
+static func _free_task4_harness(harness: Dictionary) -> void:
+	var main: Main = harness.main
+	main.free()
+	var host: Control = harness.host
+	host.queue_free()
+	await Engine.get_main_loop().process_frame
+	await Engine.get_main_loop().process_frame
+	await Engine.get_main_loop().process_frame
 
 
 static func _test_deck_builder_model(t) -> void:
