@@ -6,10 +6,12 @@ const MILESTONES := ["deployed_unit", "moved_to_frontline", "completed_attack"]
 var _path: String
 var _state: Dictionary = {}
 var _loaded := false
+var _valid_path: bool
 
 
 func _init(path: String = "user://onboarding.json") -> void:
 	_path = path
+	_valid_path = _is_canonical_user_path(path)
 
 
 static func defaults() -> Dictionary:
@@ -26,6 +28,8 @@ func load() -> Dictionary:
 		return _state.duplicate(true)
 	_loaded = true
 	_state = defaults()
+	if not _valid_path:
+		return _state.duplicate(true)
 	if not FileAccess.file_exists(_path):
 		return _state.duplicate(true)
 	var file := FileAccess.open(_path, FileAccess.READ)
@@ -65,6 +69,8 @@ func _ensure_loaded() -> void:
 
 
 func _save() -> bool:
+	if not _valid_path:
+		return false
 	var temporary_path := _path + ".tmp"
 	var file := FileAccess.open(temporary_path, FileAccess.WRITE)
 	if file == null:
@@ -80,4 +86,16 @@ func _save() -> bool:
 		DirAccess.remove_absolute(temporary_absolute)
 		print("OnboardingStore: unable to replace state at %s" % _path)
 		return false
+	return true
+
+
+static func _is_canonical_user_path(path: String) -> bool:
+	if not path.begins_with("user://"):
+		return false
+	var relative := path.trim_prefix("user://")
+	if relative.is_empty() or relative.contains("\\"):
+		return false
+	for segment in relative.split("/", true):
+		if segment.is_empty() or segment in [".", ".."]:
+			return false
 	return true

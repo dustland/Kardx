@@ -8,6 +8,7 @@ const ACTION_PRIORITY := [
 	"attack_hq",
 	"play_order",
 	"toggle_countermeasure",
+	"activate_ability",
 ]
 
 
@@ -62,8 +63,11 @@ static func derive(snapshot: Dictionary, legal_actions: Array, selection: Dictio
 			result.objective = "Select a highlighted Order card to play."
 			result.next_kind = "order"
 		"toggle_countermeasure":
-			result.objective = "Select a highlighted Countermeasure card to activate."
+			result.objective = "Select a highlighted Countermeasure card to activate or deactivate."
 			result.next_kind = "countermeasure"
+		"activate_ability":
+			result.objective = "Select a ready unit to use an ability."
+			result.next_kind = "ability"
 		"end_turn":
 			if result.end_turn_only:
 				result.objective = "No other actions are available. End the turn to gain another Credit slot."
@@ -153,9 +157,6 @@ static func _highest_priority_type(actions: Array) -> String:
 		for action in actions:
 			if _action_type(action) == desired_type:
 				return desired_type
-	for action in actions:
-		if _action_type(action) == "activate_ability":
-			return "activate_ability"
 	for action in actions:
 		if _action_type(action) == "end_turn":
 			return "end_turn"

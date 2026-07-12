@@ -8,9 +8,11 @@ const OnboardingStore = preload("res://scripts/ui/onboarding_store.gd")
 static func run(t) -> void:
 	_test_coach_priority_and_exact_copy(t)
 	_test_real_first_turn_credit_fixture(t)
+	_test_real_active_countermeasure_is_legal(t)
 	_test_source_reasons(t)
 	_test_end_turn_requires_the_sole_complete_action(t)
 	_test_persistence(t)
+	_test_persistence_rejects_non_user_paths(t)
 
 
 static func _test_coach_priority_and_exact_copy(t) -> void:
@@ -20,6 +22,7 @@ static func _test_coach_priority_and_exact_copy(t) -> void:
 	var attack := _action("attack_unit", "front-unit", ["enemy-unit"])
 	var order := _action("play_order", "order", ["enemy-unit"])
 	var counter := _action("toggle_countermeasure", "counter")
+	var ability := _action("activate_ability", "ability-unit")
 	var end := _action("end_turn")
 
 	_assert_coach(t, snapshot.merged({"active_player_id": "opponent"}, true), [deploy, end], {},
@@ -42,7 +45,9 @@ static func _test_coach_priority_and_exact_copy(t) -> void:
 	_assert_coach(t, snapshot, [order, counter, end], {},
 		"Select a highlighted Order card to play.", ["counter", "order"], "order")
 	_assert_coach(t, snapshot, [counter, end], {},
-		"Select a highlighted Countermeasure card to activate.", ["counter"], "countermeasure")
+		"Select a highlighted Countermeasure card to activate or deactivate.", ["counter"], "countermeasure")
+	_assert_coach(t, snapshot, [ability, end], {},
+		"Select a ready unit to use an ability.", ["ability-unit"], "ability")
 	_assert_coach(t, snapshot, [end], {},
 		"No other actions are available. End the turn to gain another Credit slot.", [], "end_turn")
 	_assert_coach(t, snapshot, [], {}, "No legal action is available.", [], "none")
@@ -66,6 +71,32 @@ static func _test_real_first_turn_credit_fixture(t) -> void:
 	t.assert_true(result.legal_source_ids.has(active.hand[0].instance_id), "one-Credit unit is a legal source")
 	t.assert_true(not result.legal_source_ids.has(active.hand[1].instance_id), "three-Credit unit is not a legal source")
 	t.assert_eq(result.objective, "Select a highlighted card to deploy. You have 1 Credit.", "real first-turn fixture uses exact deploy copy")
+
+
+static func _test_real_active_countermeasure_is_legal(t) -> void:
+	var fixture: Dictionary = CoreCards.build_valid_fixture()
+	var controller: MatchController = MatchController.create(fixture.definitions, fixture.player_deck, fixture.enemy_deck, 317)
+	_start_player_turn(controller)
+	var player = controller.state.players.player
+	player.credit = 0
+	var counter = player.hand[0]
+	counter.category = "Countermeasure"
+	counter.deployment_cost = 0
+	counter.countermeasure_active = true
+	controller.card_definitions[counter.definition_id]["category"] = "Countermeasure"
+	controller.card_definitions[counter.definition_id]["deployment_cost"] = 0
+	controller._definitions[counter.definition_id]["category"] = "Countermeasure"
+	controller._definitions[counter.definition_id]["deployment_cost"] = 0
+	player.active_countermeasures.append(counter)
+	var legal_actions: Array[GameAction] = controller.legal_actions("player")
+	var toggle_actions := legal_actions.filter(func(action: GameAction) -> bool:
+		return action.type == "toggle_countermeasure" and action.source_id == counter.instance_id
+	)
+	var result := MatchCoachModel.derive(controller.state.snapshot_for("player"), legal_actions, {}, {})
+	t.assert_eq(toggle_actions.size(), 1, "real active Countermeasure retains its legal deactivation toggle")
+	t.assert_true(result.legal_source_ids.has(counter.instance_id), "active Countermeasure remains a legal coach source")
+	t.assert_true(not result.source_reasons.has(counter.instance_id), "legal active Countermeasure is never unavailable")
+	t.assert_eq(result.objective, "Select a highlighted Countermeasure card to activate or deactivate.", "active Countermeasure objective names both toggle directions")
 
 
 static func _test_source_reasons(t) -> void:
@@ -134,6 +165,24 @@ static func _test_persistence(t) -> void:
 	_cleanup(path)
 
 
+static func _test_persistence_rejects_non_user_paths(t) -> void:
+	var invalid_paths := [
+		"res://onboarding-invalid.json",
+		"/tmp/opencards-onboarding-invalid.json",
+		"user://../opencards-onboarding-invalid.json",
+		"user://nested/../../opencards-onboarding-invalid.json",
+	]
+	for path in invalid_paths:
+		var absolute := ProjectSettings.globalize_path(path)
+		if FileAccess.file_exists(absolute):
+			DirAccess.remove_absolute(absolute)
+		var store = OnboardingStore.new(path)
+		t.assert_eq(store.load(), OnboardingStore.defaults(), "%s reads safe defaults" % path)
+		t.assert_true(not store.complete("deployed_unit"), "%s rejects persistence" % path)
+		t.assert_true(store.load().deployed_unit, "%s preserves failed write in memory" % path)
+		t.assert_true(not FileAccess.file_exists(absolute), "%s cannot create a file" % path)
+
+
 static func _assert_coach(t, snapshot: Dictionary, actions: Array, selection: Dictionary, objective: String, sources: Array, next_kind: String) -> void:
 	var result := MatchCoachModel.derive(snapshot, actions, selection, {})
 	t.assert_eq(result.objective, objective, "%s objective copy" % next_kind)
@@ -169,6 +218,13 @@ static func _card(instance_id: String, category: String, cost: int, active: bool
 
 static func _action(type: String, source_id: String = "", targets: Array[String] = [], payload: Dictionary = {}, actor_id: String = "player") -> GameAction:
 	return GameAction.create(type, actor_id, source_id, targets, payload)
+
+
+static func _start_player_turn(controller: MatchController) -> void:
+	for action in [_action("start_match", "", [], {}, "system"), _action("mulligan"), _action("mulligan", "", [], {}, "opponent"), _action("confirm_mulligan"), _action("confirm_mulligan", "", [], {}, "opponent")]:
+		controller.submit_action(action)
+	if controller.state.active_player_id != "player":
+		controller.submit_action(_action("end_turn", "", [], {}, "opponent"))
 
 
 static func _cleanup(path: String) -> void:
