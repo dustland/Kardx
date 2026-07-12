@@ -1,121 +1,81 @@
-# Kardx
+# OpenCards
 
-A digital collectible card game built with Unity that simulates the physical card game mechanics of [Kards](https://kards.com/), a popular World-War II-style strategy card game. It is a turn-based game where players deploy units to the battlefield, use abilities, and attack opponents to win.
+OpenCards is a Godot 4.7 card game.
 
-![Kards](./Docs/Images/Kards.jpg)
+## Run
 
-## Overview
+Open this repository in Godot 4 and press Play. The main scene is `scenes/main.tscn`.
 
-Kardx is a turn-based card game where players deploy units to the battlefield, use abilities, and attack opponents to win. The game features:
+The playable flow is Deck Builder, opening-hand Mulligan, player-versus-AI Match, and Result. AI opponents support Easy, Standard, and Hard difficulties. Result supports a rematch with the same complete player deck and difficulty or a return to Deck Builder with the current in-memory deck still selected. The starter cards use original generated illustrations in `game_assets/generated_cards/`; other source assets are kept under `game_assets/`.
 
-- A data-driven card system
-- Ability-based gameplay mechanics
-- Battlefield positioning strategy
-- Hand and resource management
-- Unified card drag-and-drop for deploy, attack, move, and order play
+### Controls
 
-## Design Documents
+- Mouse: select cards and targets, drag cards to legal zones, and activate commands.
+- Enter or Space: activate the primary command where supported, including Play, confirm, and Rematch.
+- Escape: clear the current Match selection or return from Result to Deck Builder.
+- E: end the player turn when End Turn is legal.
 
-For developers who want to understand the project better:
+## Validate
 
-- [Architecture](./Docs/Arch.md) - Overview and design principles of the game's architecture
-- [Data System Design](./Docs/Data.md) - Data structures and the model-view-controller (MVC) layout
-- [Ability System Design](./Docs/Ability.md) - How card abilities work in the data-driven system
+With Godot 4 installed, run the focused validation commands:
 
-## Getting Started
+```sh
+godot --headless --path . --script tests/data_validation.gd
+godot --headless --path . --script tests/test_suite.gd
+sh tests/ui/run_task6.sh
+godot --path . --script tests/capture_ui.gd
+godot --headless --path . --script tests/run_ai_match.gd -- 90210 standard hard 300
+```
 
-### Prerequisites
+The strict Task6 runner covers Result contracts and the complete Deck Builder -> Mulligan -> Match -> Result -> Rematch/Builder flow at 1280x720 and true 1024x720. It rejects runtime and teardown diagnostics except the exact known macOS headless system-CA lookup failure. The capture command writes five deterministic UI captures to ignored `builds/qa/`. The representative AI command must complete without illegal actions and reproduce its replay.
 
-- Unity 6 (v6000.0.41f1) - [Download from Unity Hub](https://unity.com/download)
-- Basic understanding of C# language and Unity concepts
+## Export
 
-### Required Unity Packages
+Export output is written under ignored `builds/`. The named `PCK` preset packages all project resources, including source data and generated card artwork:
 
-Install these packages to work with the project:
+```sh
+godot --headless --path . --export-pack PCK builds/pck/OpenCards.pck
+godot --headless --main-pack builds/pck/OpenCards.pck --script "$PWD/tests/verify_pck_manifest.gd"
+```
 
-1. **Windsurf Integration**
-   - Install from Git URL: `https://github.com/Asuta/com.unity.ide.windsurf.git`
-   - Windsurf offers better performance than Cursor IDE
+The manifest check verifies required runtime files and all 12 generated card-art resources are packed while tests, documentation, legacy card art, unused backgrounds, and local build metadata are absent.
 
-1. **DOTween**
-   - This is a Unity package for animation, required in this project.
+The `Web` preset targets Godot 4.7's Compatibility renderer without thread support, so it does not require cross-origin isolation. With matching Godot 4.7 export templates installed, create release builds with:
 
-1. **Unity Extension**
-   - It is strongly recommended to install the Unity extension for VSCode in Windsurf. Since it did not release as open-vsx, you should look for this extension (and also C# and C# DevKit) in VSCode (version later than 1.96) and download it as vsx file and then manually install in Windsurf.
+```sh
+godot --headless --path . --export-release Web builds/web/index.html
+godot --headless --path . --export-release macOS builds/macos/OpenCards.zip
+```
 
-1. **NewtonSoft JSON**
-   - Add from Package Manager: `com.unity.nuget.newtonsoft-json`
-   - Used for JSON serialization/deserialization
+Validate the GitHub Pages workflow and Web export preset without downloading dependencies:
 
-C# code is formatted with the C# extension installed with Unity extension. It's recommended to enable Format On Save in the configuration.
+```sh
+sh tests/validate_web_deploy.sh
+sh tests/test_web_deploy_validator.sh
+```
 
-## Project Structure
+To inspect a local Web export, serve it over HTTP after exporting and open the displayed local URL:
 
-All code and assets are organized in the `Assets` folder:
+```sh
+python3 -m http.server 8000 --directory builds/web
+```
 
-### Code Organization
+Pushes to `main` and manual runs of **Build Godot Web and Deploy to GitHub Pages** export the game to `builds/web/index.html` and deploy it through GitHub Pages.
 
-The codebase follows an MVC layout under `Assets/Scripts/`:
+### Custom domain
 
-- **`Models/`** - Game state and rules
-  - **`Cards/`** - `Card`, `CardType`, `CardCollection`, `Hand`, `Deck`, `Battlefield`, `DiscardPile`
-  - **`Match/`** - `Board`, `Player`, `MatchManager`
-  - **`Abilities/`** - Ability type definitions
-- **`Views/`** - UI components that reflect model state
-  - **`Cards/`** - `CardView`, `CardDetailView`
-  - **`Hand/`** - `PlayerHandView`, `OpponentHandView`
-  - **`Match/`** - `MatchView`, battlefield views, card slots, attack arrow
-  - **`Home/`** - Home screen
-- **`Controllers/`** - Input handling
-  - **`DragHandlers/`** - Unified drag workflow (`CardDragController`, `CardDragCapability`, `CardDropResolver`)
-- **`Managers/`** - Cross-cutting services (`ViewManager`, `ViewRegistry`, `TabManager`)
-- **`Acting/`** - Ability system runtime (`AbilitySystem`, effect handlers)
-- **`Planning/`** - AI and strategy planning (`StrategyPlanner`, `DummyStrategyProvider`)
-- **`Utils/`** - Shared utilities (`CombatRules`, `CardLoader`, `GameStateValidator`)
+The production URL is <https://opencards.dustland.ai>. First verify the `dustland.ai` domain for the `dustland` GitHub organization to reduce custom-domain takeover risk. Then configure `opencards.dustland.ai` in the repository under **Settings > Pages > Custom domain** before changing DNS. The DNS record must be:
 
-### Asset Organization
+```text
+Type:  CNAME
+Name:  opencards
+Value: dustland.github.io
+```
 
-- **`Assets/Sprites`** - Static game sprites
-- **`Assets/Resources`** - Dynamically loaded art (card faces, etc.)
-- **`Assets/StreamingAssets`** - JSON data files (CardTypes, AbilityTypes)
-- **`Assets/Scenes`** - `StartingScene`, `HomeScene`, `BattleScene`, `CardScene`
+After DNS propagation and GitHub certificate issuance, enable **Enforce HTTPS** in **Settings > Pages**. The Actions artifact intentionally does not include a `CNAME` file because the custom domain is managed in repository settings.
 
-### Development Tools
+## Current limitations
 
-#### FindMissingScripts
-
-A utility editor tool to help locate GameObjects with missing script references in your scene.
-
-**Usage:**
-1. Go to the Unity menu and select `Tools > Find Missing Scripts`
-2. In the window that appears, you can:
-   - Click "Find Missing Scripts in Scene" to scan the entire scene
-   - Click "Find Missing Scripts in Selected GameObjects" to scan only selected objects
-3. Results will be logged to the Unity Console, showing which GameObjects have missing script references
-
-This tool is particularly helpful when you encounter the "The referenced script (Unknown) on this Behaviour is missing!" error, which doesn't provide location information.
-
-## Web Build and Deployment
-
-The project includes a GitHub Actions workflow (`.github/workflows/webgl-pages.yml`) that builds a WebGL player and deploys it to GitHub Pages on pushes to `main`.
-
-Required repository secrets for CI builds:
-
-- `UNITY_LICENSE`
-- `UNITY_EMAIL`
-- `UNITY_PASSWORD`
-
-See [game.ci activation docs](https://game.ci/docs/github/activation) for setup.
-
-## Development Tips
-
-- Read the design documents before making changes
-- The game uses a data-driven approach - many game elements are defined in JSON
-- Check `CardLoader.cs`, `DeckBuilder.cs`, and `AbilityType.cs` to understand how data is loaded
-- Zone changes (`Hand`, `Battlefield`, etc.) must go through `CardCollection` APIs so ownership, zone state, and events stay consistent
-- Combat targeting rules live in `CombatRules.cs`; `MatchManager.CanAttack` adds credit checks on top
-- Use the Unity Console to debug issues during gameplay
-
-## License
-
-This project is licensed under the [MIT](./LICENSE) license.
+- Matches are local player-versus-AI only; there is no network multiplayer.
+- Replay data is retained on Result for verification but has no replay-browser UI.
+- User deck changes remain in memory until Save is used in Deck Builder.

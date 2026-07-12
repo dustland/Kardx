@@ -1,14 +1,14 @@
-# Kardx Ability System Design Document
+# OpenCards Ability System Design Document
 
 [简体中文版](./Ability-CN.md)
 
 ## Overview
 
-The Kardx Ability System employs a **data-driven** design, providing a flexible framework for defining and executing card abilities in the game. Drawing inspiration from [Kards](https://kards.com) game mechanics, this system supports both basic ability types and complex strategic card effects.
+The OpenCards Ability System employs a **data-driven** design, providing a flexible framework for defining and executing card abilities in the game. Drawing inspiration from [Kards](https://kards.com) game mechanics, this system supports both basic ability types and complex strategic card effects.
 
 ### Core Design Principles
 
-The Kardx Ability System is built around four core design principles:
+The OpenCards Ability System is built around four core design principles:
 
 Separation of Data and Logic: Clear distinction between ability definitions (static data) and ability instances (runtime state)
 Declarative Configuration: Define abilities through JSON, creating new abilities without code changes

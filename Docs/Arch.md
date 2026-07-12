@@ -1,12 +1,12 @@
-# Kardx Architecture: Design Principles and System Structure
+# OpenCards Architecture: Design Principles and System Structure
 
 [查看简体中文版本](./Arch-CN.md)
 
-_This document provides high-level architectural guidance for the Kardx game, outlining the core design principles, system structure, and component interactions. For detailed information about the data model, see [Data.md](./Data.md)._
+_This document provides high-level architectural guidance for the OpenCards game, outlining the core design principles, system structure, and component interactions. For detailed information about the data model, see [Data.md](./Data.md)._
 
 ## Overview
 
-The Kardx architecture is designed to create a maintainable, testable, and scalable codebase that can evolve with the game's requirements. At its core, the architecture emphasizes clean separation of concerns, unidirectional data flow, and event-driven communication between components.
+The OpenCards architecture is designed to create a maintainable, testable, and scalable codebase that can evolve with the game's requirements. At its core, the architecture emphasizes clean separation of concerns, unidirectional data flow, and event-driven communication between components.
 
 ## Core Architectural Principles
 

@@ -1,92 +1,124 @@
-# Secrets required (Personal license): UNITY_LICENSE, UNITY_EMAIL, UNITY_PASSWORD
-# Setup: https://game.ci/docs/github/activation
-name: Build WebGL and Deploy to GitHub Pages
+name: Build Godot Web and Deploy to GitHub Pages
 
-on:
+"on":
   push:
     branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: webgl-pages-${{ github.ref }}
+  group: pages
   cancel-in-progress: true
+
+env:
+  GODOT_VERSION: "4.7"
+  GODOT_RELEASE: 4.7-stable
+  GODOT_EDITOR_SHA256: 0b1a6c54c2c619c12e169fe9241edda4b81080b519451cec2984bf0d2c6cb73c
+  GODOT_TEMPLATES_SHA256: 9714459dc071907c0f3d5f17d608faf69e7cda21331fc5d39c4503ffa4e99eec
+  GODOT_DOWNLOAD_DIR: ${{ github.workspace }}/.godot-downloads
 
 jobs:
   build:
-    name: Build Unity WebGL
+    name: Build Godot Web
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pages: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          lfs: true
 
-      - name: Cache Unity Library
+      - name: Cache official Godot archives
         uses: actions/cache@v4
         with:
-          path: Library
-          key: Library-WebGL-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
-          restore-keys: |
-            Library-WebGL-
+          path: ${{ env.GODOT_DOWNLOAD_DIR }}
+          key: godot-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_RELEASE }}-0b1a6c54c2c619c12e169fe9241edda4b81080b519451cec2984bf0d2c6cb73c-9714459dc071907c0f3d5f17d608faf69e7cda21331fc5d39c4503ffa4e99eec
 
-      - name: Free disk space
-        uses: jlumbroso/free-disk-space@v1.3.1
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: true
-
-      - name: Build WebGL
-        uses: game-ci/unity-builder@v4
-        env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-        with:
-          unityVersion: 6000.0.41f1
-          targetPlatform: WebGL
-          buildsPath: build
-
-      - name: Assemble publish folder
+      - name: Download official Godot editor and export templates
+        shell: bash
         run: |
           set -euo pipefail
-          if [ ! -d build/WebGL/Build ]; then
-            echo "Expected build/WebGL/Build but it was not found:"
-            find build -maxdepth 4 -type f | head -50
+          mkdir -p "$GODOT_DOWNLOAD_DIR"
+          base_url="https://github.com/godotengine/godot-builds/releases/download/${GODOT_RELEASE}"
+          editor="Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          templates="Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+
+          if [[ ! -s "$GODOT_DOWNLOAD_DIR/$editor" ]]; then
+            curl --fail --location --proto '=https' --tlsv1.2 \
+              --retry 3 --output "$GODOT_DOWNLOAD_DIR/$editor" "$base_url/$editor"
+          fi
+          if [[ ! -s "$GODOT_DOWNLOAD_DIR/$templates" ]]; then
+            curl --fail --location --proto '=https' --tlsv1.2 \
+              --retry 3 --output "$GODOT_DOWNLOAD_DIR/$templates" "$base_url/$templates"
+          fi
+          printf '%s  %s\n' "$GODOT_EDITOR_SHA256" "$GODOT_DOWNLOAD_DIR/$editor" \
+            | sha256sum --check --strict
+          printf '%s  %s\n' "$GODOT_TEMPLATES_SHA256" "$GODOT_DOWNLOAD_DIR/$templates" \
+            | sha256sum --check --strict
+          unzip -t "$GODOT_DOWNLOAD_DIR/$editor"
+          unzip -t "$GODOT_DOWNLOAD_DIR/$templates"
+
+      - name: Install Godot and matching export templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          install_dir="$RUNNER_TEMP/godot"
+          template_dir="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          mkdir -p "$install_dir" "$template_dir"
+          unzip -q "$GODOT_DOWNLOAD_DIR/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip" -d "$install_dir"
+          unzip -q "$GODOT_DOWNLOAD_DIR/Godot_v${GODOT_VERSION}-stable_export_templates.tpz" -d "$RUNNER_TEMP/godot-templates"
+          cp -R "$RUNNER_TEMP/godot-templates/templates/." "$template_dir/"
+          mv "$install_dir/Godot_v${GODOT_VERSION}-stable_linux.x86_64" "$install_dir/godot"
+          chmod +x "$install_dir/godot"
+          echo "$install_dir" >> "$GITHUB_PATH"
+
+      - name: Import project
+        run: godot --headless --path . --editor --quit
+
+      - name: Validate game data
+        run: godot --headless --path . --script tests/data_validation.gd
+
+      - name: Run focused rules suite
+        run: godot --headless --path . --script tests/test_suite.gd
+
+      - name: Export single-threaded Web release
+        run: godot --headless --path . --export-release Web builds/web/index.html
+
+      - name: Validate Pages artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s builds/web/index.html
+          test -s builds/web/index.js
+          test -s builds/web/index.wasm
+          test -s builds/web/index.pck
+          if find builds/web -type l -print -quit | grep -q .; then
+            echo "Pages artifact contains an unexpected symbolic link:" >&2
+            find builds/web -type l -print >&2
             exit 1
           fi
-          rm -rf Web/Build
-          mkdir -p Web/Build Web/StreamingAssets
-          cp -r build/WebGL/Build/* Web/Build/
-          cp -r Assets/StreamingAssets/* Web/StreamingAssets/
-          if [ -d build/WebGL/StreamingAssets ]; then
-            cp -r build/WebGL/StreamingAssets/* Web/StreamingAssets/
-          fi
-          touch Web/.nojekyll
-          echo "Publish folder contents:"
-          find Web -maxdepth 2 -type f | sort
+          touch builds/web/.nojekyll
+          find builds/web -maxdepth 1 -type f -print | sort
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
-          path: Web
+          path: builds/web
 
   deploy:
-    name: Deploy to GitHub Pages
+    name: Deploy GitHub Pages
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
