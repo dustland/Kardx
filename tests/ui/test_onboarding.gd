@@ -3,6 +3,8 @@ const GameAction = preload("res://scripts/core/game_action.gd")
 const MatchController = preload("res://scripts/core/match_controller.gd")
 const MatchCoachModel = preload("res://scripts/ui/match_coach_model.gd")
 const OnboardingStore = preload("res://scripts/ui/onboarding_store.gd")
+const ContentCatalog = preload("res://scripts/content/content_catalog.gd")
+const DeckBuilderScene = preload("res://scenes/ui/deck_builder_view.tscn")
 
 
 static func run(t) -> void:
@@ -13,6 +15,98 @@ static func run(t) -> void:
 	_test_end_turn_requires_the_sole_complete_action(t)
 	_test_persistence(t)
 	_test_persistence_rejects_non_user_paths(t)
+	await _test_deck_builder_starter_readiness(t)
+	await _test_deck_builder_edited_validation_and_restoration(t)
+	await _test_deck_builder_readiness_containment(t)
+
+
+static func _test_deck_builder_starter_readiness(t) -> void:
+	var onboarding_path := "user://test-onboarding-deck-builder.json"
+	_cleanup(onboarding_path)
+	var view = await _create_deck_builder(onboarding_path, Vector2(1280, 720))
+	t.assert_eq(view.get_node("%StarterStatus").text, "Starter deck ready - 40 valid cards.", "shipped deck has exact readiness copy")
+	t.assert_eq(view.get_node("%StarterHint").text, "Choose a difficulty and start battle, or click cards to edit.", "starter hint uses exact explanatory copy")
+	t.assert_true(view.get_node("%StarterHint").visible, "starter hint begins visible")
+	t.assert_eq(view.get_node("%PlayButton").text, "Start Battle", "launch command names the battle")
+	var dismiss := view.get_node("%DismissHint") as Button
+	t.assert_eq(dismiss.tooltip_text, "Hide starter hint", "icon close button explains itself")
+	dismiss.pressed.emit()
+	await view.get_tree().process_frame
+	t.assert_true(not view.get_node("%StarterHint").visible, "dismissal hides only the explanatory sentence")
+	t.assert_true(view.get_node("%StarterStatus").visible, "dismissal preserves live readiness")
+	view.queue_free()
+	await Engine.get_main_loop().process_frame
+
+	view = await _create_deck_builder(onboarding_path, Vector2(1280, 720))
+	t.assert_true(not view.get_node("%StarterHint").visible, "dismissal reloads from injected onboarding path")
+	t.assert_eq(view.get_node("%StarterStatus").text, "Starter deck ready - 40 valid cards.", "readiness remains after persisted dismissal")
+	view.queue_free()
+	await Engine.get_main_loop().process_frame
+	_cleanup(onboarding_path)
+
+
+static func _test_deck_builder_edited_validation_and_restoration(t) -> void:
+	var onboarding_path := "user://test-onboarding-edits.json"
+	_cleanup(onboarding_path)
+	var view = await _create_deck_builder(onboarding_path, Vector2(1280, 720))
+	var shipped_cards: Array = view.model._cards().duplicate()
+	view._on_add_card(str(shipped_cards[0]))
+	t.assert_eq(view.get_node("%StarterStatus").text, "Deck Size", "added card shows the first concrete validator error")
+	t.assert_true(view.get_node("%PlayButton").disabled, "added card disables Start Battle")
+	t.assert_true("Starter deck ready" not in view.get_node("%StarterStatus").text, "edited copy loses preset readiness")
+
+	view.model.select_deck("us-starter")
+	view._refresh_deck()
+	t.assert_eq(view.get_node("%StarterStatus").text, "Starter deck ready - 40 valid cards.", "returning to shipped deck restores readiness")
+	t.assert_true(not view.get_node("%PlayButton").disabled, "restored shipped deck enables Start Battle")
+	view.queue_free()
+	await Engine.get_main_loop().process_frame
+
+	view = await _create_deck_builder(onboarding_path + "-remove", Vector2(1280, 720))
+	shipped_cards = view.model._cards().duplicate()
+	view._on_remove_card(str(shipped_cards[0]))
+	t.assert_eq(view.get_node("%StarterStatus").text, "Deck Size", "removed card shows the first concrete validator error")
+	t.assert_true(view.get_node("%PlayButton").disabled, "removed card disables Start Battle")
+	view.model.select_deck("us-starter")
+	view._refresh_deck()
+	t.assert_eq(view.get_node("%StarterStatus").text, "Starter deck ready - 40 valid cards.", "shipped deck readiness restores after removal edit")
+	view.queue_free()
+	await Engine.get_main_loop().process_frame
+	_cleanup(onboarding_path)
+
+
+static func _test_deck_builder_readiness_containment(t) -> void:
+	for viewport_size in [Vector2(1280, 720), Vector2(1024, 720)]:
+		var path := "user://test-onboarding-layout-%d.json" % int(viewport_size.x)
+		_cleanup(path)
+		var view = await _create_deck_builder(path, viewport_size)
+		var strip := view.get_node("%StarterReadiness") as Control
+		var viewport_rect := Rect2(Vector2.ZERO, viewport_size)
+		t.assert_true(viewport_rect.encloses(strip.get_global_rect()), "readiness strip stays contained at %d" % int(viewport_size.x))
+		t.assert_true(strip.get_global_rect().end.y <= (view.get_node("%Workspace") as Control).get_global_rect().position.y, "readiness strip stays above workspace at %d" % int(viewport_size.x))
+		t.assert_true(strip.size.y <= 56.0, "readiness strip remains compact at %d" % int(viewport_size.x))
+		view.queue_free()
+		await Engine.get_main_loop().process_frame
+		_cleanup(path)
+
+
+static func _create_deck_builder(onboarding_path: String, viewport_size: Vector2):
+	var root := Engine.get_main_loop().root as Window
+	var view = DeckBuilderScene.instantiate()
+	root.add_child(view)
+	view.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	view.size = viewport_size
+	var deck_store_path := onboarding_path.replace("onboarding", "decks")
+	_cleanup(deck_store_path)
+	view.initialize(null, {
+		"catalog": ContentCatalog.load_from_paths("res://data/cards.json", "res://data/abilities.json", "res://data/decks.json", "res://data/rules.json"),
+		"deck_id": "us-starter",
+		"difficulty": "standard",
+		"store_path": deck_store_path,
+		"onboarding_path": onboarding_path,
+	})
+	await view.get_tree().process_frame
+	return view
 
 
 static func _test_coach_priority_and_exact_copy(t) -> void:

@@ -10,7 +10,7 @@ func _init() -> void:
 
 func _run() -> void:
 	var test_case := TestCase.new()
-	OnboardingTests.run(test_case)
+	await OnboardingTests.run(test_case)
 	var failures := test_case.finish()
 	await process_frame
 	await process_frame

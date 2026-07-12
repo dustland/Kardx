@@ -5,6 +5,7 @@ signal play_requested(deck_id: String, difficulty: String)
 
 const DeckValidator = preload("res://scripts/core/deck_validator.gd")
 const DeckStore = preload("res://scripts/ui/deck_store.gd")
+const OnboardingStore = preload("res://scripts/ui/onboarding_store.gd")
 const CardViewScene = preload("res://scenes/ui/card_view.tscn")
 
 
@@ -114,6 +115,7 @@ var router
 var catalog
 var model: DeckBuilderViewModel
 var store
+var onboarding_store
 var difficulty := "standard"
 
 
@@ -146,6 +148,9 @@ func initialize(main, payload: Dictionary) -> void:
 	if catalog == null:
 		return
 	store = DeckStore.new(str(payload.get("store_path", DeckStore.DEFAULT_PATH)))
+	onboarding_store = payload.get("onboarding_store")
+	if onboarding_store == null:
+		onboarding_store = OnboardingStore.new(str(payload.get("onboarding_path", "user://onboarding.json")))
 	model = DeckBuilderViewModel.new(catalog, store.load_all(catalog.decks))
 	var session_deck: Dictionary = payload.get("player_deck", {})
 	if session_deck.is_empty():
@@ -154,6 +159,7 @@ func initialize(main, payload: Dictionary) -> void:
 		model.merge_session_deck(session_deck)
 	difficulty = str(payload.get("difficulty", "standard"))
 	_populate_controls()
+	_apply_onboarding_hint(onboarding_store.load())
 	_refresh()
 	if not store.last_error.is_empty():
 		%Validation.text = store.last_error
@@ -232,8 +238,30 @@ func _refresh_deck() -> void:
 	%NationDistribution.text = "  ".join(nations.keys().map(func(key): return "%s %d" % [key, nations[key]]))
 	%CardCount.text = "%d / 40" % model.card_count()
 	var validation := model.validation()
-	%Validation.text = "Ready" if validation.valid else ", ".join(validation.errors).replace("_", " ").capitalize()
+	var status := _readiness_status(validation)
+	%StarterStatus.text = status
+	%Validation.text = status
 	%PlayButton.disabled = not validation.valid
+
+
+func _readiness_status(validation: Dictionary) -> String:
+	if not validation.valid:
+		var errors: Array = validation.get("errors", [])
+		return "Deck invalid" if errors.is_empty() else str(errors[0]).replace("_", " ").capitalize()
+	if not model.selected_deck_id.begins_with("user-") and model.card_count() == 40:
+		return "Starter deck ready - 40 valid cards."
+	return "Deck ready - %d valid cards." % model.card_count()
+
+
+func _apply_onboarding_hint(state: Dictionary) -> void:
+	var show_hint := not bool(state.get("deck_hint_dismissed", false))
+	%StarterHint.visible = show_hint
+	%DismissHint.visible = show_hint
+
+
+func _on_dismiss_hint_pressed() -> void:
+	onboarding_store.dismiss_deck_hint()
+	_apply_onboarding_hint(onboarding_store.load())
 
 
 func _on_add_card(card_id: String) -> void:

@@ -66,7 +66,42 @@ layout_mode = 2
 toggle_mode = true
 text = "Hard"
 
+[node name="StarterReadiness" type="VBoxContainer" parent="Margin/Page"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="StarterStatus" type="Label" parent="Margin/Page/StarterReadiness"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 22)
+layout_mode = 2
+text = "Starter deck ready - 40 valid cards."
+vertical_alignment = 1
+
+[node name="HintLine" type="HBoxContainer" parent="Margin/Page/StarterReadiness"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="StarterHint" type="Label" parent="Margin/Page/StarterReadiness/HintLine"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 22)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Choose a difficulty and start battle, or click cards to edit."
+text_overrun_behavior = 3
+vertical_alignment = 1
+
+[node name="DismissHint" type="Button" parent="Margin/Page/StarterReadiness/HintLine"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(24, 22)
+layout_mode = 2
+flat = true
+text = "X"
+tooltip_text = "Hide starter hint"
+
 [node name="Workspace" type="HBoxContainer" parent="Margin/Page"]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 12
@@ -206,12 +241,13 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
 size_flags_horizontal = 3
-text = "Play"
+text = "Start Battle"
 
 [connection signal="item_selected" from="Margin/Page/Header/DeckSelector" to="." method="_on_deck_selected"]
 [connection signal="pressed" from="Margin/Page/Header/Difficulty/Easy" to="." method="_on_difficulty_pressed" binds=["easy"]]
 [connection signal="pressed" from="Margin/Page/Header/Difficulty/Standard" to="." method="_on_difficulty_pressed" binds=["standard"]]
 [connection signal="pressed" from="Margin/Page/Header/Difficulty/Hard" to="." method="_on_difficulty_pressed" binds=["hard"]]
+[connection signal="pressed" from="Margin/Page/StarterReadiness/HintLine/DismissHint" to="." method="_on_dismiss_hint_pressed"]
 [connection signal="text_changed" from="Margin/Page/Workspace/Filters/Margin/Controls/Search" to="." method="_on_search_changed"]
 [connection signal="item_selected" from="Margin/Page/Workspace/Filters/Margin/Controls/NationFilter" to="." method="_on_option_selected" binds=["nation", NodePath("Margin/Page/Workspace/Filters/Margin/Controls/NationFilter")]]
 [connection signal="item_selected" from="Margin/Page/Workspace/Filters/Margin/Controls/CategoryFilter" to="." method="_on_option_selected" binds=["category", NodePath("Margin/Page/Workspace/Filters/Margin/Controls/CategoryFilter")]]
