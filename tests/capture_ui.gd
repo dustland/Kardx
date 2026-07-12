@@ -151,6 +151,11 @@ func _check_artwork_regions(screen: Control, image: Image, filename: String) -> 
 		var card_rect := card.get_global_rect()
 		var art_rect := artwork.get_global_rect()
 		_check(card_rect.encloses(art_rect), "%s artwork stays within card bounds" % filename)
+		if card.mode == "battlefield":
+			var title := card.get_node("Frame/Title") as Label
+			_check(title.get_theme_font_size("font_size") >= 10, "%s battlefield title is at least 10px" % filename)
+			_check(card_rect.encloses(title.get_global_rect()), "%s battlefield title stays within card bounds" % filename)
+			_check(title.get_combined_minimum_size().y <= title.size.y, "%s battlefield title text fits its band" % filename)
 		var region := Rect2i(Vector2i(art_rect.position), Vector2i(art_rect.size)).intersection(Rect2i(Vector2i.ZERO, image.get_size()))
 		if region.has_area():
 			onscreen += 1

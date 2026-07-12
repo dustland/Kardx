@@ -8,7 +8,7 @@ signal card_dropped(instance_id: String, target: Variant)
 const MODE_SIZES := {
 	"catalog": Vector2(180, 252),
 	"hand": Vector2(116, 162),
-	"battlefield": Vector2(84, 118),
+	"battlefield": Vector2(108, 118),
 	"hidden": Vector2(116, 162),
 }
 
@@ -48,6 +48,7 @@ func bind(data: Dictionary, display_mode: String) -> void:
 	get_node("Frame/Stats/Attack").text = str(data.get("attack", ""))
 	get_node("Frame/Stats/Defense").text = str(data.get("defense", ""))
 	get_node("Frame/Artwork").texture = _load_art(str(data.get("image_path", "")))
+	_apply_semantic_accents(data)
 
 
 func _on_pressed() -> void:
@@ -92,6 +93,7 @@ func _apply_mode_layout() -> void:
 	var description := get_node("Frame/Description") as Control
 	var keywords := get_node("Frame/Keywords") as Control
 	var stats := get_node("Frame/Stats") as Control
+	var category_strip := get_node("Frame/CategoryStrip") as Control
 	frame.clip_contents = true
 	artwork.visible = mode != "hidden"
 	title.visible = mode != "hidden"
@@ -112,21 +114,24 @@ func _apply_mode_layout() -> void:
 			_set_rect(description, 6, 130, 166, 188)
 			_set_rect(keywords, 6, 192, 166, 211)
 			_set_rect(stats, 106, 216, 166, 237)
+			_set_rect(category_strip, 0, 0, 3, 244)
 		"hand":
 			type.visible = false
 			_set_rect(title, 4, 2, 104, 29)
 			_set_rect(artwork, 4, 32, 104, 111)
 			_set_rect(costs, 4, 114, 46, 133)
 			_set_rect(stats, 44, 128, 104, 149)
+			_set_rect(category_strip, 0, 0, 3, 154)
 		"battlefield":
 			type.visible = false
 			get_node("Frame/Costs/Deployment").visible = false
 			costs.add_theme_constant_override("separation", 2)
 			stats.add_theme_constant_override("separation", 3)
-			_set_rect(title, 3, 2, 72, 25)
-			_set_rect(artwork, 3, 28, 72, 77)
+			_set_rect(title, 4, 2, 96, 35)
+			_set_rect(artwork, 4, 38, 96, 79)
 			_set_rect(costs, 3, 84, 24, 105)
-			_set_rect(stats, 28, 84, 72, 105)
+			_set_rect(stats, 51, 84, 96, 105)
+			_set_rect(category_strip, 0, 0, 3, 110)
 
 
 func _fit_title(value: String) -> void:
@@ -137,8 +142,39 @@ func _fit_title(value: String) -> void:
 	if mode == "hand":
 		font_size = 9 if value.length() <= 16 else 8
 	elif mode == "battlefield":
-		font_size = 8 if value.length() <= 14 else 7
+		font_size = 10
 	title.add_theme_font_size_override("font_size", font_size)
+
+
+func _apply_semantic_accents(data: Dictionary) -> void:
+	var category := str(data.get("category", "Unit"))
+	var category_colors := {
+		"Unit": Color("82936f"),
+		"Order": Color("b28c57"),
+		"Countermeasure": Color("807b9b"),
+		"Headquarters": Color("8a9188"),
+	}
+	var category_color: Color = category_colors.get(category, Color("82936f"))
+	get_node("Frame/CategoryStrip").color = category_color
+	var owner := str(data.get("owner_id", ""))
+	var nation := str(data.get("nation", ""))
+	var border := Color("a88f58")
+	if owner == "player" or nation == "UnitedStates":
+		border = Color("7899ad")
+	elif owner == "opponent" or nation == "SovietUnion":
+		border = Color("a96d5e")
+	add_theme_stylebox_override("normal", _card_style(Color("1b241e"), border, 2))
+	add_theme_stylebox_override("hover", _card_style(Color("243029"), border.lightened(0.15), 2))
+	add_theme_stylebox_override("pressed", _card_style(Color("151d18"), category_color.lightened(0.12), 3))
+
+
+func _card_style(fill: Color, border: Color, width: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = fill
+	style.border_color = border
+	style.set_border_width_all(width)
+	style.set_corner_radius_all(4)
+	return style
 
 
 func _set_rect(control: Control, left: float, top: float, right: float, bottom: float) -> void:

@@ -89,6 +89,13 @@ grow_vertical = 2
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleFrame")
 
+[node name="CategoryStrip" type="ColorRect" parent="Frame"]
+layout_mode = 0
+offset_right = 3.0
+offset_bottom = 244.0
+mouse_filter = 2
+color = Color(0.509804, 0.576471, 0.435294, 1)
+
 [node name="Artwork" type="TextureRect" parent="Frame"]
 layout_mode = 1
 anchors_preset = 10

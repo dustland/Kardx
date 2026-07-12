@@ -25,6 +25,10 @@ func render(cards: Array, hidden := false) -> void:
 		slot.slot_index = index
 		slot.input_locked = input_locked
 		slot.disabled = input_locked
+		var slot_style := _slot_style(zone_name)
+		slot.add_theme_stylebox_override("normal", slot_style)
+		slot.add_theme_stylebox_override("hover", slot_style)
+		slot.add_theme_stylebox_override("disabled", slot_style)
 		slot.pressed.connect(func() -> void: slot_pressed.emit(zone_name, index))
 		slot.card_dropped.connect(func(instance_id: String) -> void: card_dropped.emit(instance_id, zone_name, index))
 		add_child(slot)
@@ -39,6 +43,22 @@ func render(cards: Array, hidden := false) -> void:
 			card.card_pressed.connect(func(instance_id: String) -> void: card_pressed.emit(instance_id))
 			card.card_dropped.connect(func(source_id: String, target_id: Variant) -> void: target_dropped.emit(source_id, str(target_id)))
 	_apply_highlights()
+
+func _slot_style(zone: String) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	match zone:
+		"frontline":
+			style.bg_color = Color("2a3431")
+			style.border_color = Color("667b7f")
+		"opponent_support":
+			style.bg_color = Color("332d29")
+			style.border_color = Color("76584f")
+		_:
+			style.bg_color = Color("273237")
+			style.border_color = Color("526d7d")
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(3)
+	return style
 
 func set_input_locked(locked: bool) -> void:
 	input_locked = locked

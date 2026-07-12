@@ -1,9 +1,21 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/match_view.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/ui/zone_view.gd" id="2"]
 [ext_resource type="Script" path="res://scripts/ui/timeline_view.gd" id="3"]
 [ext_resource type="PackedScene" path="res://scenes/ui/card_view.tscn" id="4"]
+
+[sub_resource type="StyleBoxFlat" id="TimelineSurface"]
+bg_color = Color(0.117647, 0.152941, 0.152941, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.345098, 0.439216, 0.447059, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
 
 [node name="MatchView" type="Control"]
 layout_mode = 3
@@ -134,6 +146,7 @@ alignment = 1
 unique_name_in_owner = true
 custom_minimum_size = Vector2(148, 0)
 layout_mode = 2
+theme_override_styles/panel = SubResource("TimelineSurface")
 [node name="Scroll" type="ScrollContainer" parent="Margin/Columns/TimelinePanel"]
 layout_mode = 2
 [node name="Timeline" type="VBoxContainer" parent="Margin/Columns/TimelinePanel/Scroll"]

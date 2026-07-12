@@ -693,7 +693,7 @@ static func _test_card_view_modes_and_geometry(t) -> void:
 	var expected_sizes := {
 		"catalog": Vector2(180, 252),
 		"hand": Vector2(116, 162),
-		"battlefield": Vector2(84, 118),
+		"battlefield": Vector2(108, 118),
 	}
 	for mode in expected_sizes:
 		var view = CardViewScene.instantiate()
@@ -703,6 +703,9 @@ static func _test_card_view_modes_and_geometry(t) -> void:
 		t.assert_eq(view.get_node("Frame/Stats/Attack").text, "1", "%s mode renders attack" % mode)
 		t.assert_eq(view.get_node("Frame/Stats/Defense").text, "2", "%s mode renders defense" % mode)
 		t.assert_true(view.get_node("Frame/Artwork").texture != null, "%s mode has fallback artwork" % mode)
+		if mode == "battlefield":
+			var title := view.get_node("Frame/Title") as Label
+			t.assert_true(title.get_theme_font_size("font_size") >= 10, "battlefield title is at least 10px")
 		view.free()
 
 
@@ -737,7 +740,7 @@ static func _test_card_view_container_layout(t) -> void:
 	var expected_sizes := {
 		"catalog": Vector2(180, 252),
 		"hand": Vector2(116, 162),
-		"battlefield": Vector2(84, 118),
+		"battlefield": Vector2(108, 118),
 		"hidden": Vector2(116, 162),
 	}
 	for mode in expected_sizes:
