@@ -64,6 +64,7 @@ func _run() -> void:
 		"snapshot": app.controller.state.snapshot_for("player"),
 	})
 	await _frames(2)
+	app.current_screen.animation_speed_scale = 0.01
 	_check(app.controller != null and app.controller.state.phase == "action", "reaches match through mulligan actions")
 	_check(app.controller.state.active_player_id == "player", "captures the active player's first turn")
 	_check(app.controller.state.players.player.credit == 1, "first player capture has 1 Credit")
@@ -136,8 +137,25 @@ func _capture_current_screen(app, capture: Array) -> void:
 	_check(_has_pixel_variation(image), "%s is not blank" % filename)
 	_check_artwork_regions(app.current_screen, image, filename)
 	_check_match_coach_bounds(app.current_screen, viewport_size, filename)
+	_check_match_grid(app.current_screen, filename)
 	var path := "%s/%s" % [CAPTURE_DIR, filename]
 	_check(image.save_png(path) == OK, "writes %s" % ProjectSettings.globalize_path(path))
+
+
+func _check_match_grid(screen: Control, filename: String) -> void:
+	if _screen_name(screen) != "match":
+		return
+	var expected: Array[float] = []
+	for zone_name in ["OpponentSupport", "Frontline", "PlayerSupport"]:
+		var zone := screen.get_node("%%%s" % zone_name) as Control
+		var centers: Array[float] = zone.grid_column_centers()
+		for slot in zone.get_children():
+			if (slot as Control).get_child_count() > 0:
+				_check((slot as Control).get_global_rect().encloses(((slot as Control).get_child(0) as Control).get_global_rect()), "%s cards remain inside stable slots" % filename)
+		if expected.is_empty(): expected = centers
+		_check(centers == expected and centers.size() == 5, "%s %s uses shared five-column centers" % [filename, zone_name])
+	_check((screen.get_node("%OpponentHQ") as Control).get_global_rect().end.x < (screen.get_node("%OpponentSupport") as Control).get_global_rect().position.x, "%s opponent HQ stays outside grid" % filename)
+	_check((screen.get_node("%PlayerHQ") as Control).get_global_rect().end.x < (screen.get_node("%PlayerSupport") as Control).get_global_rect().position.x, "%s player HQ stays outside grid" % filename)
 
 
 func _screen_name(screen: Control) -> String:

@@ -6,6 +6,7 @@ signal action_requested(action: GameAction)
 const ActionBuilderScript = preload("res://scripts/ui/action_builder.gd")
 const CardViewScene = preload("res://scenes/ui/card_view.tscn")
 const MatchCoachModelScript = preload("res://scripts/ui/match_coach_model.gd")
+const CardMotionDirectorScript = preload("res://scripts/ui/card_motion_director.gd")
 
 var router: Main
 var model := MatchInteractionModel.new()
@@ -14,6 +15,9 @@ var _input_locked := false
 var _onboarding_state: Dictionary = {}
 var _coach_state: Dictionary = {}
 var _rejection_message := ""
+var animation_mode := "on"
+var animation_speed_scale := 0.01 if DisplayServer.get_name() == "headless" else 1.0
+var _motion_director = CardMotionDirectorScript.new()
 
 class MatchInteractionModel:
 	var selected_source_id := ""
@@ -120,6 +124,8 @@ class MatchInteractionModel:
 
 
 func _ready() -> void:
+	%OpponentHQ.bind({}, "battlefield")
+	%PlayerHQ.bind({}, "battlefield")
 	%OpponentHQ.card_pressed.connect(_on_board_card_pressed)
 	%OpponentHQ.card_dropped.connect(_on_target_dropped)
 	%OpponentSupport.card_pressed.connect(_on_board_card_pressed)
@@ -137,7 +143,9 @@ func _ready() -> void:
 	%CancelButton.pressed.connect(_on_cancel_pressed)
 	%ConfirmButton.pressed.connect(_on_confirm_pressed)
 	%EndTurnButton.pressed.connect(_on_end_turn_pressed)
+	%AnimationButton.pressed.connect(_on_animation_pressed)
 	resized.connect(_apply_responsive_layout)
+	tree_exiting.connect(cancel_motion)
 	_apply_responsive_layout()
 
 
@@ -147,12 +155,13 @@ func _apply_responsive_layout() -> void:
 	var compact := size.x <= 1000.0
 	%TimelinePanel.custom_minimum_size.x = 136.0 if compact else 148.0
 	%HandScroll.custom_minimum_size.y = 164.0 if compact else 170.0
-	var row_height := 112.0 if compact else 118.0
+	var row_height := 118.0
 	for path in ["Margin/Columns/Board/OpponentArea", "Margin/Columns/Board/Frontline", "Margin/Columns/Board/PlayerArea"]:
 		(get_node(path) as Control).custom_minimum_size.y = row_height
 	var margin := get_node("Margin") as MarginContainer
 	margin.offset_left = 6.0 if compact else 8.0
 	margin.offset_right = -6.0 if compact else -8.0
+	cancel_motion()
 
 func initialize(main: Main, payload: Dictionary) -> void:
 	router = main
@@ -192,6 +201,45 @@ func _sanitize_hidden_opponent_hand() -> void:
 
 func render_events(events: Array) -> void:
 	%Timeline.render_events(events)
+
+func set_animation_mode(mode: String) -> void:
+	animation_mode = mode if mode in ["on", "reduced"] else "on"
+	if is_node_ready():
+		%AnimationButton.text = "Animation: Reduced" if animation_mode == "reduced" else "Animation: On"
+		%AnimationButton.tooltip_text = "Use full card motion" if animation_mode == "reduced" else "Use reduced card motion"
+
+func _on_animation_pressed() -> void:
+	set_animation_mode("reduced" if animation_mode == "on" else "on")
+	if router != null:
+		router.set_animation_mode(animation_mode)
+
+func play_motion(events: Array, before_snapshot: Dictionary, after_snapshot: Dictionary) -> void:
+	_motion_director.speed_scale = animation_speed_scale
+	await _motion_director.play(events, before_snapshot, after_snapshot, self)
+
+func cancel_motion() -> void:
+	_motion_director.cancel()
+
+func animation_zone_rect(player_id: String) -> Rect2:
+	return (%OpponentSupport if player_id == "opponent" else %PlayerHand).get_global_rect()
+
+func visible_card_rects() -> Dictionary:
+	var result := {}
+	for card in _visible_card_views():
+		var instance_id := str(card.card_data.get("instance_id", ""))
+		if not instance_id.is_empty() and not bool(card.card_data.get("hidden", false)):
+			result[instance_id] = card.get_global_rect()
+	return result
+
+func _visible_card_views() -> Array:
+	var result: Array = [%OpponentHQ, %PlayerHQ]
+	for parent in [%OpponentSupport, %Frontline, %PlayerSupport, %PlayerHand]:
+		for child in parent.get_children():
+			if child is CardView:
+				result.append(child)
+			elif child is Control and child.get_child_count() > 0 and child.get_child(0) is CardView:
+				result.append(child.get_child(0))
+	return result
 
 func set_legal_actions(actions: Array) -> void:
 	model.set_legal_actions(actions)

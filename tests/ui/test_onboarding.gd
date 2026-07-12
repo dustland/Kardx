@@ -6,6 +6,7 @@ const OnboardingStore = preload("res://scripts/ui/onboarding_store.gd")
 const ContentCatalog = preload("res://scripts/content/content_catalog.gd")
 const DeckBuilderScene = preload("res://scenes/ui/deck_builder_view.tscn")
 const MatchViewScene = preload("res://scenes/ui/match_view.tscn")
+const CardMotionDirector = preload("res://scripts/ui/card_motion_director.gd")
 const AIPlayer = preload("res://scripts/ai/ai_player.gd")
 
 
@@ -26,6 +27,9 @@ static func run(t) -> void:
 	await _test_end_turn_semantic_states(t)
 	await _test_unavailable_card_does_not_submit(t)
 	await _test_target_highlights_preserve_geometry(t)
+	await _test_stable_battlefield_grid(t)
+	await _test_visible_card_registry(t)
+	await _test_event_animation_queue(t)
 	await _test_real_main_milestone_submissions(t)
 
 
@@ -136,6 +140,9 @@ static func _test_match_coach_and_card_states(t) -> void:
 	t.assert_eq(view.get_node("%CoachObjective").text, "Choose a highlighted Support Line slot.", "selection refreshes coach immediately")
 	t.assert_eq(view.get_node("%StatusLabel").text, "", "precise coach copy replaces legacy selection status")
 	var objective_height := (view.get_node("%CoachObjective") as Control).size.y
+	t.assert_eq(view.get_node("%AnimationButton").text, "Animation: On", "match exposes animation preference")
+	view.get_node("%AnimationButton").pressed.emit()
+	t.assert_eq(view.animation_mode, "reduced", "animation command switches to reduced mode")
 	view.show_rejection("stale_action", "That action is no longer legal.")
 	t.assert_eq(view.get_node("%CoachObjective").text, "That action is no longer legal.", "rejection takes coach precedence")
 	t.assert_eq((view.get_node("%CoachObjective") as Control).size.y, objective_height, "rejection does not resize coach strip")
@@ -223,6 +230,90 @@ static func _test_target_highlights_preserve_geometry(t) -> void:
 	await view.get_tree().process_frame
 	t.assert_eq(slot.get_global_rect(), before, "strong slot highlight does not shift layout")
 	t.assert_true(slot.get_theme_stylebox("normal").get_border_width(SIDE_LEFT) >= 3, "highlight uses a strong slot border")
+	view.queue_free()
+	await Engine.get_main_loop().process_frame
+
+
+static func _test_stable_battlefield_grid(t) -> void:
+	for viewport_width in [1280, 1024]:
+		var view = MatchViewScene.instantiate()
+		Engine.get_main_loop().root.add_child(view)
+		Engine.get_main_loop().root.size = Vector2i(viewport_width, 720)
+		view.render_snapshot(_populated_grid_snapshot())
+		await view.get_tree().process_frame
+		await view.get_tree().process_frame
+		var expected_centers: Array[float] = []
+		for zone_name in ["OpponentSupport", "Frontline", "PlayerSupport"]:
+			var zone := view.get_node("%%%s" % zone_name) as Control
+			var centers: Array[float] = zone.grid_column_centers()
+			if expected_centers.is_empty(): expected_centers = centers
+			t.assert_eq(centers, expected_centers, "%s shares stable five-column centers at %d" % [zone_name, viewport_width])
+			t.assert_eq(centers.size(), 5, "%s exposes five grid cells at %d" % [zone_name, viewport_width])
+			for slot in zone.get_children():
+				var slot_control := slot as Control
+				t.assert_true(slot_control.size.x >= 90.0 and slot_control.size.x <= 112.0, "slot width remains bounded at %d" % viewport_width)
+				if slot_control.get_child_count() > 0:
+					t.assert_true(slot_control.get_global_rect().encloses((slot_control.get_child(0) as Control).get_global_rect()), "card fills without escaping its stable slot")
+		var grid_left: float = (view.get_node("%Frontline").get_child(0) as Control).get_global_rect().position.x
+		t.assert_true((view.get_node("%OpponentHQ") as Control).get_global_rect().end.x < grid_left, "opponent HQ stays outside grid")
+		t.assert_true((view.get_node("%PlayerHQ") as Control).get_global_rect().end.x < grid_left, "player HQ stays outside grid")
+		var hand := view.get_node("%PlayerHand") as Control
+		if hand.get_child_count() > 1:
+			var hand_gap := (hand.get_child(1) as Control).position.x - (hand.get_child(0) as Control).position.x
+			t.assert_eq(snappedf(hand_gap, 0.01), 124.0, "hand uses fixed card spacing")
+		view.queue_free()
+		await Engine.get_main_loop().process_frame
+
+
+static func _test_visible_card_registry(t) -> void:
+	var view = MatchViewScene.instantiate()
+	Engine.get_main_loop().root.add_child(view)
+	Engine.get_main_loop().root.size = Vector2i(1280, 720)
+	var before := _populated_grid_snapshot()
+	view.render_snapshot(before)
+	await view.get_tree().process_frame
+	var first_registry: Dictionary = view.visible_card_rects()
+	t.assert_true(first_registry.has("shared-unit"), "public battlefield instance enters registry")
+	t.assert_true(not first_registry.has("hidden-opponent-card"), "hidden opponent hand identity never enters registry")
+	var after := before.duplicate(true)
+	after.players.player.support_line[0] = null
+	after.frontline[0] = before.players.player.support_line[0]
+	view.render_snapshot(after)
+	await view.get_tree().process_frame
+	var second_registry: Dictionary = view.visible_card_rects()
+	t.assert_eq(second_registry.keys().count("shared-unit"), 1, "reconciliation leaves one visible view per public instance")
+	t.assert_true(second_registry["shared-unit"] is Rect2, "registry publicly exposes rectangles")
+	view.queue_free()
+	await Engine.get_main_loop().process_frame
+
+
+static func _test_event_animation_queue(t) -> void:
+	var view = MatchViewScene.instantiate()
+	Engine.get_main_loop().root.add_child(view)
+	Engine.get_main_loop().root.size = Vector2i(1280, 720)
+	var before := _populated_grid_snapshot()
+	var after := before.duplicate(true)
+	view.render_snapshot(before)
+	await view.get_tree().process_frame
+	var events := [
+		{"type": "card_drawn", "instance_id": "one-cost", "player_id": "player"},
+		{"type": "card_deployed", "instance_id": "one-cost", "zone": "support_line", "slot": 0},
+		{"type": "unit_moved", "instance_id": "shared-unit", "to_zone": "frontline", "to_slot": 0},
+		{"type": "attack_started", "attacker_id": "front-0", "defender_id": "front-1"},
+		{"type": "damage_dealt", "source_id": "front-0", "target_id": "front-1", "damage": 2},
+		{"type": "card_destroyed", "instance_id": "front-1"},
+		{"type": "order_played", "order_id": "targetless-order", "target_ids": ["front-0"]},
+		{"type": "countermeasure_activated", "instance_id": "hidden-opponent-card", "player_id": "opponent"},
+	]
+	var director = CardMotionDirector.new()
+	director.speed_scale = 0.01
+	await director.play(events, before, after, view)
+	t.assert_eq(director.processed_event_types, ["card_drawn", "card_deployed", "unit_moved", "attack_started", "damage_dealt", "card_destroyed", "order_played", "countermeasure_activated"], "accepted events animate in emitted order")
+	t.assert_eq(view.get_tree().get_nodes_in_group("card_motion_proxy").size(), 0, "animation queue cleans motion proxies")
+	t.assert_eq(view.get_tree().get_nodes_in_group("card_damage_indicator").size(), 0, "animation queue cleans damage indicators")
+	view.set_animation_mode("reduced")
+	await director.play([{"type": "unit_moved", "instance_id": "shared-unit"}], before, after, view)
+	t.assert_true(director.last_duration_ms <= 80.0, "reduced mode caps animation duration")
 	view.queue_free()
 	await Engine.get_main_loop().process_frame
 
@@ -544,6 +635,26 @@ static func _snapshot() -> Dictionary:
 		},
 		"frontline": [null, null, null, null, null],
 	}
+
+
+static func _populated_grid_snapshot() -> Dictionary:
+	var value := _snapshot()
+	value.players.player["headquarters"] = _card("player-hq", "Headquarters", 0)
+	value.players.opponent["headquarters"] = _card("opponent-hq", "Headquarters", 0)
+	value.players.opponent.hand = [{"hidden": true}]
+	value.players.opponent.support_line = [
+		_card("enemy-support-0", "Unit", 1), _card("enemy-support-1", "Unit", 1),
+		_card("enemy-support-2", "Unit", 1), _card("enemy-support-3", "Unit", 1),
+	]
+	value.players.player.support_line = [
+		_card("shared-unit", "Unit", 1), _card("player-support-1", "Unit", 1),
+		_card("player-support-2", "Unit", 1), _card("player-support-3", "Unit", 1),
+	]
+	value.frontline = [
+		_card("front-0", "Unit", 1), _card("front-1", "Unit", 1), _card("front-2", "Unit", 1),
+		_card("front-3", "Unit", 1), _card("front-4", "Unit", 1),
+	]
+	return value
 
 
 static func _card(instance_id: String, category: String, cost: int, active: bool = false) -> Dictionary:

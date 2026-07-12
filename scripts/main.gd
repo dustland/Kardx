@@ -41,10 +41,13 @@ var _match_submission_active := false
 var _match_generation := 0
 var _terminal_events: Array = []
 var onboarding_store = OnboardingStoreScript.new()
+var animation_mode := "on"
+var animation_preferences_path := "user://match-preferences.cfg"
 
 
 func _ready() -> void:
 	theme = ThemeFactory.create()
+	_load_animation_mode()
 	_match_rng.randomize()
 	_validate_and_start()
 
@@ -67,6 +70,8 @@ func show_screen(screen_name: String, payload: Dictionary = {}) -> void:
 		if screen_name == "match" and not payload.has("onboarding"):
 			payload["onboarding"] = onboarding_store.load()
 		current_screen.initialize(self, payload)
+	if screen_name == "match" and current_screen.has_method("set_animation_mode"):
+		current_screen.set_animation_mode(animation_mode)
 	if screen_name == "deck_builder" and current_screen.has_signal("play_requested"):
 		current_screen.play_requested.connect(_on_play_requested)
 	if screen_name == "mulligan" and current_screen.has_signal("confirm_requested"):
@@ -234,12 +239,16 @@ func submit_player_action(action: GameAction) -> void:
 	_match_generation += 1
 	var generation := _match_generation
 	current_screen.set_input_locked(true)
+	var before_snapshot := controller.state.snapshot_for("player")
 	var result = controller.submit_action(action)
 	if result.accepted:
 		var milestone := onboarding_milestone_for(action)
 		if not milestone.is_empty():
 			onboarding_store.complete(milestone)
-	_render_match_result(result)
+	if result.accepted:
+		await _animate_match_result(result, before_snapshot, controller.state.snapshot_for("player"), generation)
+	else:
+		_render_match_result(result)
 	if result.accepted and not _route_match_result_if_complete():
 		await _drive_ai_turn(generation)
 	if generation == _match_generation and current_screen != null and current_screen.has_method("set_input_locked"):
@@ -282,8 +291,12 @@ func _drive_ai_turn(generation: int) -> void:
 				_route_match_result_if_complete()
 				return
 			action = legal_end_turn[0]
+		var before_snapshot := controller.state.snapshot_for("player")
 		var result = controller.submit_action(action)
-		_render_match_result(result)
+		if result.accepted:
+			await _animate_match_result(result, before_snapshot, controller.state.snapshot_for("player"), generation)
+		else:
+			_render_match_result(result)
 		if not result.accepted:
 			controller.abort_invalid("ai_rejected_action", {"reason_code": result.reason_code})
 			_route_match_result_if_complete()
@@ -309,6 +322,17 @@ func _render_match_result(result: ActionResult) -> void:
 		current_screen.show_rejection(result.reason_code, result.message)
 	current_screen.render_snapshot(controller.state.snapshot_for("player"))
 
+func _animate_match_result(result: ActionResult, before_snapshot: Dictionary, after_snapshot: Dictionary, generation: int) -> void:
+	if current_screen == null or generation != _match_generation:
+		return
+	_terminal_events = result.events.duplicate(true)
+	if current_screen.has_method("play_motion"):
+		await current_screen.play_motion(result.events, before_snapshot, after_snapshot)
+	if current_screen == null or generation != _match_generation:
+		return
+	current_screen.render_events(result.events)
+	current_screen.render_snapshot(after_snapshot)
+
 
 func _refresh_match_view() -> void:
 	if current_screen == null or controller == null or not current_screen.has_method("set_legal_actions"):
@@ -328,6 +352,22 @@ static func onboarding_milestone_for(action: GameAction) -> String:
 		"attack_unit", "attack_hq":
 			return "completed_attack"
 	return ""
+
+
+func set_animation_mode(mode: String) -> void:
+	if mode not in ["on", "reduced"]:
+		return
+	animation_mode = mode
+	var config := ConfigFile.new()
+	config.set_value("match", "animation_mode", animation_mode)
+	config.save(animation_preferences_path)
+
+
+func _load_animation_mode() -> void:
+	var config := ConfigFile.new()
+	if config.load(animation_preferences_path) == OK:
+		var stored := str(config.get_value("match", "animation_mode", "on"))
+		animation_mode = stored if stored in ["on", "reduced"] else "on"
 
 
 func _route_match_result_if_complete() -> bool:
@@ -420,7 +460,11 @@ func _show_content_errors(diagnostics: Array[Dictionary]) -> void:
 
 
 func _clear_screen() -> void:
+	_match_generation += 1
+	_match_submission_active = false
 	if current_screen != null and is_instance_valid(current_screen):
+		if current_screen.has_method("cancel_motion"):
+			current_screen.cancel_motion()
 		if current_screen.get_parent() == screen_host:
 			screen_host.remove_child(current_screen)
 		current_screen.queue_free()
