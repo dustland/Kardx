@@ -1,14 +1,12 @@
 name: Build Godot Web and Deploy to GitHub Pages
 
-on:
+"on":
   push:
     branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
@@ -17,6 +15,8 @@ concurrency:
 env:
   GODOT_VERSION: "4.7"
   GODOT_RELEASE: 4.7-stable
+  GODOT_EDITOR_SHA256: 0b1a6c54c2c619c12e169fe9241edda4b81080b519451cec2984bf0d2c6cb73c
+  GODOT_TEMPLATES_SHA256: 9714459dc071907c0f3d5f17d608faf69e7cda21331fc5d39c4503ffa4e99eec
   GODOT_DOWNLOAD_DIR: ${{ github.workspace }}/.godot-downloads
 
 jobs:
@@ -24,6 +24,8 @@ jobs:
     name: Build Godot Web
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
@@ -33,7 +35,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.GODOT_DOWNLOAD_DIR }}
-          key: godot-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_RELEASE }}-official-archives
+          key: godot-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_RELEASE }}-0b1a6c54c2c619c12e169fe9241edda4b81080b519451cec2984bf0d2c6cb73c-9714459dc071907c0f3d5f17d608faf69e7cda21331fc5d39c4503ffa4e99eec
 
       - name: Download official Godot editor and export templates
         shell: bash
@@ -52,6 +54,10 @@ jobs:
             curl --fail --location --proto '=https' --tlsv1.2 \
               --retry 3 --output "$GODOT_DOWNLOAD_DIR/$templates" "$base_url/$templates"
           fi
+          printf '%s  %s\n' "$GODOT_EDITOR_SHA256" "$GODOT_DOWNLOAD_DIR/$editor" \
+            | sha256sum --check --strict
+          printf '%s  %s\n' "$GODOT_TEMPLATES_SHA256" "$GODOT_DOWNLOAD_DIR/$templates" \
+            | sha256sum --check --strict
           unzip -t "$GODOT_DOWNLOAD_DIR/$editor"
           unzip -t "$GODOT_DOWNLOAD_DIR/$templates"
 
@@ -85,10 +91,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -f builds/web/index.html
-          compgen -G 'builds/web/*.js' >/dev/null
-          compgen -G 'builds/web/*.wasm' >/dev/null
-          compgen -G 'builds/web/*.pck' >/dev/null
+          test -s builds/web/index.html
+          test -s builds/web/index.js
+          test -s builds/web/index.wasm
+          test -s builds/web/index.pck
           if find builds/web -type l -print -quit | grep -q .; then
             echo "Pages artifact contains an unexpected symbolic link:" >&2
             find builds/web -type l -print >&2
@@ -109,6 +115,9 @@ jobs:
     name: Deploy GitHub Pages
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
