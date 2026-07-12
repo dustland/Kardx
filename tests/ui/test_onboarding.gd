@@ -9,6 +9,16 @@ const MatchViewScene = preload("res://scenes/ui/match_view.tscn")
 const CardMotionDirector = preload("res://scripts/ui/card_motion_director.gd")
 const AIPlayer = preload("res://scripts/ai/ai_player.gd")
 
+class MotionProbe:
+	extends RefCounted
+	var completed := false
+	func run_director(director, events: Array, before: Dictionary, after: Dictionary, view) -> void:
+		await director.play(events, before, after, view)
+		completed = true
+	func run_view(view, events: Array, before: Dictionary, after: Dictionary) -> void:
+		await view.play_motion(events, before, after)
+		completed = true
+
 
 static func run(t) -> void:
 	_test_coach_priority_and_exact_copy(t)
@@ -30,6 +40,10 @@ static func run(t) -> void:
 	await _test_stable_battlefield_grid(t)
 	await _test_visible_card_registry(t)
 	await _test_event_animation_queue(t)
+	await _test_real_move_draw_attack_destroy_and_commands(t)
+	await _test_motion_cancellation_resolves(t)
+	await _test_lock_blocks_animation_and_keyboard_selection(t)
+	_test_animation_preference_reload(t)
 	await _test_real_main_milestone_submissions(t)
 
 
@@ -269,20 +283,26 @@ static func _test_visible_card_registry(t) -> void:
 	var view = MatchViewScene.instantiate()
 	Engine.get_main_loop().root.add_child(view)
 	Engine.get_main_loop().root.size = Vector2i(1280, 720)
-	var before := _populated_grid_snapshot()
+	var controller := _real_action_controller("player")
+	var deploy = _first_legal(controller, "player", "deploy_unit")
+	var before: Dictionary = controller.state.snapshot_for("player")
 	view.render_snapshot(before)
 	await view.get_tree().process_frame
-	var first_registry: Dictionary = view.visible_card_rects()
-	t.assert_true(first_registry.has("shared-unit"), "public battlefield instance enters registry")
-	t.assert_true(not first_registry.has("hidden-opponent-card"), "hidden opponent hand identity never enters registry")
-	var after := before.duplicate(true)
-	after.players.player.support_line[0] = null
-	after.frontline[0] = before.players.player.support_line[0]
+	var identity = view.card_view(deploy.source_id)
+	var source_rect: Rect2 = view.visible_card_rects()[deploy.source_id]
+	var result = controller.submit_action(deploy)
+	t.assert_true(result.accepted, "real deploy transition is accepted")
+	var after: Dictionary = controller.state.snapshot_for("player")
+	var measured_after: Dictionary = view.snapshot_card_rects(after)
+	t.assert_true(measured_after.has(deploy.source_id), "after geometry measures deployed public instance off current snapshot")
+	t.assert_true(source_rect.get_center().distance_to((measured_after[deploy.source_id] as Rect2).get_center()) > 40.0, "deploy has distinct hand and Support geometry")
 	view.render_snapshot(after)
 	await view.get_tree().process_frame
-	var second_registry: Dictionary = view.visible_card_rects()
-	t.assert_eq(second_registry.keys().count("shared-unit"), 1, "reconciliation leaves one visible view per public instance")
-	t.assert_true(second_registry["shared-unit"] is Rect2, "registry publicly exposes rectangles")
+	t.assert_true(view.card_view(deploy.source_id) == identity, "deploy reparents the same persistent CardView")
+	t.assert_eq(view.visible_card_rects()[deploy.source_id], measured_after[deploy.source_id], "deployed CardView ends at measured Support rect: %s != %s" % [view.visible_card_rects()[deploy.source_id], measured_after[deploy.source_id]])
+	for hidden in before.players.opponent.hand:
+		if hidden is Dictionary:
+			t.assert_true(not view.visible_card_rects().has(str(hidden.get("instance_id", ""))), "hidden opponent hand identity is excluded")
 	view.queue_free()
 	await Engine.get_main_loop().process_frame
 
@@ -291,31 +311,299 @@ static func _test_event_animation_queue(t) -> void:
 	var view = MatchViewScene.instantiate()
 	Engine.get_main_loop().root.add_child(view)
 	Engine.get_main_loop().root.size = Vector2i(1280, 720)
-	var before := _populated_grid_snapshot()
-	var after := before.duplicate(true)
+	var controller := _real_action_controller("player")
+	var deploy = _first_legal(controller, "player", "deploy_unit")
+	var before: Dictionary = controller.state.snapshot_for("player")
 	view.render_snapshot(before)
 	await view.get_tree().process_frame
-	var events := [
-		{"type": "card_drawn", "instance_id": "one-cost", "player_id": "player"},
-		{"type": "card_deployed", "instance_id": "one-cost", "zone": "support_line", "slot": 0},
-		{"type": "unit_moved", "instance_id": "shared-unit", "to_zone": "frontline", "to_slot": 0},
-		{"type": "attack_started", "attacker_id": "front-0", "defender_id": "front-1"},
-		{"type": "damage_dealt", "source_id": "front-0", "target_id": "front-1", "damage": 2},
-		{"type": "card_destroyed", "instance_id": "front-1"},
-		{"type": "order_played", "order_id": "targetless-order", "target_ids": ["front-0"]},
-		{"type": "countermeasure_activated", "instance_id": "hidden-opponent-card", "player_id": "opponent"},
-	]
+	var result = controller.submit_action(deploy)
+	var after: Dictionary = controller.state.snapshot_for("player")
 	var director = CardMotionDirector.new()
-	director.speed_scale = 0.01
-	await director.play(events, before, after, view)
-	t.assert_eq(director.processed_event_types, ["card_drawn", "card_deployed", "unit_moved", "attack_started", "damage_dealt", "card_destroyed", "order_played", "countermeasure_activated"], "accepted events animate in emitted order")
+	director.speed_scale = 1.0
+	var probe := MotionProbe.new()
+	probe.call_deferred("run_director", director, result.events, before, after, view)
+	await Engine.get_main_loop().create_timer(0.08).timeout
+	await Engine.get_main_loop().process_frame
+	var proxies := view.get_tree().get_nodes_in_group("card_motion_proxy")
+	t.assert_true(not proxies.is_empty(), "real deploy exposes an in-flight proxy")
+	if not proxies.is_empty():
+		var position := (proxies[0] as Control).get_global_rect().get_center()
+		var source := (view.snapshot_card_rects(before)[deploy.source_id] as Rect2).get_center()
+		var destination := (view.snapshot_card_rects(after)[deploy.source_id] as Rect2).get_center()
+		t.assert_true(position.distance_to(source) > 1.0 and position.distance_to(destination) > 1.0, "deploy proxy reaches a true midpoint: %s source %s destination %s" % [position, source, destination])
+	while not probe.completed:
+		await Engine.get_main_loop().process_frame
+	view.render_snapshot(after)
+	await view.get_tree().process_frame
+	t.assert_eq(view.visible_card_rects()[deploy.source_id], view.snapshot_card_rects(after)[deploy.source_id], "animation reconciles to authoritative destination")
 	t.assert_eq(view.get_tree().get_nodes_in_group("card_motion_proxy").size(), 0, "animation queue cleans motion proxies")
 	t.assert_eq(view.get_tree().get_nodes_in_group("card_damage_indicator").size(), 0, "animation queue cleans damage indicators")
 	view.set_animation_mode("reduced")
-	await director.play([{"type": "unit_moved", "instance_id": "shared-unit"}], before, after, view)
+	await director.play(result.events, before, after, view)
 	t.assert_true(director.last_duration_ms <= 80.0, "reduced mode caps animation duration")
 	view.queue_free()
 	await Engine.get_main_loop().process_frame
+
+
+static func _test_motion_cancellation_resolves(t) -> void:
+	var view = MatchViewScene.instantiate()
+	Engine.get_main_loop().root.add_child(view)
+	var controller := _real_action_controller("player")
+	var action = _first_legal(controller, "player", "deploy_unit")
+	var before: Dictionary = controller.state.snapshot_for("player")
+	view.render_snapshot(before)
+	await view.get_tree().process_frame
+	var result = controller.submit_action(action)
+	var after: Dictionary = controller.state.snapshot_for("player")
+	view.animation_speed_scale = 2.0
+	var probe := MotionProbe.new()
+	probe.call_deferred("run_view", view, result.events, before, after)
+	for _frame in range(20):
+		await Engine.get_main_loop().process_frame
+		if not view.get_tree().get_nodes_in_group("card_motion_proxy").is_empty(): break
+	view.cancel_motion(after)
+	await Engine.get_main_loop().process_frame
+	t.assert_true(probe.completed, "cancelled motion await resolves")
+	t.assert_eq(view.snapshot.get("sequence"), after.get("sequence"), "cancellation snaps authoritative sequence")
+	t.assert_true(view.visible_card_rects().has(action.source_id), "cancellation renders deployed card from authoritative after snapshot")
+	t.assert_eq(view.get_tree().get_nodes_in_group("card_motion_proxy").size(), 0, "cancellation leaves no proxies")
+	view.queue_free()
+	await Engine.get_main_loop().process_frame
+
+	var main_controller := _real_action_controller("player")
+	var main_action = _first_legal(main_controller, "player", "deploy_unit")
+	var runtime := _main_runtime(main_controller, OnboardingStore.new("user://test-cancel-store.json"))
+	runtime.main.current_screen.animation_speed_scale = 2.0
+	runtime.main.submit_player_action(main_action)
+	for _frame in range(30):
+		await Engine.get_main_loop().process_frame
+		if not runtime.main.current_screen.get_tree().get_nodes_in_group("card_motion_proxy").is_empty(): break
+	t.assert_true(runtime.main._match_submission_active and runtime.main.current_screen._input_locked, "Main locks input while accepted motion is active")
+	runtime.main.current_screen.size.x -= 1.0
+	for _frame in range(60):
+		await Engine.get_main_loop().process_frame
+		if not runtime.main._match_submission_active: break
+	t.assert_true(not runtime.main._match_submission_active and not runtime.main.current_screen._input_locked, "resize cancellation resolves Main queue and unlocks input")
+	t.assert_true(runtime.main.current_screen.visible_card_rects().has(main_action.source_id), "resize cancellation snaps final authoritative deployed card")
+	t.assert_eq(runtime.main.current_screen.get_tree().get_nodes_in_group("card_motion_proxy").size(), 0, "resize cancellation leaves no Main proxies")
+	await _free_runtime(runtime)
+	_cleanup("user://test-cancel-store.json")
+
+	var replacement_controller := _real_action_controller("player")
+	var replacement_action = _first_legal(replacement_controller, "player", "deploy_unit")
+	var replacement := _main_runtime(replacement_controller, OnboardingStore.new("user://test-replacement-store.json"))
+	replacement.main.current_screen.animation_speed_scale = 2.0
+	replacement.main.submit_player_action(replacement_action)
+	for _frame in range(30):
+		await Engine.get_main_loop().process_frame
+		if not replacement.main.current_screen.get_tree().get_nodes_in_group("card_motion_proxy").is_empty(): break
+	replacement.main.show_screen("match", {
+		"snapshot": replacement_controller.state.snapshot_for("player"),
+		"events": [],
+		"onboarding": replacement.main.onboarding_store.load(),
+	})
+	await Engine.get_main_loop().process_frame
+	await Engine.get_main_loop().process_frame
+	t.assert_true(not replacement.main._match_submission_active and not replacement.main.current_screen._input_locked, "screen replacement cancels queue and clears locks")
+	t.assert_eq(replacement.main.current_screen.snapshot.get("sequence"), replacement_controller.state.sequence, "replacement renders final authoritative snapshot")
+	t.assert_true(replacement.main.current_screen.visible_card_rects().has(replacement_action.source_id), "replacement snapshot contains accepted deployed card")
+	t.assert_eq(replacement.main.current_screen.get_tree().get_nodes_in_group("card_motion_proxy").size(), 0, "screen replacement leaves no proxies")
+	await _free_runtime(replacement)
+	_cleanup("user://test-replacement-store.json")
+
+	var combat := _real_combat_controller()
+	combat.state.players.opponent.support_line[0].current_defense = 99
+	var attack = _first_legal(combat, "player", "attack_unit")
+	var attack_before: Dictionary = combat.state.snapshot_for("player")
+	var attack_view = MatchViewScene.instantiate()
+	Engine.get_main_loop().root.add_child(attack_view)
+	attack_view.render_snapshot(attack_before)
+	await attack_view.get_tree().process_frame
+	var target = attack_view.card_view(attack.target_ids[0])
+	var baseline: Color = target.modulate
+	var attack_result = combat.submit_action(attack)
+	var attack_after: Dictionary = combat.state.snapshot_for("player")
+	attack_view.animation_speed_scale = 2.0
+	var attack_probe := MotionProbe.new()
+	attack_probe.call_deferred("run_view", attack_view, attack_result.events, attack_before, attack_after)
+	for _frame in range(30):
+		await Engine.get_main_loop().process_frame
+		if bool(target.get_meta("motion_flash_active", false)): break
+	attack_view.cancel_motion(attack_after)
+	await Engine.get_main_loop().process_frame
+	t.assert_true(attack_probe.completed, "attack cancellation resolves await")
+	t.assert_true(not bool(target.get_meta("motion_flash_active", false)) and target.modulate == baseline, "attack cancellation restores target flash baseline")
+	attack_view.queue_free()
+	await Engine.get_main_loop().process_frame
+
+
+static func _test_real_move_draw_attack_destroy_and_commands(t) -> void:
+	var view = MatchViewScene.instantiate()
+	Engine.get_main_loop().root.add_child(view)
+	Engine.get_main_loop().root.size = Vector2i(1280, 720)
+	var director = CardMotionDirector.new()
+	director.speed_scale = 0.25
+
+	var move_controller := _real_action_controller("player")
+	var moving = move_controller.state.players.player.hand.pop_front()
+	moving.zone = "support_line"
+	moving.slot = 0
+	moving.deployed_turn = move_controller.state.turn - 1
+	move_controller.state.players.player.support_line[0] = moving
+	var move = _first_legal(move_controller, "player", "move_unit")
+	var move_before: Dictionary = move_controller.state.snapshot_for("player")
+	view.render_snapshot(move_before)
+	await view.get_tree().process_frame
+	var move_identity = view.card_view(moving.instance_id)
+	var move_result = move_controller.submit_action(move)
+	var move_after: Dictionary = move_controller.state.snapshot_for("player")
+	director.speed_scale = 5.0
+	var move_probe := MotionProbe.new()
+	move_probe.call_deferred("run_director", director, move_result.events, move_before, move_after, view)
+	var move_source := (view.snapshot_card_rects(move_before)[moving.instance_id] as Rect2).get_center()
+	var move_destination := (view.snapshot_card_rects(move_after)[moving.instance_id] as Rect2).get_center()
+	var move_crossed_midpoint := false
+	for _frame in range(240):
+		await Engine.get_main_loop().process_frame
+		var move_proxies := view.get_tree().get_nodes_in_group("card_motion_proxy")
+		if director.current_event_type == "unit_moved" and not move_proxies.is_empty():
+			var center := (move_proxies[0] as Control).get_global_rect().get_center()
+			if center.distance_to(move_source) > 1.0 and center.distance_to(move_destination) > 1.0:
+				move_crossed_midpoint = true
+		elif move_crossed_midpoint:
+			break
+	t.assert_true(move_crossed_midpoint, "real move crosses an in-flight point between Support and Frontline")
+	while not move_probe.completed: await Engine.get_main_loop().process_frame
+	view.render_snapshot(move_after)
+	await view.get_tree().process_frame
+	t.assert_true(view.card_view(moving.instance_id) == move_identity, "move reparents the same CardView identity")
+	t.assert_eq(view.visible_card_rects()[moving.instance_id], view.snapshot_card_rects(move_after)[moving.instance_id], "move ends at authoritative Frontline rect")
+
+	var draw_controller := _real_action_controller("player")
+	var player_end = _first_legal(draw_controller, "player", "end_turn")
+	draw_controller.submit_action(player_end)
+	var draw_before: Dictionary = draw_controller.state.snapshot_for("player")
+	var opponent_end = _first_legal(draw_controller, "opponent", "end_turn")
+	var draw_result = draw_controller.submit_action(opponent_end)
+	var draw_after: Dictionary = draw_controller.state.snapshot_for("player")
+	view.render_snapshot(draw_before)
+	await view.get_tree().process_frame
+	director.speed_scale = 5.0
+	var draw_probe := MotionProbe.new()
+	draw_probe.call_deferred("run_director", director, draw_result.events, draw_before, draw_after, view)
+	for _frame in range(30):
+		await Engine.get_main_loop().process_frame
+		if director.current_event_type == "card_drawn" and not view.get_tree().get_nodes_in_group("card_motion_proxy").is_empty(): break
+	var draw_proxies := view.get_tree().get_nodes_in_group("card_motion_proxy")
+	var draw_source: Vector2 = view.deck_edge_rect("player").position
+	var drawn_id := str(draw_result.events.filter(func(event) -> bool: return str(event.get("type", "")) == "card_drawn")[-1].get("instance_id", ""))
+	var draw_destination: Vector2 = (view.snapshot_card_rects(draw_after).get(drawn_id, Rect2()) as Rect2).position
+	var initial_draw_distance: float = (draw_proxies[0] as Control).global_position.distance_to(draw_source) if not draw_proxies.is_empty() else INF
+	t.assert_true(not draw_proxies.is_empty() and initial_draw_distance < draw_source.distance_to(draw_destination) * 0.35, "draw proxy begins on deck-edge side of its route")
+	await Engine.get_main_loop().create_timer(0.08).timeout
+	draw_proxies = view.get_tree().get_nodes_in_group("card_motion_proxy")
+	t.assert_true(not draw_proxies.is_empty() and (draw_proxies[0] as Control).global_position.distance_to(draw_source) > initial_draw_distance + 1.0, "draw proxy travels toward new hand position")
+	while not draw_probe.completed: await Engine.get_main_loop().process_frame
+	t.assert_true("card_drawn" in director.processed_event_types, "real turn transition emits animated draw")
+	t.assert_eq(director.last_source_rect, view.deck_edge_rect("player"), "draw originates at player deck/hand edge")
+	t.assert_true(director.last_destination_rect != director.last_source_rect, "draw destination is the new hand position")
+
+	var combat := _real_combat_controller()
+	var attack = _first_legal(combat, "player", "attack_unit")
+	t.assert_true(attack != null, "real combat fixture exposes unit attack")
+	if attack != null:
+		var attack_before: Dictionary = combat.state.snapshot_for("player")
+		view.render_snapshot(attack_before)
+		await view.get_tree().process_frame
+		var target_id: String = attack.target_ids[0]
+		var attacker_start: Vector2 = (view.snapshot_card_rects(attack_before)[attack.source_id] as Rect2).position
+		var attack_result = combat.submit_action(attack)
+		var attack_after: Dictionary = combat.state.snapshot_for("player")
+		director.speed_scale = 1.0
+		var probe := MotionProbe.new()
+		probe.call_deferred("run_director", director, attack_result.events, attack_before, attack_after, view)
+		for _frame in range(120):
+			await Engine.get_main_loop().process_frame
+			if director.current_event_type == "attack_started" and not view.get_tree().get_nodes_in_group("card_motion_proxy").is_empty(): break
+		var attack_proxies := view.get_tree().get_nodes_in_group("card_motion_proxy")
+		t.assert_true(bool(view.card_view(target_id).get_meta("motion_flash_active", false)), "real attack flashes target during lunge")
+		var farthest := 0.0
+		var returned := false
+		for _sample in range(240):
+			await Engine.get_main_loop().process_frame
+			attack_proxies = view.get_tree().get_nodes_in_group("card_motion_proxy")
+			if director.current_event_type != "attack_started" or attack_proxies.is_empty(): break
+			var distance := (attack_proxies[0] as Control).global_position.distance_to(attacker_start)
+			if farthest > 10.0 and distance < farthest - 1.0:
+				returned = true
+				break
+			farthest = maxf(farthest, distance)
+		t.assert_true(farthest > 1.0, "attack proxy lunges toward real target")
+		t.assert_true(returned, "attack proxy reverses and returns toward attacker rect")
+		for _frame in range(240):
+			await Engine.get_main_loop().process_frame
+			if director.current_event_type == "card_destroyed": break
+		await Engine.get_main_loop().create_timer(0.12).timeout
+		var destroy_proxies := view.get_tree().get_nodes_in_group("card_motion_proxy")
+		t.assert_true(not destroy_proxies.is_empty() and (destroy_proxies[0] as Control).scale.x < 0.98 and (destroy_proxies[0] as Control).modulate.a < 0.8, "destroy proxy visibly shrinks and fades in flight")
+		while not probe.completed: await Engine.get_main_loop().process_frame
+		t.assert_eq(view.visible_card_rects()[attack.source_id], view.snapshot_card_rects(attack_before)[attack.source_id], "attack completion leaves attacker at authoritative source rect")
+		t.assert_true("card_destroyed" in director.processed_event_types, "lethal real attack animates destruction payload")
+		t.assert_true(not bool(view.card_view(target_id).get_meta("motion_flash_active", false)), "attack target flash returns to baseline")
+
+	var commands := _real_command_controller()
+	for action_type in ["toggle_countermeasure", "play_order"]:
+		var command = _first_legal(commands, "player", action_type)
+		t.assert_true(command != null, "real fixture exposes %s" % action_type)
+		if command != null:
+			var command_before: Dictionary = commands.state.snapshot_for("player")
+			view.render_snapshot(command_before)
+			await view.get_tree().process_frame
+			var command_result = commands.submit_action(command)
+			var command_after: Dictionary = commands.state.snapshot_for("player")
+			director.speed_scale = 1.0
+			var command_probe := MotionProbe.new()
+			command_probe.call_deferred("run_director", director, command_result.events, command_before, command_after, view)
+			for _frame in range(30):
+				await Engine.get_main_loop().process_frame
+				if director.current_event_type in ["order_played", "countermeasure_activated", "countermeasure_deactivated"]: break
+			var command_proxies := view.get_tree().get_nodes_in_group("card_motion_proxy")
+			var command_source := (view.snapshot_card_rects(command_before)[command.source_id] as Rect2).position
+			await Engine.get_main_loop().create_timer(0.14).timeout
+			command_proxies = view.get_tree().get_nodes_in_group("card_motion_proxy")
+			t.assert_true(not command_proxies.is_empty() and (command_proxies[0] as Control).global_position.distance_to(view.command_area_rect().position) < command_source.distance_to(view.command_area_rect().position), "%s proxy travels toward command area" % action_type)
+			while not command_probe.completed: await Engine.get_main_loop().process_frame
+	view.queue_free()
+	await Engine.get_main_loop().process_frame
+static func _test_lock_blocks_animation_and_keyboard_selection(t) -> void:
+	var view = MatchViewScene.instantiate()
+	Engine.get_main_loop().root.add_child(view)
+	view.render_snapshot(_snapshot())
+	view.model.select_source("one-cost")
+	view.set_input_locked(true)
+	t.assert_true(view.get_node("%AnimationButton").disabled, "animation preference is disabled while input is locked")
+	var event := InputEventAction.new()
+	event.action = "ui_cancel"
+	event.pressed = true
+	view._unhandled_key_input(event)
+	t.assert_eq(view.model.selected_source_id, "one-cost", "locked keyboard input cannot change selection")
+	view.queue_free()
+	await Engine.get_main_loop().process_frame
+
+
+static func _test_animation_preference_reload(t) -> void:
+	var path := "user://test-match-preferences.cfg"
+	_cleanup(path)
+	var first := Main.new()
+	first.animation_preferences_path = path
+	first.set_animation_mode("reduced")
+	var second := Main.new()
+	second.animation_preferences_path = path
+	second._load_animation_mode()
+	t.assert_eq(second.animation_mode, "reduced", "animation preference reloads from adjacent config")
+	first.free()
+	second.free()
+	_cleanup(path)
 
 
 static func _test_real_main_milestone_submissions(t) -> void:
@@ -679,6 +967,58 @@ static func _real_action_controller(active_player_id: String) -> MatchController
 	if active_player_id == "opponent":
 		var end_action = _first_legal(controller, "player", "end_turn")
 		controller.submit_action(end_action)
+	return controller
+
+
+static func _real_combat_controller() -> MatchController:
+	var controller := _real_action_controller("player")
+	var attacker = controller.state.players.player.hand.pop_front()
+	var defender = controller.state.players.opponent.hand.pop_front()
+	attacker.zone = "frontline"
+	attacker.slot = 0
+	attacker.deployed_turn = controller.state.turn - 1
+	attacker.operations_used = 0
+	attacker.current_attack = 20
+	defender.zone = "support_line"
+	defender.slot = 0
+	defender.current_defense = 1
+	controller.state.frontline[0] = attacker
+	controller.state.players.opponent.support_line[0] = defender
+	controller.state.frontline_controller_id = "player"
+	controller.state.players.player.credit = 10
+	return controller
+
+
+static func _real_command_controller() -> MatchController:
+	var definitions := {
+		"player-hq": CoreCards._gameplay_definition("player-hq", "Headquarters"),
+		"opponent-hq": CoreCards._gameplay_definition("opponent-hq", "Headquarters"),
+		"unit": CoreCards._gameplay_definition("unit", "Unit", 2, 3),
+		"order": CoreCards._gameplay_definition("order", "Order"),
+		"counter": CoreCards._gameplay_definition("counter", "Countermeasure"),
+	}
+	var player_deck: Array[String] = []
+	var opponent_deck: Array[String] = []
+	for index in range(19):
+		player_deck.append("order")
+		player_deck.append("counter")
+		opponent_deck.append("unit")
+		opponent_deck.append("unit")
+	player_deck.append("unit")
+	player_deck.append("player-hq")
+	opponent_deck.append("unit")
+	opponent_deck.append("opponent-hq")
+	var controller := MatchController.create(definitions, player_deck, opponent_deck, 818)
+	_start_player_turn(controller)
+	for category in ["Order", "Countermeasure"]:
+		if not controller.state.players.player.hand.any(func(card) -> bool: return card.category == category):
+			for card in controller.state.players.player.deck:
+				if card.category == category:
+					controller.state.players.player.deck.erase(card)
+					card.zone = "hand"
+					controller.state.players.player.hand.append(card)
+					break
+	controller.state.players.player.credit = 10
 	return controller
 
 

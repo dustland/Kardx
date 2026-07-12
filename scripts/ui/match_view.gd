@@ -18,6 +18,7 @@ var _rejection_message := ""
 var animation_mode := "on"
 var animation_speed_scale := 0.01 if DisplayServer.get_name() == "headless" else 1.0
 var _motion_director = CardMotionDirectorScript.new()
+var _card_registry: Dictionary = {}
 
 class MatchInteractionModel:
 	var selected_source_id := ""
@@ -183,12 +184,13 @@ func render_snapshot(next_snapshot: Dictionary) -> void:
 	%OpponentLabel.text = "%s  HQ %d  Hand %d  Deck %d" % [str(opponent.get("nation", "Opponent")), int(opponent.get("hq_defense", 0)), (opponent.get("hand", []) as Array).size(), int(opponent.get("deck_count", 0))]
 	%PlayerLabel.text = "%s  HQ %d" % [str(player.get("nation", "Player")), int(player.get("hq_defense", 0))]
 	%CreditLabel.text = "Credit %d / %d" % [int(player.get("credit", 0)), int(player.get("credit_slots", 0))]
-	%OpponentSupport.render(opponent.get("support_line", []))
-	%Frontline.render(snapshot.get("frontline", []))
-	%PlayerSupport.render(player.get("support_line", []))
+	%OpponentSupport.render(opponent.get("support_line", []), false, _resolve_card_view)
+	%Frontline.render(snapshot.get("frontline", []), false, _resolve_card_view)
+	%PlayerSupport.render(player.get("support_line", []), false, _resolve_card_view)
 	%OpponentHQ.bind(opponent.get("headquarters", {}), "battlefield")
 	%PlayerHQ.bind(player.get("headquarters", {}), "battlefield")
 	_render_hand(player.get("hand", []))
+	_release_missing_card_views(_public_instance_ids(snapshot))
 	_refresh_coach()
 
 
@@ -217,29 +219,63 @@ func play_motion(events: Array, before_snapshot: Dictionary, after_snapshot: Dic
 	_motion_director.speed_scale = animation_speed_scale
 	await _motion_director.play(events, before_snapshot, after_snapshot, self)
 
-func cancel_motion() -> void:
+func cancel_motion(final_snapshot: Dictionary = {}) -> void:
 	_motion_director.cancel()
+	if not final_snapshot.is_empty():
+		render_snapshot(final_snapshot)
 
 func animation_zone_rect(player_id: String) -> Rect2:
 	return (%OpponentSupport if player_id == "opponent" else %PlayerHand).get_global_rect()
 
+func deck_edge_rect(player_id: String) -> Rect2:
+	var area: Rect2 = (%OpponentSupport if player_id == "opponent" else %HandScroll).get_global_rect()
+	return Rect2(area.end.x - 18.0, area.position.y + area.size.y * 0.5 - 24.0, 36.0, 48.0)
+
+func command_area_rect() -> Rect2:
+	return (%AnimationButton as Control).get_global_rect()
+
 func visible_card_rects() -> Dictionary:
 	var result := {}
-	for card in _visible_card_views():
+	for card in _card_registry.values():
 		var instance_id := str(card.card_data.get("instance_id", ""))
-		if not instance_id.is_empty() and not bool(card.card_data.get("hidden", false)):
+		if is_instance_valid(card) and card.is_visible_in_tree() and not instance_id.is_empty() and not bool(card.card_data.get("hidden", false)):
 			result[instance_id] = card.get_global_rect()
+	for card in [%OpponentHQ, %PlayerHQ]:
+		var instance_id := str(card.card_data.get("instance_id", ""))
+		if not instance_id.is_empty(): result[instance_id] = card.get_global_rect()
 	return result
 
-func _visible_card_views() -> Array:
-	var result: Array = [%OpponentHQ, %PlayerHQ]
-	for parent in [%OpponentSupport, %Frontline, %PlayerSupport, %PlayerHand]:
-		for child in parent.get_children():
-			if child is CardView:
-				result.append(child)
-			elif child is Control and child.get_child_count() > 0 and child.get_child(0) is CardView:
-				result.append(child.get_child(0))
+func card_view(instance_id: String):
+	return _card_registry.get(instance_id)
+
+func snapshot_card_rects(value: Dictionary) -> Dictionary:
+	var result := {}
+	var players: Dictionary = value.get("players", {})
+	_add_zone_snapshot_rects(result, players.get("opponent", {}).get("support_line", []), %OpponentSupport)
+	_add_zone_snapshot_rects(result, value.get("frontline", []), %Frontline)
+	_add_zone_snapshot_rects(result, players.get("player", {}).get("support_line", []), %PlayerSupport)
+	for pair in [[players.get("opponent", {}).get("headquarters", {}), %OpponentHQ], [players.get("player", {}).get("headquarters", {}), %PlayerHQ]]:
+		if pair[0] is Dictionary:
+			var instance_id := str(pair[0].get("instance_id", ""))
+			if not instance_id.is_empty(): result[instance_id] = (pair[1] as Control).get_global_rect()
+	var hand: Array = players.get("player", {}).get("hand", [])
+	var hand_rect := (%HandScroll as Control).get_global_rect()
+	var total_width := hand.size() * 116.0 + maxf(0.0, hand.size() - 1.0) * 8.0
+	var left := hand_rect.position.x + maxf(0.0, (hand_rect.size.x - total_width) * 0.5)
+	var top := hand_rect.position.y + maxf(0.0, (hand_rect.size.y - 162.0) * 0.5)
+	for index in range(hand.size()):
+		if hand[index] is Dictionary and not bool(hand[index].get("hidden", false)):
+			var instance_id := str(hand[index].get("instance_id", ""))
+			if not instance_id.is_empty(): result[instance_id] = Rect2(left + index * 124.0, top, 116.0, 162.0)
 	return result
+
+func _add_zone_snapshot_rects(result: Dictionary, cards: Array, zone: ZoneView) -> void:
+	for index in range(mini(cards.size(), zone.get_child_count())):
+		if cards[index] is Dictionary and not bool(cards[index].get("hidden", false)):
+			var instance_id := str(cards[index].get("instance_id", ""))
+			if not instance_id.is_empty():
+				var slot_rect := (zone.get_child(index) as Control).get_global_rect()
+				result[instance_id] = Rect2(slot_rect.position.x, zone.global_position.y, 108.0, 118.0)
 
 func set_legal_actions(actions: Array) -> void:
 	model.set_legal_actions(actions)
@@ -267,6 +303,7 @@ func set_input_locked(locked: bool) -> void:
 	%EndTurnButton.disabled = locked or snapshot.get("active_player_id") != "player"
 	%ConfirmButton.disabled = locked or not model.can_confirm()
 	%CancelButton.disabled = locked or model.selected_source_id.is_empty()
+	%AnimationButton.disabled = locked
 	%OpponentHQ.disabled = locked
 	%PlayerHQ.disabled = locked
 	%OpponentSupport.set_input_locked(locked)
@@ -282,15 +319,51 @@ func show_rejection(code: String, message: String) -> void:
 	_refresh_coach()
 
 func _render_hand(cards: Array) -> void:
-	for child in %PlayerHand.get_children(): child.free()
+	for child in %PlayerHand.get_children():
+		%PlayerHand.remove_child(child)
 	for card_data in cards:
 		if not (card_data is Dictionary): continue
-		var card = CardViewScene.instantiate()
+		var card = _resolve_card_view(card_data, "hand")
+		if card.get_parent() != null: card.get_parent().remove_child(card)
 		%PlayerHand.add_child(card)
 		card.bind(card_data, "hand")
 		card.disabled = _input_locked
-		card.card_pressed.connect(_on_card_pressed)
 	_apply_hand_states()
+
+func _resolve_card_view(card_data: Dictionary, mode: String):
+	var instance_id := str(card_data.get("instance_id", ""))
+	var card = _card_registry.get(instance_id)
+	if card == null or not is_instance_valid(card):
+		card = CardViewScene.instantiate()
+		_card_registry[instance_id] = card
+		card.card_pressed.connect(_on_registered_card_pressed.bind(card))
+		card.card_dropped.connect(_on_registered_card_dropped.bind(card))
+	card.bind(card_data, mode)
+	return card
+
+func _on_registered_card_pressed(instance_id: String, card: CardView) -> void:
+	if card.mode == "hand": _on_card_pressed(instance_id)
+	else: _on_board_card_pressed(instance_id)
+
+func _on_registered_card_dropped(source_id: String, target_id: Variant, card: CardView) -> void:
+	if card.mode == "battlefield": _on_target_dropped(source_id, str(target_id))
+
+func _public_instance_ids(value: Dictionary) -> Dictionary:
+	var result := {}
+	var players: Dictionary = value.get("players", {})
+	for cards in [players.get("player", {}).get("hand", []), players.get("player", {}).get("support_line", []), players.get("opponent", {}).get("support_line", []), value.get("frontline", [])]:
+		for card in cards:
+			if card is Dictionary and not bool(card.get("hidden", false)):
+				var instance_id := str(card.get("instance_id", ""))
+				if not instance_id.is_empty(): result[instance_id] = true
+	return result
+
+func _release_missing_card_views(public_ids: Dictionary) -> void:
+	for instance_id in _card_registry.keys():
+		if not public_ids.has(instance_id):
+			var card = _card_registry[instance_id]
+			if is_instance_valid(card): card.free()
+			_card_registry.erase(instance_id)
 
 func _on_card_pressed(instance_id: String) -> void:
 	if _reject_locked(): return
@@ -372,6 +445,7 @@ func _reject_locked() -> bool:
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
+		if _reject_locked(): return
 		model.cancel()
 		_clear_rejection()
 		%StatusLabel.text = ""

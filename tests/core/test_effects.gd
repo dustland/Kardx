@@ -101,8 +101,10 @@ static func _test_zone_and_resource_effects(t) -> void:
 	_put_hand(controller, discard_card)
 	var engine := _engine(controller, 502, definitions)
 
-	_resolve(engine, source, [], [{"type": "draw", "count": 1, "player": "owner"}], {"selector": "none"})
+	var draw_events := _resolve(engine, source, [], [{"type": "draw", "count": 1, "player": "owner"}], {"selector": "none"})
 	t.assert_true(controller.state.players.player.hand.has(draw_card), "draw moves the top card into hand")
+	var draw_event: Dictionary = draw_events.filter(func(event) -> bool: return str(event.get("type", "")) == "card_drawn")[0]
+	t.assert_eq(draw_event.get("instance_id", ""), draw_card.instance_id, "effect draw identifies the actual card entering hand")
 
 	_resolve(engine, source, [discard_card.instance_id], [{"type": "discard"}])
 	t.assert_true(controller.state.players.player.discard.has(discard_card), "discard moves the selected hand card")
@@ -156,6 +158,8 @@ static func _test_destroy_runs_death_trigger(t) -> void:
 	t.assert_eq(doomed.zone, "discard", "destroy moves a unit to discard")
 	t.assert_eq(controller.state.players.player.headquarters.current_defense, 18, "death trigger resolves after destruction")
 	t.assert_true(_event_types(events).has("card_destroyed"), "destroy emits a semantic event")
+	var destroy_event: Dictionary = events.filter(func(event) -> bool: return str(event.get("type", "")) == "card_destroyed")[0]
+	t.assert_eq(destroy_event.get("target_id", ""), doomed.instance_id, "effect destroy identifies the actual removed card")
 
 
 static func _test_random_target_is_seeded(t) -> void:

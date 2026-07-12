@@ -583,7 +583,9 @@ static func _test_router_replaces_screen_and_initializes_payload(t) -> void:
 	main.show_screen("match", {"difficulty": "hard"})
 	t.assert_true(first_screen.is_queued_for_deletion(), "replaced screen is freed")
 	t.assert_eq(host.get_child_count(), 1, "screen host contains only active screen")
-	t.assert_eq((main.current_screen as TestScreen).payload, {"difficulty": "hard"}, "replacement receives payload")
+	var match_payload: Dictionary = (main.current_screen as TestScreen).payload
+	t.assert_eq(match_payload.get("difficulty", ""), "hard", "replacement receives requested payload")
+	t.assert_true(match_payload.get("onboarding", null) is Dictionary, "match replacement receives onboarding state")
 	first_screen.free()
 	main.free()
 

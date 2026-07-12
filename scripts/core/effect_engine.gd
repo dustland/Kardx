@@ -410,9 +410,15 @@ func _apply_effect(effect: Dictionary) -> Dictionary:
 			return _event("status_changed", {"source_id": source.instance_id, "target_id": _first_id(targets)})
 		"draw":
 			var draw_player: Variant = _effect_player(effect, source)
+			var drawn_ids: Array[String] = []
 			for count in range(int(effect.get("count", 1))):
-				_draw(draw_player, source.instance_id)
-			return _event("card_drawn", {"player_id": draw_player.id})
+				var drawn_id := _draw(draw_player, source.instance_id)
+				if not drawn_id.is_empty(): drawn_ids.append(drawn_id)
+			return _event("card_drawn", {
+				"player_id": draw_player.id,
+				"instance_id": drawn_ids.back() if not drawn_ids.is_empty() else "",
+				"target_ids": drawn_ids,
+			})
 		"discard":
 			for target in targets:
 				_move_to_discard(target, str(effect.get("actor_id", source.owner_id)))
@@ -477,21 +483,22 @@ func _trigger_countermeasure(counter: CardInstance, actor_id: String) -> Diction
 	return _event("countermeasure_triggered", {"player_id": owner.id, "instance_id": counter.instance_id})
 
 
-func _draw(player, source_id: String) -> void:
+func _draw(player, source_id: String) -> String:
 	if player.deck.is_empty():
 		player.headquarters.current_defense = maxi(0, player.headquarters.current_defense - player.fatigue)
 		player.fatigue += 1
 		_queue_damage_checkpoint(player.headquarters, source_id)
-		return
+		return ""
 	var card: CardInstance = player.deck.pop_back()
 	if player.hand.size() >= GameConstants.MAX_HAND_SIZE:
 		card.zone = "discard"
 		player.discard.append(card)
 		_enqueue_trigger("discard", {"source_id": card.instance_id, "actor_id": _resolving_actor_id, "target_ids": []})
-		return
+		return ""
 	card.zone = "hand"
 	player.hand.append(card)
 	_enqueue_trigger("draw", {"source_id": card.instance_id, "actor_id": _resolving_actor_id, "target_ids": []})
+	return card.instance_id
 
 
 func _destroy(card: CardInstance) -> void:
