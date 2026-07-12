@@ -4,6 +4,10 @@ const MainScene = preload("res://scenes/main.tscn")
 const ContentErrorViewScene = preload("res://scenes/ui/content_error_view.tscn")
 const ActionBuilder = preload("res://scripts/ui/action_builder.gd")
 const CardViewScene = preload("res://scenes/ui/card_view.tscn")
+const ContentCatalog = preload("res://scripts/content/content_catalog.gd")
+const DeckBuilderViewModel = preload("res://scripts/ui/deck_builder_view.gd")
+const DeckBuilderScene = preload("res://scenes/ui/deck_builder_view.tscn")
+const DeckStore = preload("res://scripts/ui/deck_store.gd")
 
 
 class TestScreen:
@@ -28,6 +32,10 @@ static func run(t) -> void:
 	_test_card_view_hidden_mode_redacts_data(t)
 	_test_card_view_press_and_drag_share_instance_id(t)
 	await _test_card_view_container_layout(t)
+	_test_deck_builder_model(t)
+	_test_deck_builder_filters(t)
+	_test_deck_store_round_trip_and_shipped_immutability(t)
+	await _test_deck_builder_scene_contract(t)
 
 
 static func _test_theme_and_screen_contract(t) -> void:
@@ -224,3 +232,73 @@ static func _card_data() -> Dictionary:
 		"keywords": ["Guard"],
 		"image_path": "res://missing-card-art.png",
 	}
+
+
+static func _test_deck_builder_model(t) -> void:
+	var catalog = _catalog()
+	var model = DeckBuilderViewModel.DeckBuilderViewModel.new(catalog)
+	model.select_deck("us-starter")
+	t.assert_eq(model.card_count(), 40, "starter deck count")
+	t.assert_true(model.validation().valid, "starter deck playable")
+	model.add_card("su-yak-patrol")
+	t.assert_true(not model.validation().valid, "invalid edit disables play")
+	t.assert_true(model.selected_deck_id.begins_with("user-"), "editing shipped deck creates user copy")
+	t.assert_eq((catalog.decks_by_id["us-starter"] as Dictionary).cards.size(), 40, "shipped deck remains immutable")
+	model.remove_card("su-yak-patrol")
+	t.assert_true(model.validation().valid, "removing edit restores validity")
+
+
+static func _test_deck_builder_filters(t) -> void:
+	var model = DeckBuilderViewModel.DeckBuilderViewModel.new(_catalog())
+	model.set_filter("search", "yak")
+	model.set_filter("nation", "SovietUnion")
+	model.set_filter("category", "Unit")
+	model.set_filter("unit_type", "Fighter")
+	model.set_filter("rarity", "Special")
+	model.set_filter("cost", 5)
+	var cards: Array = model.filtered_cards()
+	t.assert_eq(cards.size(), 1, "all catalog filters combine")
+	t.assert_eq((cards[0] as Dictionary).id, "su-yak-patrol", "filters retain matching card")
+
+
+static func _test_deck_store_round_trip_and_shipped_immutability(t) -> void:
+	var path := "user://test-decks-task3.json"
+	var temp_path := path + ".tmp"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(temp_path))
+	var shipped: Array = [{"id": "us-starter", "cards": ["us-hq"]}]
+	var store = DeckStore.new(path)
+	t.assert_true(store.save_user_decks([{"id": "user-alpha", "cards": ["su-hq"]}]), "user decks save atomically")
+	t.assert_true(store.save_user_decks([{"id": "user-alpha", "cards": ["us-hq", "su-hq"]}]), "atomic save replaces existing data")
+	t.assert_true(not FileAccess.file_exists(temp_path), "atomic save leaves no temporary file")
+	var loaded: Dictionary = store.load_all(shipped)
+	t.assert_eq((loaded["us-starter"] as Dictionary).cards, ["us-hq"], "shipped deck loads")
+	t.assert_eq((loaded["user-alpha"] as Dictionary).cards, ["us-hq", "su-hq"], "user deck round trips")
+	t.assert_true(not store.save_user_decks([{"id": "us-starter", "cards": []}], shipped), "shipped deck cannot be overwritten")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+static func _test_deck_builder_scene_contract(t) -> void:
+	var view = DeckBuilderScene.instantiate()
+	Engine.get_main_loop().root.add_child(view)
+	view.initialize(null, {"catalog": _catalog(), "deck_id": "us-starter", "difficulty": "standard", "store_path": "user://test-decks-task3.json"})
+	for path in ["DeckSelector", "Difficulty", "Search", "NationFilter", "CategoryFilter", "UnitTypeFilter", "RarityFilter", "CostFilter", "CatalogGrid", "DeckList", "NationDistribution", "CardCount", "Validation", "SaveButton", "PlayButton"]:
+		t.assert_true(view.has_node("%%%s" % path), "deck builder exposes %s" % path)
+	await Engine.get_main_loop().process_frame
+	await Engine.get_main_loop().process_frame
+	t.assert_eq((view.get_node("%CatalogGrid") as GridContainer).columns, 3, "catalog uses three columns")
+	t.assert_true(not (view.get_node("%PlayButton") as Button).disabled, "valid shipped deck enables play")
+	_assert_builder_columns_do_not_overlap(t, view, Vector2(1280, 720))
+	_assert_builder_columns_do_not_overlap(t, view, Vector2(1024, 720))
+	view.free()
+
+
+static func _assert_builder_columns_do_not_overlap(t, view: Control, viewport_size: Vector2) -> void:
+	view.size = viewport_size
+	var columns := [view.get_node("%Filters") as Control, view.get_node("%Catalog") as Control, view.get_node("%DeckPanel") as Control]
+	for index in range(columns.size() - 1):
+		t.assert_true(columns[index].get_rect().end.x <= columns[index + 1].get_rect().position.x, "%s-wide builder columns do not overlap" % int(viewport_size.x))
+
+
+static func _catalog():
+	return ContentCatalog.load_from_paths("res://data/cards.json", "res://data/abilities.json", "res://data/decks.json", "res://data/rules.json")
