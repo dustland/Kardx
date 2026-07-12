@@ -10,7 +10,9 @@ var node_budget: int = 256
 var max_depth: int = 4
 var beam_width: int = 8
 var visited_nodes: int = 0
+var search_metrics: Dictionary = {}
 var _rng := RandomNumberGenerator.new()
+var _validation_workspaces: Dictionary = {}
 
 
 static func create(difficulty_name: String, seed: int) -> AIPlayer:
@@ -41,10 +43,12 @@ func _configure(difficulty_name: String) -> void:
 
 func choose_action(controller, actor_id: String) -> GameAction:
 	visited_nodes = 0
+	search_metrics = _empty_search_metrics()
+	_validation_workspaces.clear()
 	var snapshot := _snapshot_for(controller, actor_id)
 	if not _is_action_turn(snapshot, actor_id):
 		return _null_action()
-	var actions: Array[GameAction] = ActionGenerator.generate(controller, actor_id)
+	var actions: Array[GameAction] = _generate_actions(controller, actor_id)
 	if actions.is_empty():
 		return _null_action()
 	var end_turn := _end_turn_action(actions)
@@ -64,7 +68,9 @@ func _choose_easy(controller, actor_id: String, baseline: float, actions: Array[
 	for action in _easy_sample_actions(actions):
 		var node := _simulate(controller, actor_id, action)
 		if node.is_empty():
-			break
+			if visited_nodes >= node_budget:
+				break
+			continue
 		if float(node.score) <= baseline:
 			continue
 		node["priority"] = _easy_priority(action, float(node.score) - baseline)
@@ -134,7 +140,9 @@ func _choose_beam(controller, actor_id: String, baseline: float, actions: Array[
 			continue
 		var node := _simulate(controller, actor_id, action)
 		if node.is_empty():
-			break
+			if visited_nodes >= node_budget:
+				break
+			continue
 		node["first_action"] = action
 		best_score = _record_best(node, best_score, best_nodes)
 		if bool(node.continues):
@@ -144,11 +152,13 @@ func _choose_beam(controller, actor_id: String, baseline: float, actions: Array[
 	while depth < max_depth and not frontier.is_empty() and visited_nodes < node_budget:
 		var next_frontier: Array[Dictionary] = []
 		for parent in frontier:
-			var branch_actions: Array[GameAction] = ActionGenerator.generate(parent.controller, actor_id)
+			var branch_actions: Array[GameAction] = _generate_actions(parent.controller, actor_id)
 			for action in _ordered_actions(branch_actions):
 				var node := _simulate(parent.controller, actor_id, action, float(parent.score))
 				if node.is_empty():
-					break
+					if visited_nodes >= node_budget:
+						break
+					continue
 				node["first_action"] = parent.first_action
 				if str((node.snapshot as Dictionary).get("winner_id", "")) == actor_id:
 					return node.first_action
@@ -182,7 +192,9 @@ func _confirmed_immediate_lethal(controller, actor_id: String, snapshot: Diction
 			continue
 		var node := _simulate(controller, actor_id, action)
 		if node.is_empty():
-			break
+			if visited_nodes >= node_budget:
+				break
+			continue
 		var result_snapshot: Dictionary = node.snapshot
 		if str(result_snapshot.get("winner_id", "")) == actor_id:
 			lethal.append(node)
@@ -192,13 +204,16 @@ func _confirmed_immediate_lethal(controller, actor_id: String, snapshot: Diction
 func _simulate(controller, actor_id: String, action: GameAction, accumulated_score: float = 0.0) -> Dictionary:
 	if visited_nodes >= node_budget or not (controller is Object) or not controller.has_method("clone_for_simulation"):
 		return {}
+	search_metrics["simulation_attempts"] = int(search_metrics.get("simulation_attempts", 0)) + 1
+	var workspace = _validation_workspace_for(controller, actor_id)
+	if not (workspace is Object) or not workspace.has_method("simulate_action_clone"):
+		search_metrics["rejected_simulations"] = int(search_metrics.get("rejected_simulations", 0)) + 1
+		return {}
+	var clone = workspace.simulate_action_clone(action, actor_id)
+	if not (clone is Object):
+		search_metrics["rejected_simulations"] = int(search_metrics.get("rejected_simulations", 0)) + 1
+		return {}
 	visited_nodes += 1
-	var clone = controller.clone_for_simulation(actor_id)
-	if not (clone is Object) or not clone.has_method("submit_action"):
-		return {}
-	var result = clone.submit_action(action)
-	if result == null or not bool(result.accepted):
-		return {}
 	var snapshot := _snapshot_for(clone, actor_id)
 	if snapshot.is_empty():
 		return {}
@@ -209,6 +224,29 @@ func _simulate(controller, actor_id: String, action: GameAction, accumulated_sco
 		"score": accumulated_score + BoardEvaluator.score(snapshot, actor_id),
 		"snapshot": snapshot,
 		"continues": not terminal and action.type != "end_turn" and _is_action_turn(snapshot, actor_id),
+	}
+
+
+func _validation_workspace_for(controller, actor_id: String):
+	var cache_key := str(controller.get_instance_id())
+	if not _validation_workspaces.has(cache_key):
+		_validation_workspaces[cache_key] = controller.clone_for_simulation(actor_id)
+	return _validation_workspaces[cache_key]
+
+
+func _generate_actions(controller, actor_id: String) -> Array[GameAction]:
+	var actions: Array[GameAction] = ActionGenerator.generate(controller, actor_id, false)
+	search_metrics["action_lists"] = int(search_metrics.get("action_lists", 0)) + 1
+	search_metrics["candidate_actions"] = int(search_metrics.get("candidate_actions", 0)) + actions.size()
+	return actions
+
+
+func _empty_search_metrics() -> Dictionary:
+	return {
+		"action_lists": 0,
+		"candidate_actions": 0,
+		"simulation_attempts": 0,
+		"rejected_simulations": 0,
 	}
 
 

@@ -10,6 +10,7 @@ var state
 var definitions: Dictionary
 var rng: RandomNumberGenerator
 var queue: Array[Dictionary] = []
+var max_queue_size: int = 0
 var last_resolution: Dictionary = {"valid": true, "events": []}
 var _resolving_actor_id: String = ""
 var _action_active: bool = false
@@ -91,6 +92,7 @@ func reset_after_rollback() -> void:
 func drain_queue() -> Dictionary:
 	var emitted: Array[Dictionary] = []
 	while not queue.is_empty():
+		max_queue_size = maxi(max_queue_size, queue.size())
 		if _effect_events_used >= GameConstants.MAX_EFFECT_EVENTS:
 			_fail_action("effect_limit")
 			return {"valid": false, "code": "effect_limit", "events": emitted}

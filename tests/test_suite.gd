@@ -13,6 +13,7 @@ const SUITES := [
 	preload("res://tests/content/test_catalog.gd"),
 	preload("res://tests/content/test_card_behaviors.gd"),
 	preload("res://tests/ai/test_ai.gd"),
+	preload("res://tests/ai/test_ai_matches.gd"),
 ]
 
 func _init() -> void:

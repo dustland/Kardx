@@ -23,6 +23,9 @@ static func run(t) -> void:
 	_test_ai_end_turn_fallback_and_safe_null_cases(t)
 	_test_ai_respects_hidden_information_boundary(t)
 	_test_simulation_clone_anonymizes_hidden_state(t)
+	_test_raw_search_candidates_preserve_legal_actions(t)
+	_test_simulation_preflight_matches_clone_submission(t)
+	_test_simulation_workspace_returns_matching_child_clone(t)
 	_test_rich_midgame_actions_are_complete_legal_and_stable(t)
 	_test_manual_adjacent_enemy_anchor_actions(t)
 	_test_action_keys_preserve_delimited_ids_and_typed_payloads(t)
@@ -225,6 +228,47 @@ static func _test_simulation_clone_anonymizes_hidden_state(t) -> void:
 	t.assert_eq([repairs.state.winner_id, repairs.state.players.opponent.headquarters.current_defense], ["", 3], "the real hidden Emergency Repairs can still counter the action")
 	t.assert_eq(maskirovka.state_hash(), maskirovka_before, "AI choice leaves the alternate source state and RNG unchanged")
 	t.assert_true(repairs_before != repairs.state_hash(), "only submitting the chosen real action mutates its source match")
+
+
+static func _test_raw_search_candidates_preserve_legal_actions(t) -> void:
+	var controller := _rich_controller(730)
+	var before_hash := controller.state_hash()
+	var before_events := controller.event_history.duplicate(true)
+	var before_replay := controller.replay_log.to_dict()
+	var legal_actions: Array[GameAction] = ActionGenerator.generate(controller, "player")
+	var raw_actions: Array[GameAction] = ActionGenerator.generate(controller, "player", false)
+	var raw_keys := {}
+	for action in raw_actions:
+		raw_keys[JSON.stringify(_action_data(action))] = true
+	for action in legal_actions:
+		t.assert_true(raw_keys.has(JSON.stringify(_action_data(action))), "raw search candidates retain each legal action")
+	t.assert_eq(controller.state_hash(), before_hash, "raw candidate generation preserves authoritative state and RNG")
+	t.assert_eq(controller.event_history, before_events, "raw candidate generation does not append source events")
+	t.assert_eq(controller.replay_log.to_dict(), before_replay, "raw candidate generation does not write source replay")
+
+
+static func _test_simulation_preflight_matches_clone_submission(t) -> void:
+	var controller := _rich_controller(731)
+	var workspace = controller.clone_for_simulation("player")
+	var before_hash := workspace.state_hash()
+	for action in ActionGenerator.generate(controller, "player", false):
+		var expected := controller.clone_for_simulation("player").submit_action(action).accepted
+		t.assert_eq(workspace.can_simulate_action(action), expected, "simulation preflight matches cloned submission: %s" % action.type)
+		t.assert_eq(workspace.state_hash(), before_hash, "simulation preflight restores its workspace state")
+
+
+static func _test_simulation_workspace_returns_matching_child_clone(t) -> void:
+	var controller := _rich_controller(732)
+	var workspace = controller.clone_for_simulation("player")
+	var before_hash := workspace.state_hash()
+	for action in ActionGenerator.generate(controller, "player", false):
+		var expected = controller.clone_for_simulation("player")
+		var expected_accepted := expected.submit_action(action).accepted
+		var actual = workspace.simulate_action_clone(action, "player")
+		t.assert_eq(actual != null, expected_accepted, "simulation workspace acceptance matches cloned submission: %s" % action.type)
+		if actual != null:
+			t.assert_eq(actual.state_hash(), expected.state_hash(), "simulation workspace child state matches cloned submission")
+		t.assert_eq(workspace.state_hash(), before_hash, "simulation workspace restores after producing a child clone")
 
 
 static func _test_rich_midgame_actions_are_complete_legal_and_stable(t) -> void:

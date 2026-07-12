@@ -79,6 +79,12 @@ func submit_action(action: GameAction) -> ActionResult:
 func state_hash() -> String:
 	return JSON.stringify(_canonicalize(_authoritative_state())).sha256_text()
 
+func effect_metrics() -> Dictionary:
+	return {"max_queue_size": _effect_engine.max_queue_size if _effect_engine != null else 0}
+
+func abort_invalid(code: String, details: Dictionary = {}) -> ActionResult:
+	return _abort_invalid(code, details)
+
 func legal_actions(actor_id: String) -> Array[GameAction]:
 	return ActionGenerator.generate(self, actor_id)
 
@@ -102,6 +108,31 @@ func clone_for_simulation(perspective_id: String) -> MatchController:
 	clone.replay_log = null
 	clone._restore_simulation_snapshot(_simulation_snapshot_for(perspective_id))
 	return clone
+
+func can_simulate_action(action: GameAction) -> bool:
+	if not _simulation_mode:
+		return false
+	var transaction := _capture_transaction()
+	var event_count := event_history.size()
+	var diagnostics := invalid_diagnostics.duplicate(true)
+	var result := submit_action(action)
+	_restore_transaction(transaction)
+	event_history.resize(event_count)
+	invalid_diagnostics = diagnostics
+	return result.accepted
+
+func simulate_action_clone(action: GameAction, perspective_id: String) -> MatchController:
+	if not _simulation_mode:
+		return null
+	var transaction := _capture_transaction()
+	var event_count := event_history.size()
+	var diagnostics := invalid_diagnostics.duplicate(true)
+	var result := submit_action(action)
+	var child: MatchController = clone_for_simulation(perspective_id) if result.accepted else null
+	_restore_transaction(transaction)
+	event_history.resize(event_count)
+	invalid_diagnostics = diagnostics
+	return child
 
 func _simulation_snapshot_for(perspective_id: String) -> Dictionary:
 	var snapshot := _invalid_replay_snapshot()

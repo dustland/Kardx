@@ -7,7 +7,7 @@ const GameAction = preload("res://scripts/core/game_action.gd")
 const PlayerState = preload("res://scripts/core/player_state.gd")
 
 
-static func generate(controller, actor_id: String) -> Array[GameAction]:
+static func generate(controller, actor_id: String, validate_actions: bool = true) -> Array[GameAction]:
 	var actions: Array[GameAction] = []
 	if not (controller is Object) or not controller.has_method("clone_for_simulation"):
 		return actions
@@ -29,29 +29,31 @@ static func generate(controller, actor_id: String) -> Array[GameAction]:
 
 	var player: PlayerState = players[actor_id]
 	for card in player.hand:
+		if _requires_unavailable_credit(player, card):
+			continue
 		if card.category == "Unit":
 			for slot in _open_slots(player.support_line):
 				for target_values in _target_variants(controller, actor_id, card, "deploy"):
 					_append_if_legal(actions, controller, GameAction.create(
 						"deploy_unit", actor_id, card.instance_id, _string_ids(target_values),
 						{"support_slot": slot}, int(state.get("sequence"))
-					))
+					), validate_actions)
 		elif card.category == "Order":
 			for target_values in _target_variants(controller, actor_id, card, "play_order"):
 				_append_if_legal(actions, controller, GameAction.create(
-					"play_order", actor_id, card.instance_id, _string_ids(target_values), {}, int(state.get("sequence"))
-				))
+						"play_order", actor_id, card.instance_id, _string_ids(target_values), {}, int(state.get("sequence"))
+					), validate_actions)
 		elif card.category == "Countermeasure":
 			_append_if_legal(actions, controller, GameAction.create(
 				"toggle_countermeasure", actor_id, card.instance_id, [], {}, int(state.get("sequence"))
-			))
+			), validate_actions)
 
 	for card in _battlefield_cards(state, player, actor_id):
 		if card.zone == "support_line":
 			for slot in _open_slots(state.get("frontline")):
 				_append_if_legal(actions, controller, GameAction.create(
 					"move_unit", actor_id, card.instance_id, [], {"zone": "frontline", "slot": slot}, int(state.get("sequence"))
-				))
+				), validate_actions)
 		for ability_value in card.abilities:
 			if not (ability_value is Dictionary):
 				continue
@@ -60,9 +62,9 @@ static func generate(controller, actor_id: String) -> Array[GameAction]:
 				continue
 			for target_values in _target_variants_for_ability(controller, actor_id, ability):
 				_append_if_legal(actions, controller, GameAction.create(
-					"activate_ability", actor_id, card.instance_id, _string_ids(target_values),
-					{"ability_id": str(ability.get("id", ""))}, int(state.get("sequence"))
-				))
+						"activate_ability", actor_id, card.instance_id, _string_ids(target_values),
+						{"ability_id": str(ability.get("id", ""))}, int(state.get("sequence"))
+					), validate_actions)
 		for target_id in CombatRules.legal_targets(state, card.instance_id):
 			var target = CombatRules.find_card(state, target_id)
 			if not (target is CardInstance):
@@ -71,10 +73,16 @@ static func generate(controller, actor_id: String) -> Array[GameAction]:
 			var payload := {"target_player_id": target.owner_id} if action_type == "attack_hq" else {}
 			_append_if_legal(actions, controller, GameAction.create(
 				action_type, actor_id, card.instance_id, [target.instance_id], payload, int(state.get("sequence"))
-			))
+			), validate_actions)
 
-	_append_if_legal(actions, controller, GameAction.create("end_turn", actor_id, "", [], {}, int(state.get("sequence"))))
+	_append_if_legal(actions, controller, GameAction.create("end_turn", actor_id, "", [], {}, int(state.get("sequence"))), validate_actions)
 	return _deduplicate_and_sort(actions)
+
+
+static func _requires_unavailable_credit(player: PlayerState, card: CardInstance) -> bool:
+	if card.category == "Countermeasure" and card.countermeasure_active:
+		return false
+	return card.category in ["Unit", "Order", "Countermeasure"] and player.credit < card.deployment_cost
 
 
 static func _valid_generation_state(state, players: Dictionary) -> bool:
@@ -104,7 +112,10 @@ static func _valid_cards(cards: Array, allow_null: bool) -> bool:
 	return true
 
 
-static func _append_if_legal(actions: Array[GameAction], controller, action: GameAction) -> void:
+static func _append_if_legal(actions: Array[GameAction], controller, action: GameAction, validate_action: bool) -> void:
+	if not validate_action:
+		actions.append(action)
+		return
 	var clone = controller.clone_for_simulation(action.actor_id)
 	if clone is Object and clone.has_method("submit_action") and clone.submit_action(action).accepted:
 		actions.append(action)
