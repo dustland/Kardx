@@ -1,6 +1,6 @@
 # OpenCards
 
-OpenCards is now the Godot 4 main project. The original Unity project is preserved on the `unity` branch.
+OpenCards is a Godot 4.7 card game.
 
 ## Run
 
@@ -47,12 +47,34 @@ godot --headless --path . --export-release Web builds/web/index.html
 godot --headless --path . --export-release macOS builds/macos/OpenCards.zip
 ```
 
-No GitHub Actions export workflow is configured; web automation is tracked separately.
+Validate the GitHub Pages workflow and Web export preset without downloading dependencies:
+
+```sh
+sh tests/validate_web_deploy.sh
+```
+
+To inspect a local Web export, serve it over HTTP after exporting and open the displayed local URL:
+
+```sh
+python3 -m http.server 8000 --directory builds/web
+```
+
+Pushes to `main` and manual runs of **Build Godot Web and Deploy to GitHub Pages** export the game to `builds/web/index.html` and deploy it through GitHub Pages.
+
+### Custom domain
+
+The production URL is <https://opencards.dustland.ai>. Configure `opencards.dustland.ai` in the repository under **Settings > Pages > Custom domain**. The DNS record must be:
+
+```text
+Type:  CNAME
+Name:  opencards
+Value: dustland.github.io
+```
+
+After DNS propagation and GitHub certificate issuance, enable **Enforce HTTPS** in **Settings > Pages**. The Actions artifact intentionally does not include a `CNAME` file because the custom domain is managed in repository settings.
 
 ## Current limitations
 
 - Matches are local player-versus-AI only; there is no network multiplayer.
 - Replay data is retained on Result for verification but has no replay-browser UI.
 - User deck changes remain in memory until Save is used in Deck Builder.
-
-The `unity` branch contains the complete Unity source and its original project settings.
