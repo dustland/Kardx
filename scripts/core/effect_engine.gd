@@ -15,6 +15,7 @@ var _resolving_actor_id: String = ""
 var _action_active: bool = false
 var _effect_events_used: int = 0
 var _action_failure: Dictionary = {"valid": true}
+var _reserved_countermeasure_ids: Dictionary = {}
 
 
 static func create(match_state, card_definitions: Dictionary, match_rng: RandomNumberGenerator) -> EffectEngine:
@@ -65,6 +66,7 @@ func begin_action() -> void:
 	_action_active = true
 	_effect_events_used = 0
 	_action_failure = {"valid": true}
+	_reserved_countermeasure_ids.clear()
 	last_resolution = {"valid": true, "events": []}
 	queue.clear()
 
@@ -72,6 +74,7 @@ func begin_action() -> void:
 func finish_action() -> Dictionary:
 	var result := _action_failure.duplicate(true)
 	_action_active = false
+	_reserved_countermeasure_ids.clear()
 	queue.clear()
 	return result
 
@@ -80,6 +83,7 @@ func reset_after_rollback() -> void:
 	_action_active = false
 	_effect_events_used = 0
 	_action_failure = {"valid": true}
+	_reserved_countermeasure_ids.clear()
 	last_resolution = {"valid": true, "events": []}
 	queue.clear()
 
@@ -112,6 +116,10 @@ func _fail_action(code: String) -> void:
 func _prepare_trigger(trigger: String, context: Dictionary, resolve_random: bool = false) -> Dictionary:
 	var queued: Array[Dictionary] = []
 	for source in _trigger_sources(trigger, context):
+		var reserved_countermeasure := source.category == "Countermeasure" and _reserved_countermeasure_ids.has(source.instance_id)
+		var resolving_countermeasure_cleanup := trigger == "countermeasure_triggered" and source.instance_id == str(context.get("source_id", ""))
+		if reserved_countermeasure and not resolving_countermeasure_cleanup:
+			continue
 		var counter_triggered := false
 		for ability_value in source.abilities:
 			var ability: Dictionary = ability_value
@@ -145,6 +153,8 @@ func _prepare_trigger(trigger: String, context: Dictionary, resolve_random: bool
 			if source.category == "Countermeasure" and source.countermeasure_active and not effects.is_empty():
 				counter_triggered = true
 		if counter_triggered:
+			if resolve_random:
+				_reserved_countermeasure_ids[source.instance_id] = true
 			queued.append({
 				"type": "trigger_countermeasure",
 				"source_id": source.instance_id,
@@ -358,7 +368,7 @@ func _apply_effect(effect: Dictionary) -> Dictionary:
 			for target in targets:
 				var damage := maxi(0, int(effect.get("amount", 0)) - (1 if target.has_keyword_or_status("Heavy Armor") else 0))
 				target.current_defense = maxi(0, target.current_defense - damage)
-				_queue_damage_checkpoint(target, source.instance_id)
+			_queue_damage_checkpoints(targets, source.instance_id)
 			return _event("damage_dealt", {"source_id": source.instance_id, "target_id": _first_id(targets), "damage": maxi(0, int(effect.get("amount", 0)) - (1 if not targets.is_empty() and targets[0].has_keyword_or_status("Heavy Armor") else 0))})
 		"repair":
 			for target in targets:
@@ -669,13 +679,19 @@ func _restore_pending_countermeasure_cleanups(cleanups: Array[Dictionary]) -> vo
 		queue.push_front(cleanups[index])
 
 
+func _queue_damage_checkpoints(targets: Array[CardInstance], source_id: String) -> void:
+	for target in targets:
+		queue.push_front({"type": "check_lethal", "target_id": target.instance_id})
+	for target in targets:
+		_enqueue_trigger("damage", {
+			"source_id": target.instance_id,
+			"actor_id": _resolving_actor_id,
+			"target_ids": [source_id],
+		})
+
+
 func _queue_damage_checkpoint(target: CardInstance, source_id: String) -> void:
-	queue.push_front({"type": "check_lethal", "target_id": target.instance_id})
-	_enqueue_trigger("damage", {
-		"source_id": target.instance_id,
-		"actor_id": _resolving_actor_id,
-		"target_ids": [source_id],
-	})
+	_queue_damage_checkpoints([target], source_id)
 
 
 func _enqueue_trigger(trigger: String, context: Dictionary) -> void:

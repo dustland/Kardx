@@ -78,6 +78,7 @@ static func run(t) -> void:
 	_test_su_heavy_breakthrough_heavy_armor(t, catalog)
 	_test_su_katyusha_battery_adjacent_damage(t, catalog)
 	_test_su_hold_the_line_repairs_lethal_frontline(t, catalog)
+	_test_su_hold_the_line_reserves_once_for_artillery_preparation(t, catalog)
 	_test_su_yak_patrol_fury(t, catalog)
 	_test_su_pe2_bomber_wing_deploy_hq_damage(t, catalog)
 	_test_su_deep_battle_retreats_and_draws(t, catalog)
@@ -442,6 +443,44 @@ static func _test_su_hold_the_line_repairs_lethal_frontline(t, catalog) -> void:
 	t.assert_eq(counter.zone, "discard", "Hold the Line reveals and discards")
 
 
+static func _test_su_hold_the_line_reserves_once_for_artillery_preparation(t, catalog) -> void:
+	_assert_locked(t, catalog, "su-hold-the-line")
+	_assert_locked(t, catalog, "su-artillery-preparation")
+	var controller := _controller(catalog, 737)
+	var counter := _put_hand(controller, _card(catalog, "su-hold-the-line", "player", "hold"))
+	var first := _place_frontline(controller, _card(catalog, "su-combat-sappers", "player", "first"), 0)
+	var second := _place_frontline(controller, _card(catalog, "su-combat-sappers", "player", "second"), 1)
+	var failing_source := _place_support(controller, _card(catalog, "us-field-battery", "opponent", "failed-trigger"), 0)
+	failing_source.abilities = [{
+		"id": "failed-trigger--damage-return-retreat",
+		"trigger": "manual",
+		"conditions": {},
+		"target": {"selector": "enemy_unit", "count": 1},
+		"effects": [{"type": "damage", "amount": 2}, {"type": "return"}, {"type": "retreat"}],
+		"credit_cost": 0,
+	}]
+	t.assert_true(_activate_countermeasure(controller, counter).accepted, "Hold the Line activates for the enemy turn")
+	controller.state.active_player_id = "opponent"
+	var failed = controller.submit_action(GameAction.create(
+		"activate_ability", "opponent", failing_source.instance_id, [first.instance_id],
+		{"ability_id": "failed-trigger--damage-return-retreat"}, controller.state.sequence
+	))
+	t.assert_eq(failed.reason_code, "invalid_origin", "failed action rejects after reserving Hold the Line")
+	t.assert_true(counter.countermeasure_active and counter.face_down and counter.zone == "hand", "rollback restores the active Countermeasure reservation")
+	t.assert_eq(controller.state.players.player.discard.count(counter), 0, "rollback leaves no Countermeasure discard reference")
+	t.assert_eq([first.zone, second.zone], ["frontline", "frontline"], "rollback restores each lethal Frontline unit")
+
+	var artillery := _put_hand(controller, _card(catalog, "su-artillery-preparation", "opponent", "preparation"))
+	var result = _play_order(controller, artillery, [], "opponent")
+	t.assert_true(result.accepted, "Artillery Preparation accepts after a rolled-back Countermeasure reservation")
+	t.assert_eq([first.current_defense, second.current_defense], [2, 2], "one Hold the Line repair deterministically saves both lethal Frontline units")
+	t.assert_true(not counter.countermeasure_active and not counter.face_down and counter.zone == "discard", "Hold the Line reveals and discards exactly once")
+	t.assert_eq(controller.state.players.player.discard.count(counter), 1, "Hold the Line has one discard reference")
+	t.assert_eq(controller.state.frontline_controller_id, "player", "repaired Frontline units retain deterministic control")
+	t.assert_eq(_event_count(result.events, "countermeasure_triggered", counter.instance_id), 1, "Hold the Line emits one Countermeasure trigger event")
+	t.assert_eq(_event_count(result.events, "damage_repaired", counter.instance_id), 1, "Hold the Line resolves one repair effect")
+
+
 static func _test_su_yak_patrol_fury(t, catalog) -> void:
 	_assert_locked(t, catalog, "su-yak-patrol")
 	_assert_two_attacks(t, catalog, "su-yak-patrol", 732)
@@ -597,6 +636,16 @@ static func _activate_countermeasure(controller: MatchController, counter: CardI
 	return controller.submit_action(GameAction.create(
 		"toggle_countermeasure", counter.owner_id, counter.instance_id, [], {}, controller.state.sequence
 	))
+
+
+static func _event_count(events: Array, event_type: String, instance_id: String) -> int:
+	var count := 0
+	for event in events:
+		if str(event.get("type", "")) == event_type and (
+			str(event.get("instance_id", "")) == instance_id or str(event.get("source_id", "")) == instance_id
+		):
+			count += 1
+	return count
 
 
 static func _assert_hq_defeat(t, catalog, defeated_hq_id: String, other_hq_id: String, seed: int) -> void:
