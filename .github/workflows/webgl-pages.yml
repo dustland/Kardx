@@ -86,7 +86,9 @@ jobs:
         run: godot --headless --path . --script tests/test_suite.gd
 
       - name: Export single-threaded Web release
-        run: godot --headless --path . --export-release Web builds/web/index.html
+        run: |
+          mkdir -p builds/web
+          godot --headless --path . --export-release Web builds/web/index.html
 
       - name: Validate Pages artifact
         shell: bash
