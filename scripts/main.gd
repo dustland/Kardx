@@ -36,6 +36,8 @@ var screen_factory: Callable
 var _match_rng := RandomNumberGenerator.new()
 var _mulligan_submitted := false
 var _mulligan_action_submitter: Callable
+var _match_submission_active := false
+var _match_generation := 0
 
 
 func _ready() -> void:
@@ -64,6 +66,9 @@ func show_screen(screen_name: String, payload: Dictionary = {}) -> void:
 		current_screen.play_requested.connect(_on_play_requested)
 	if screen_name == "mulligan" and current_screen.has_signal("confirm_requested"):
 		current_screen.confirm_requested.connect(_on_mulligan_confirmed)
+	if screen_name == "match" and current_screen.has_signal("action_requested"):
+		current_screen.action_requested.connect(submit_player_action)
+		_refresh_match_view()
 
 
 func _on_play_requested(deck_id: String, selected_difficulty: String) -> void:
@@ -206,6 +211,91 @@ func _recover_mulligan(message: String) -> void:
 	_mulligan_submitted = false
 	if current_screen != null and current_screen.has_method("recover_from_error"):
 		current_screen.recover_from_error(message)
+
+
+func submit_player_action(action: GameAction) -> void:
+	if _match_submission_active or controller == null or current_screen == null:
+		return
+	if controller.state.phase != "action" or controller.state.active_player_id != "player":
+		return
+	_match_submission_active = true
+	_match_generation += 1
+	var generation := _match_generation
+	current_screen.set_input_locked(true)
+	var result = controller.submit_action(action)
+	_render_match_result(result)
+	if result.accepted and not _route_match_result_if_complete():
+		await _drive_ai_turn(generation)
+	if generation == _match_generation and current_screen != null and current_screen.has_method("set_input_locked"):
+		_refresh_match_view()
+		current_screen.set_input_locked(false)
+	_match_submission_active = false
+
+
+func _drive_ai_turn(generation: int) -> void:
+	var actions_this_turn := 0
+	var last_sequence := controller.state.sequence
+	while generation == _match_generation and controller != null \
+			and controller.state.phase == "action" and controller.state.active_player_id == "opponent":
+		if actions_this_turn >= 64:
+			controller.abort_invalid("ai_action_limit", {"limit": 64})
+			_route_match_result_if_complete()
+			return
+		var action = ai.choose_action(controller, "opponent")
+		if action == null or action.type.is_empty():
+			var legal_end_turn = controller.legal_actions("opponent").filter(func(candidate) -> bool: return candidate.type == "end_turn")
+			if legal_end_turn.is_empty():
+				controller.abort_invalid("ai_deadlock", {"sequence": controller.state.sequence})
+				_route_match_result_if_complete()
+				return
+			action = legal_end_turn[0]
+		var result = controller.submit_action(action)
+		_render_match_result(result)
+		if not result.accepted:
+			controller.abort_invalid("ai_rejected_action", {"reason_code": result.reason_code})
+			_route_match_result_if_complete()
+			return
+		if controller.state.sequence <= last_sequence:
+			controller.abort_invalid("ai_stale_sequence", {"sequence": controller.state.sequence})
+			_route_match_result_if_complete()
+			return
+		last_sequence = controller.state.sequence
+		actions_this_turn += 1
+		if _route_match_result_if_complete():
+			return
+		await Engine.get_main_loop().process_frame
+
+
+func _render_match_result(result: ActionResult) -> void:
+	if current_screen == null:
+		return
+	if result.accepted:
+		current_screen.render_events(result.events)
+	else:
+		current_screen.show_rejection(result.reason_code, result.message)
+	current_screen.render_snapshot(controller.state.snapshot_for("player"))
+
+
+func _refresh_match_view() -> void:
+	if current_screen == null or controller == null or not current_screen.has_method("set_legal_actions"):
+		return
+	current_screen.render_snapshot(controller.state.snapshot_for("player"))
+	current_screen.set_legal_actions(controller.legal_actions("player"))
+
+
+func _route_match_result_if_complete() -> bool:
+	if controller == null or (controller.state.phase not in ["complete", "invalid"] and controller.state.winner_id.is_empty()):
+		return false
+	_match_generation += 1
+	var payload := {
+		"winner_id": controller.state.winner_id,
+		"reason": "invalid" if controller.state.phase == "invalid" else "headquarters_destroyed",
+		"turns": controller.state.turn,
+		"seed": controller.state.seed,
+		"replay_log": controller.replay_log.to_dict() if controller.replay_log != null else {},
+	}
+	show_screen("result", payload)
+	return true
 
 
 func _shipped_opponent_deck(player_deck_id: String) -> Dictionary:

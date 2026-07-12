@@ -11,6 +11,8 @@ const DeckStore = preload("res://scripts/ui/deck_store.gd")
 const MulliganViewModel = preload("res://scripts/ui/mulligan_view.gd")
 const MulliganScene = preload("res://scenes/ui/mulligan_view.tscn")
 const ActionResult = preload("res://scripts/core/action_result.gd")
+const MatchViewScript = preload("res://scripts/ui/match_view.gd")
+const MatchViewScene = preload("res://scenes/ui/match_view.tscn")
 
 
 class TestScreen:
@@ -54,6 +56,62 @@ static func run(t) -> void:
 	await _test_mulligan_scene_renders_and_confirms(t)
 	await _test_mulligan_layout_is_responsive(t)
 	await _test_main_completes_both_mulligans_and_routes(t)
+	await run_task5(t)
+
+
+static func run_task5(t) -> void:
+	_test_match_selection_builds_only_legal_actions(t)
+	_test_match_selection_cancels_and_reports_rejection(t)
+	await _test_match_scene_contract_and_responsive_layout(t)
+
+
+static func _test_match_selection_builds_only_legal_actions(t) -> void:
+	var model := MatchViewScript.MatchInteractionModel.new()
+	var attack = ActionBuilder.attack("p-unit", "o-unit", "player", 15)
+	var hq_attack = GameAction.create("attack_hq", "player", "p-unit", ["o-hq"], {"target_player_id": "opponent"}, 15)
+	model.set_legal_actions([attack, hq_attack])
+	model.select_source("p-unit")
+	t.assert_eq(model.highlighted_targets(), ["o-hq", "o-unit"], "legal targets exposed in stable order")
+	t.assert_eq(model.choose_target("o-unit").type, "attack_unit", "selection resolves exact legal action")
+	model.select_source("p-unit")
+	t.assert_eq(model.choose_target("o-hq").type, "attack_hq", "HQ attack preserves controller action type")
+
+
+static func _test_match_selection_cancels_and_reports_rejection(t) -> void:
+	var model := MatchViewScript.MatchInteractionModel.new()
+	model.set_legal_actions([ActionBuilder.deploy("p-card", 2, "player", 9)])
+	model.select_source("p-card")
+	t.assert_eq(model.highlighted_slots("support"), [2], "deploy slots exposed")
+	model.cancel()
+	t.assert_eq(model.selected_source_id, "", "cancel clears source")
+	model.apply_rejection("insufficient_credit", "Not enough Credit")
+	t.assert_eq(model.status_message, "Not enough Credit", "rejection visible")
+
+
+static func _test_match_scene_contract_and_responsive_layout(t) -> void:
+	for viewport_size in [Vector2(1280, 720), Vector2(1024, 720)]:
+		var root_control := Control.new()
+		root_control.size = viewport_size
+		Engine.get_main_loop().root.add_child(root_control)
+		var view = MatchViewScene.instantiate()
+		root_control.add_child(view)
+		view.render_snapshot(_match_snapshot())
+		await Engine.get_main_loop().process_frame
+		t.assert_true(view.has_node("%OpponentSupport"), "opponent support exists")
+		t.assert_true(view.has_node("%Frontline"), "shared frontline exists")
+		t.assert_true(view.has_node("%PlayerSupport"), "player support exists")
+		t.assert_true(view.has_node("%PlayerHand"), "player hand exists")
+		t.assert_true(view.has_node("%Timeline"), "timeline exists")
+		t.assert_eq(view.get_node("%Frontline").get_child_count(), 5, "frontline reserves five slots")
+		t.assert_eq(view.get_node("%OpponentSupport").get_child_count(), 4, "opponent reserves four slots")
+		t.assert_eq(view.get_node("%PlayerSupport").get_child_count(), 4, "player reserves four slots")
+		t.assert_true(view.size.x <= viewport_size.x, "match fits viewport width")
+		root_control.free()
+
+
+static func _match_snapshot() -> Dictionary:
+	var hq := {"instance_id": "p-hq", "title": "HQ", "category": "Headquarters", "attack": 0, "defense": 20, "deployment_cost": 0, "operation_cost": 0}
+	return {"players": {"player": {"id": "player", "nation": "US", "headquarters": hq, "hq_defense": 20, "deck_count": 34, "hand": [], "support_line": [null, null, null, null], "credit": 3, "credit_slots": 3}, "opponent": {"id": "opponent", "nation": "SU", "headquarters": hq.merged({"instance_id": "o-hq"}, true), "hq_defense": 20, "deck_count": 34, "hand": [{"instance_id": "o-hidden", "hidden": true}], "support_line": [null, null, null, null], "credit": 3, "credit_slots": 3}}, "frontline": [null, null, null, null, null], "active_player_id": "player", "turn": 1, "phase": "action", "sequence": 5, "winner_id": ""}
 
 
 static func run_task4(t) -> void:
