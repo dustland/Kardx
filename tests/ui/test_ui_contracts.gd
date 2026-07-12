@@ -8,6 +8,8 @@ const ContentCatalog = preload("res://scripts/content/content_catalog.gd")
 const DeckBuilderViewModel = preload("res://scripts/ui/deck_builder_view.gd")
 const DeckBuilderScene = preload("res://scenes/ui/deck_builder_view.tscn")
 const DeckStore = preload("res://scripts/ui/deck_store.gd")
+const MulliganViewModel = preload("res://scripts/ui/mulligan_view.gd")
+const MulliganScene = preload("res://scenes/ui/mulligan_view.tscn")
 
 
 class TestScreen:
@@ -47,6 +49,10 @@ static func run(t) -> void:
 	await _test_deck_builder_scene_contract(t)
 	await _test_deck_builder_copy_selection_and_save_failure(t)
 	_test_deck_builder_displays_corrupt_load_status(t)
+	_test_mulligan_model_selection_and_lock(t)
+	await _test_mulligan_scene_renders_and_confirms(t)
+	await _test_mulligan_layout_is_responsive(t)
+	await _test_main_completes_both_mulligans_and_routes(t)
 
 
 static func _test_theme_and_screen_contract(t) -> void:
@@ -87,14 +93,18 @@ static func _test_main_routes_play_to_mulligan_fallback(t) -> void:
 	var main := Main.new()
 	var host := Control.new()
 	main.screen_host = host
+	main.catalog = ContentCatalog.load_from_paths("res://data/cards.json", "res://data/abilities.json", "res://data/decks.json", "res://data/rules.json")
 	main.screen_factory = func(path: String) -> Control:
 		return TestScreen.new() if path.ends_with("deck_builder_view.tscn") else null
 	main.show_screen("deck_builder", {})
-	(main.current_screen as TestScreen).selected_definition = {"id": "user-us-starter", "cards": ["us-hq", "su-yak-patrol"], "meta": {"unsaved": true}}
+	var deck: Dictionary = main.catalog.decks_by_id["us-starter"].duplicate(true)
+	deck["id"] = "user-us-starter"
+	deck["meta"] = {"unsaved": true}
+	(main.current_screen as TestScreen).selected_definition = deck
 	(main.current_screen as TestScreen).play_requested.emit("user-us-starter", "hard")
 	t.assert_eq(main.selected_deck_id, "user-us-starter", "Play stores selected deck")
 	t.assert_eq(main.difficulty, "hard", "Play stores difficulty")
-	t.assert_eq(main.selected_player_deck, {"id": "user-us-starter", "cards": ["us-hq", "su-yak-patrol"], "meta": {"unsaved": true}}, "Play captures full unsaved deck before freeing builder")
+	t.assert_eq(main.selected_player_deck, deck, "Play captures full unsaved deck before freeing builder")
 	t.assert_true(main.current_screen is CenterContainer, "missing mulligan scene uses fallback")
 	t.assert_eq((main.current_screen.get_child(0) as Label).text, "Mulligan", "Play visibly advances to mulligan fallback")
 	main.free()
@@ -104,15 +114,19 @@ static func _test_main_passes_selected_deck_to_mulligan(t) -> void:
 	var main := Main.new()
 	var host := Control.new()
 	main.screen_host = host
+	main.catalog = ContentCatalog.load_from_paths("res://data/cards.json", "res://data/abilities.json", "res://data/decks.json", "res://data/rules.json")
 	main.screen_factory = func(_path: String) -> Control: return TestScreen.new()
 	main.show_screen("deck_builder", {})
-	var deck := {"id": "user-us-starter", "cards": ["us-hq"], "meta": {"unsaved": true}}
+	var deck: Dictionary = main.catalog.decks_by_id["us-starter"].duplicate(true)
+	deck["id"] = "user-us-starter"
+	deck["meta"] = {"unsaved": true}
 	(main.current_screen as TestScreen).selected_definition = deck
 	(main.current_screen as TestScreen).play_requested.emit("user-us-starter", "standard")
 	var payload: Dictionary = (main.current_screen as TestScreen).payload
 	t.assert_eq(payload.get("player_deck"), deck, "mulligan payload receives complete selected deck")
+	var expected_cards: Array = deck.cards.duplicate()
 	deck.cards.clear()
-	t.assert_eq((payload.player_deck as Dictionary).cards, ["us-hq"], "mulligan payload owns a deep copy")
+	t.assert_eq((payload.player_deck as Dictionary).cards, expected_cards, "mulligan payload owns a deep copy")
 	main.free()
 
 
@@ -276,6 +290,89 @@ static func _card_data() -> Dictionary:
 		"keywords": ["Guard"],
 		"image_path": "res://missing-card-art.png",
 	}
+
+
+static func _test_mulligan_model_selection_and_lock(t) -> void:
+	var model := MulliganViewModel.new(["p-1", "p-2", "p-3", "p-4"])
+	model.toggle("p-2")
+	model.toggle("p-4")
+	t.assert_eq(model.selected_ids(), ["p-2", "p-4"], "mulligan preserves hand selection order")
+	model.toggle("p-2")
+	t.assert_eq(model.selected_ids(), ["p-4"], "mulligan click toggles replacement off")
+	model.lock()
+	model.toggle("p-1")
+	t.assert_eq(model.selected_ids(), ["p-4"], "locked mulligan selection is immutable")
+
+
+static func _test_mulligan_scene_renders_and_confirms(t) -> void:
+	var view = MulliganScene.instantiate()
+	Engine.get_main_loop().root.add_child(view)
+	var hand := [_card_data(), _card_data().merged({"instance_id": "p-02", "title": "Combat Engineers"}, true)]
+	view.initialize(null, {"snapshot": {"players": {"player": {"hand": hand}}}, "difficulty": "hard"})
+	await Engine.get_main_loop().process_frame
+	t.assert_eq(view.get_node("%HandRow").get_child_count(), 2, "mulligan renders player hand with CardView")
+	t.assert_eq(view.get_node("%DifficultyLabel").text, "HARD", "mulligan displays selected difficulty")
+	var first_card = view.get_node("%HandRow").get_child(0)
+	first_card.card_pressed.emit("p-01")
+	t.assert_true(first_card.button_pressed, "selected replacement has clear toggled state")
+	var confirmations: Array = []
+	view.confirm_requested.connect(func(ids: Array[String]) -> void: confirmations.append(ids))
+	view.get_node("%ConfirmButton").pressed.emit()
+	view.get_node("%ConfirmButton").pressed.emit()
+	t.assert_eq(confirmations, [["p-01"]], "confirm emits once with selected IDs")
+	t.assert_true(view.get_node("%ConfirmButton").disabled, "confirm locks input immediately")
+	view.free()
+
+
+static func _test_main_completes_both_mulligans_and_routes(t) -> void:
+	var main := Main.new()
+	var host := Control.new()
+	main.screen_host = host
+	main.catalog = ContentCatalog.load_from_paths("res://data/cards.json", "res://data/abilities.json", "res://data/decks.json", "res://data/rules.json")
+	main.screen_factory = func(path: String) -> Control:
+		return MulliganScene.instantiate() if path.ends_with("mulligan_view.tscn") else TestScreen.new()
+	var player_deck: Dictionary = main.catalog.decks_by_id["us-starter"].duplicate(true)
+	main.start_mulligan(player_deck, "hard", 88)
+	await Engine.get_main_loop().process_frame
+	t.assert_eq(main.controller.state.phase, "mulligan", "main starts controller in mulligan phase")
+	t.assert_eq(main.ai.difficulty, "hard", "main constructs AI with selected difficulty")
+	var opponent_snapshot: Dictionary = main.controller.state.snapshot_for("opponent")
+	var expected_ai_ids: Array[String] = main.ai_mulligan_selection(opponent_snapshot)
+	t.assert_eq(main.ai_mulligan_selection(opponent_snapshot), expected_ai_ids, "AI mulligan selection is deterministic")
+	var no_replacements: Array[String] = []
+	main.current_screen.confirm_requested.emit(no_replacements)
+	await Engine.get_main_loop().process_frame
+	t.assert_eq(main.controller.state.phase, "action", "both action-contract confirmations start match")
+	t.assert_true(main.controller.state.players.player.mulligan_used, "player mulligan action submitted")
+	t.assert_true(main.controller.state.players.opponent.mulligan_used, "AI mulligan action submitted")
+	t.assert_true(main.controller.state.players.player.mulligan_confirmed, "player mulligan confirmed")
+	t.assert_true(main.controller.state.players.opponent.mulligan_confirmed, "AI mulligan confirmed")
+	t.assert_eq((main.current_screen as TestScreen).payload.get("controller"), main.controller, "match receives live controller")
+	t.assert_eq((main.current_screen as TestScreen).payload.get("ai"), main.ai, "match receives configured AI")
+	var ai_action: Dictionary = main.controller.replay_log.actions[2].action
+	t.assert_eq(ai_action.type, "mulligan", "AI submits through mulligan action contract")
+	t.assert_eq(ai_action.target_ids, expected_ai_ids, "AI submits deterministic own-hand selections")
+	main.free()
+
+
+static func _test_mulligan_layout_is_responsive(t) -> void:
+	for viewport_size in [Vector2(1280, 720), Vector2(1024, 576)]:
+		var view = MulliganScene.instantiate()
+		view.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+		view.size = viewport_size
+		Engine.get_main_loop().root.add_child(view)
+		var hand: Array = []
+		for index in range(5):
+			hand.append(_card_data().merged({"instance_id": "p-%02d" % index}, true))
+		view.initialize(null, {"snapshot": {"players": {"player": {"hand": hand}}}})
+		await Engine.get_main_loop().process_frame
+		await Engine.get_main_loop().process_frame
+		var panel_rect: Rect2 = view.get_node("Margin/Page/HandPanel").get_global_rect()
+		var footer_rect: Rect2 = view.get_node("Margin/Page/Footer").get_global_rect()
+		for card in view.get_node("%HandRow").get_children():
+			t.assert_true(panel_rect.encloses(card.get_global_rect()), "%s mulligan card stays inside hand panel" % viewport_size.x)
+			t.assert_true(not card.get_global_rect().intersects(footer_rect), "%s mulligan card avoids commands" % viewport_size.x)
+		view.free()
 
 
 static func _test_deck_builder_model(t) -> void:
