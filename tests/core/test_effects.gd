@@ -1,6 +1,7 @@
 extends RefCounted
 
 const CardInstance = preload("res://scripts/core/card_instance.gd")
+const ContentCatalog = preload("res://scripts/content/content_catalog.gd")
 const EffectEngine = preload("res://scripts/core/effect_engine.gd")
 const GameAction = preload("res://scripts/core/game_action.gd")
 const GameConstants = preload("res://scripts/core/game_constants.gd")
@@ -49,6 +50,7 @@ static func run(t) -> void:
 	_test_global_triggers_include_event_source_and_owner_battlefield(t)
 	_test_hold_the_line_ignores_lethal_support_unit(t)
 	_test_hold_the_line_ignores_hq_attack_without_frontline_targets(t)
+	_test_shipped_hold_the_line_reserves_once_for_artillery_preparation(t)
 	_test_failed_action_rolls_back_reveal_state(t)
 
 
@@ -1355,6 +1357,61 @@ static func _test_hold_the_line_ignores_hq_attack_without_frontline_targets(t) -
 	t.assert_true(counter.countermeasure_active and counter.zone == "hand", "HQ attack does not consume Hold the Line")
 
 
+static func _test_shipped_hold_the_line_reserves_once_for_artillery_preparation(t) -> void:
+	var catalog = ContentCatalog.load_from_paths(
+		"res://data/cards.json", "res://data/abilities.json", "res://data/decks.json", "res://data/rules.json"
+	)
+	var controller: MatchController = MatchController.create(catalog.cards_by_id, ["us-hq"], ["su-hq"], 737)
+	controller.state.phase = "action"
+	controller.state.active_player_id = "player"
+	controller.state.starting_player_id = "player"
+	controller.state.turn = 5
+	for player_id in controller.state.players:
+		controller.state.players[player_id].credit_slots = 12
+		controller.state.players[player_id].credit = 12
+	var counter := CardInstance.from_definition(catalog.cards_by_id["su-hold-the-line"], "player", "hold")
+	var first := CardInstance.from_definition(catalog.cards_by_id["su-combat-sappers"], "player", "first")
+	var second := CardInstance.from_definition(catalog.cards_by_id["su-combat-sappers"], "player", "second")
+	var failing_source := CardInstance.from_definition(catalog.cards_by_id["us-field-battery"], "opponent", "failed-trigger")
+	_put_hand(controller, counter)
+	_place_frontline(controller, first, 0)
+	_place_frontline(controller, second, 1)
+	_place_support(controller, failing_source, 0)
+	failing_source.abilities = [{
+		"id": "failed-trigger--damage-return-retreat",
+		"trigger": "manual",
+		"conditions": {},
+		"target": {"selector": "enemy_unit", "count": 1},
+		"effects": [{"type": "damage", "amount": 2}, {"type": "return"}, {"type": "retreat"}],
+		"credit_cost": 0,
+	}]
+	t.assert_true(controller.submit_action(GameAction.create(
+		"toggle_countermeasure", "player", counter.instance_id, [], {}, controller.state.sequence
+	)).accepted, "Hold the Line activates for the enemy turn")
+	controller.state.active_player_id = "opponent"
+	var failed = controller.submit_action(GameAction.create(
+		"activate_ability", "opponent", failing_source.instance_id, [first.instance_id],
+		{"ability_id": "failed-trigger--damage-return-retreat"}, controller.state.sequence
+	))
+	t.assert_eq(failed.reason_code, "invalid_origin", "failed action rejects after reserving Hold the Line")
+	t.assert_true(counter.countermeasure_active and counter.face_down and counter.zone == "hand", "rollback restores the active Countermeasure reservation")
+	t.assert_eq(controller.state.players.player.discard.count(counter), 0, "rollback leaves no Countermeasure discard reference")
+	t.assert_eq([first.zone, second.zone], ["frontline", "frontline"], "rollback restores each lethal Frontline unit")
+
+	var artillery := CardInstance.from_definition(catalog.cards_by_id["su-artillery-preparation"], "opponent", "preparation")
+	_put_hand(controller, artillery)
+	var result = controller.submit_action(GameAction.create(
+		"play_order", "opponent", artillery.instance_id, [], {}, controller.state.sequence
+	))
+	t.assert_true(result.accepted, "Artillery Preparation accepts after a rolled-back Countermeasure reservation")
+	t.assert_eq([first.current_defense, second.current_defense], [2, 2], "one Hold the Line repair deterministically saves both lethal Frontline units")
+	t.assert_true(not counter.countermeasure_active and not counter.face_down and counter.zone == "discard", "Hold the Line reveals and discards exactly once")
+	t.assert_eq(controller.state.players.player.discard.count(counter), 1, "Hold the Line has one discard reference")
+	t.assert_eq(controller.state.frontline_controller_id, "player", "repaired Frontline units retain deterministic control")
+	t.assert_eq(_event_count(result.events, "countermeasure_triggered", counter.instance_id), 1, "Hold the Line emits one Countermeasure trigger event")
+	t.assert_eq(_event_count(result.events, "damage_repaired", counter.instance_id), 1, "Hold the Line resolves one repair effect")
+
+
 static func _hold_the_line_counter(instance_id: String, owner_id: String) -> CardInstance:
 	var counter := _countermeasure(instance_id, owner_id, 0)
 	counter.abilities = [_ability(
@@ -1630,6 +1687,16 @@ static func _event_types(events: Array) -> Array[String]:
 	for event in events:
 		types.append(str(event.get("type", "")))
 	return types
+
+
+static func _event_count(events: Array, event_type: String, instance_id: String) -> int:
+	var count := 0
+	for event in events:
+		if str(event.get("type", "")) == event_type and (
+			str(event.get("instance_id", "")) == instance_id or str(event.get("source_id", "")) == instance_id
+		):
+			count += 1
+	return count
 
 
 static func _controller_digest(controller: MatchController) -> Dictionary:
