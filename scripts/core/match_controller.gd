@@ -2,6 +2,7 @@ class_name MatchController
 extends RefCounted
 
 const ActionResult = preload("res://scripts/core/action_result.gd")
+const ActionGenerator = preload("res://scripts/ai/action_generator.gd")
 const CardInstance = preload("res://scripts/core/card_instance.gd")
 const CombatRules = preload("res://scripts/core/combat_rules.gd")
 const EffectEngine = preload("res://scripts/core/effect_engine.gd")
@@ -22,6 +23,7 @@ var _rng := RandomNumberGenerator.new()
 var _effect_engine: EffectEngine
 var _debug_trigger_hook: Callable
 var _debug_modifier_expiry_hook: Callable
+var _simulation_mode: bool = false
 
 static func create(card_definitions: Dictionary, player_deck: Array, opponent_deck: Array, seed: int) -> MatchController:
 	var controller: MatchController = load("res://scripts/core/match_controller.gd").new()
@@ -68,13 +70,72 @@ func submit_action(action: GameAction) -> ActionResult:
 	if not invariants.valid:
 		return _abort_invalid("state_invariant", invariants)
 	event_history.append_array(result.events.duplicate(true))
-	replay_log.record(action, state.sequence)
-	replay_log.starting_player_id = state.starting_player_id
-	replay_log.terminal_result = _replay_terminal_result()
+	if not _simulation_mode and replay_log != null:
+		replay_log.record(action, state.sequence)
+		replay_log.starting_player_id = state.starting_player_id
+		replay_log.terminal_result = _replay_terminal_result()
 	return result
 
 func state_hash() -> String:
 	return JSON.stringify(_canonicalize(_authoritative_state())).sha256_text()
+
+func legal_actions(actor_id: String) -> Array[GameAction]:
+	return ActionGenerator.generate(self, actor_id)
+
+func clone_for_simulation(perspective_id: String) -> MatchController:
+	var clone := MatchController.create(
+		card_definitions.duplicate(true),
+		initial_deck_ids.get("player", []).duplicate(),
+		initial_deck_ids.get("opponent", []).duplicate(),
+		state.seed
+	)
+	clone.initial_deck_ids = initial_deck_ids.duplicate(true)
+	clone.event_history = event_history.duplicate(true)
+	clone.invalid_diagnostics = invalid_diagnostics.duplicate(true)
+	clone._simulation_mode = true
+	clone.replay_log = null
+	clone._restore_simulation_snapshot(_invalid_replay_snapshot())
+	return clone
+
+func _restore_simulation_snapshot(snapshot: Dictionary) -> void:
+	var cards := {}
+	for card_id in snapshot.cards:
+		var data: Dictionary = snapshot.cards[card_id]
+		var card: CardInstance = CardInstance.headquarters(data.definition_id, data.owner_id, data.instance_id) \
+			if data.category == "Headquarters" else CardInstance.from_definition(_definitions.get(data.definition_id, {}), data.owner_id, data.instance_id)
+		_apply_card_snapshot(card, data)
+		cards[card_id] = card
+	for player_id in state.players:
+		var player: PlayerState = state.players[player_id]
+		var player_snapshot: Dictionary = snapshot.players[player_id]
+		player.id = player_snapshot.id
+		player.nation = player_snapshot.nation
+		player.headquarters = cards[player_snapshot.headquarters]
+		player.deck = _cards_from_snapshot_ids(player_snapshot.deck, cards)
+		player.hand = _cards_from_snapshot_ids(player_snapshot.hand, cards)
+		player.support_line = _cards_from_snapshot_ids(player_snapshot.support_line, cards)
+		player.discard = _cards_from_snapshot_ids(player_snapshot.discard, cards)
+		player.active_countermeasures = _cards_from_snapshot_ids(player_snapshot.active_countermeasures, cards)
+		player.credit_slots = player_snapshot.credit_slots
+		player.credit = player_snapshot.credit
+		player.fatigue = player_snapshot.fatigue
+		player.turns_started = player_snapshot.turns_started
+		player.mulligan_used = player_snapshot.mulligan_used
+		player.mulligan_confirmed = player_snapshot.mulligan_confirmed
+		player.max_hand_size = player_snapshot.max_hand_size
+	state.active_player_id = snapshot.active_player_id
+	state.starting_player_id = snapshot.starting_player_id
+	state.turn = snapshot.turn
+	state.frontline = _cards_from_snapshot_ids(snapshot.frontline, cards)
+	state.frontline_controller_id = snapshot.frontline_controller_id
+	state.winner_id = snapshot.winner_id
+	state.seed = snapshot.seed
+	state.rng_state = snapshot.rng_state
+	_rng.state = snapshot.rng_internal_state
+	state.sequence = snapshot.sequence
+	state.phase = snapshot.phase
+	invalid_diagnostics = snapshot.invalid_diagnostics.duplicate(true)
+	_effect_engine.reset_after_rollback()
 
 func _replay_terminal_result() -> Dictionary:
 	return {
