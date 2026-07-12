@@ -5,11 +5,20 @@ signal action_requested(action: GameAction)
 
 const ActionBuilderScript = preload("res://scripts/ui/action_builder.gd")
 const CardViewScene = preload("res://scenes/ui/card_view.tscn")
+const MatchCoachModelScript = preload("res://scripts/ui/match_coach_model.gd")
+const CardMotionDirectorScript = preload("res://scripts/ui/card_motion_director.gd")
 
 var router: Main
 var model := MatchInteractionModel.new()
 var snapshot: Dictionary = {}
 var _input_locked := false
+var _onboarding_state: Dictionary = {}
+var _coach_state: Dictionary = {}
+var _rejection_message := ""
+var animation_mode := "on"
+var animation_speed_scale := 0.01 if DisplayServer.get_name() == "headless" else 1.0
+var _motion_director = CardMotionDirectorScript.new()
+var _card_registry: Dictionary = {}
 
 class MatchInteractionModel:
 	var selected_source_id := ""
@@ -116,6 +125,8 @@ class MatchInteractionModel:
 
 
 func _ready() -> void:
+	%OpponentHQ.bind({}, "battlefield")
+	%PlayerHQ.bind({}, "battlefield")
 	%OpponentHQ.card_pressed.connect(_on_board_card_pressed)
 	%OpponentHQ.card_dropped.connect(_on_target_dropped)
 	%OpponentSupport.card_pressed.connect(_on_board_card_pressed)
@@ -133,7 +144,9 @@ func _ready() -> void:
 	%CancelButton.pressed.connect(_on_cancel_pressed)
 	%ConfirmButton.pressed.connect(_on_confirm_pressed)
 	%EndTurnButton.pressed.connect(_on_end_turn_pressed)
+	%AnimationButton.pressed.connect(_on_animation_pressed)
 	resized.connect(_apply_responsive_layout)
+	tree_exiting.connect(cancel_motion)
 	_apply_responsive_layout()
 
 
@@ -143,19 +156,25 @@ func _apply_responsive_layout() -> void:
 	var compact := size.x <= 1000.0
 	%TimelinePanel.custom_minimum_size.x = 136.0 if compact else 148.0
 	%HandScroll.custom_minimum_size.y = 164.0 if compact else 170.0
-	var row_height := 112.0 if compact else 118.0
+	var row_height := 118.0
 	for path in ["Margin/Columns/Board/OpponentArea", "Margin/Columns/Board/Frontline", "Margin/Columns/Board/PlayerArea"]:
 		(get_node(path) as Control).custom_minimum_size.y = row_height
 	var margin := get_node("Margin") as MarginContainer
 	margin.offset_left = 6.0 if compact else 8.0
 	margin.offset_right = -6.0 if compact else -8.0
+	cancel_motion()
 
 func initialize(main: Main, payload: Dictionary) -> void:
 	router = main
+	_onboarding_state = payload.get("onboarding", {}).duplicate(true)
 	render_events(payload.get("events", []))
 	render_snapshot(payload.get("snapshot", {}))
 
 func render_snapshot(next_snapshot: Dictionary) -> void:
+	var previous_state_key := _snapshot_state_key(snapshot)
+	var next_state_key := _snapshot_state_key(next_snapshot)
+	if not _rejection_message.is_empty() and not previous_state_key.is_empty() and next_state_key != previous_state_key:
+		_clear_rejection()
 	snapshot = next_snapshot.duplicate(true)
 	_sanitize_hidden_opponent_hand()
 	var players: Dictionary = snapshot.get("players", {})
@@ -165,14 +184,14 @@ func render_snapshot(next_snapshot: Dictionary) -> void:
 	%OpponentLabel.text = "%s  HQ %d  Hand %d  Deck %d" % [str(opponent.get("nation", "Opponent")), int(opponent.get("hq_defense", 0)), (opponent.get("hand", []) as Array).size(), int(opponent.get("deck_count", 0))]
 	%PlayerLabel.text = "%s  HQ %d" % [str(player.get("nation", "Player")), int(player.get("hq_defense", 0))]
 	%CreditLabel.text = "Credit %d / %d" % [int(player.get("credit", 0)), int(player.get("credit_slots", 0))]
-	%OpponentSupport.render(opponent.get("support_line", []))
-	%Frontline.render(snapshot.get("frontline", []))
-	%PlayerSupport.render(player.get("support_line", []))
+	%OpponentSupport.render(opponent.get("support_line", []), false, _resolve_card_view)
+	%Frontline.render(snapshot.get("frontline", []), false, _resolve_card_view)
+	%PlayerSupport.render(player.get("support_line", []), false, _resolve_card_view)
 	%OpponentHQ.bind(opponent.get("headquarters", {}), "battlefield")
 	%PlayerHQ.bind(player.get("headquarters", {}), "battlefield")
 	_render_hand(player.get("hand", []))
-	%EndTurnButton.disabled = _input_locked or snapshot.get("active_player_id") != "player" or snapshot.get("phase") != "action"
-	_refresh_highlights()
+	_release_missing_card_views(_public_instance_ids(snapshot))
+	_refresh_coach()
 
 
 func _sanitize_hidden_opponent_hand() -> void:
@@ -185,8 +204,87 @@ func _sanitize_hidden_opponent_hand() -> void:
 func render_events(events: Array) -> void:
 	%Timeline.render_events(events)
 
+func set_animation_mode(mode: String) -> void:
+	animation_mode = mode if mode in ["on", "reduced"] else "on"
+	if is_node_ready():
+		%AnimationButton.text = "Animation: Reduced" if animation_mode == "reduced" else "Animation: On"
+		%AnimationButton.tooltip_text = "Use full card motion" if animation_mode == "reduced" else "Use reduced card motion"
+
+func _on_animation_pressed() -> void:
+	set_animation_mode("reduced" if animation_mode == "on" else "on")
+	if router != null:
+		router.set_animation_mode(animation_mode)
+
+func play_motion(events: Array, before_snapshot: Dictionary, after_snapshot: Dictionary) -> void:
+	_motion_director.speed_scale = animation_speed_scale
+	await _motion_director.play(events, before_snapshot, after_snapshot, self)
+
+func cancel_motion(final_snapshot: Dictionary = {}) -> void:
+	_motion_director.cancel()
+	if not final_snapshot.is_empty():
+		render_snapshot(final_snapshot)
+
+func animation_zone_rect(player_id: String) -> Rect2:
+	return (%OpponentSupport if player_id == "opponent" else %PlayerHand).get_global_rect()
+
+func deck_edge_rect(player_id: String) -> Rect2:
+	var area: Rect2 = (%OpponentSupport if player_id == "opponent" else %HandScroll).get_global_rect()
+	return Rect2(area.end.x - 18.0, area.position.y + area.size.y * 0.5 - 24.0, 36.0, 48.0)
+
+func command_area_rect() -> Rect2:
+	return (%AnimationButton as Control).get_global_rect()
+
+func visible_card_rects() -> Dictionary:
+	var result := {}
+	for card in _card_registry.values():
+		var instance_id := str(card.card_data.get("instance_id", ""))
+		if is_instance_valid(card) and card.is_visible_in_tree() and not instance_id.is_empty() and not bool(card.card_data.get("hidden", false)):
+			result[instance_id] = card.get_global_rect()
+	for card in [%OpponentHQ, %PlayerHQ]:
+		var instance_id := str(card.card_data.get("instance_id", ""))
+		if not instance_id.is_empty(): result[instance_id] = card.get_global_rect()
+	return result
+
+func card_view(instance_id: String):
+	return _card_registry.get(instance_id)
+
+func snapshot_card_rects(value: Dictionary) -> Dictionary:
+	var result := {}
+	var players: Dictionary = value.get("players", {})
+	_add_zone_snapshot_rects(result, players.get("opponent", {}).get("support_line", []), %OpponentSupport)
+	_add_zone_snapshot_rects(result, value.get("frontline", []), %Frontline)
+	_add_zone_snapshot_rects(result, players.get("player", {}).get("support_line", []), %PlayerSupport)
+	for pair in [[players.get("opponent", {}).get("headquarters", {}), %OpponentHQ], [players.get("player", {}).get("headquarters", {}), %PlayerHQ]]:
+		if pair[0] is Dictionary:
+			var instance_id := str(pair[0].get("instance_id", ""))
+			if not instance_id.is_empty(): result[instance_id] = (pair[1] as Control).get_global_rect()
+	var hand: Array = players.get("player", {}).get("hand", [])
+	var hand_rect := (%HandScroll as Control).get_global_rect()
+	var total_width := hand.size() * 116.0 + maxf(0.0, hand.size() - 1.0) * 8.0
+	var left := hand_rect.position.x + maxf(0.0, (hand_rect.size.x - total_width) * 0.5)
+	var top := hand_rect.position.y + maxf(0.0, (hand_rect.size.y - 162.0) * 0.5)
+	for index in range(hand.size()):
+		if hand[index] is Dictionary and not bool(hand[index].get("hidden", false)):
+			var instance_id := str(hand[index].get("instance_id", ""))
+			if not instance_id.is_empty(): result[instance_id] = Rect2(left + index * 124.0, top, 116.0, 162.0)
+	return result
+
+func _add_zone_snapshot_rects(result: Dictionary, cards: Array, zone: ZoneView) -> void:
+	for index in range(mini(cards.size(), zone.get_child_count())):
+		if cards[index] is Dictionary and not bool(cards[index].get("hidden", false)):
+			var instance_id := str(cards[index].get("instance_id", ""))
+			if not instance_id.is_empty():
+				var slot_rect := (zone.get_child(index) as Control).get_global_rect()
+				result[instance_id] = Rect2(slot_rect.position.x, zone.global_position.y, 108.0, 118.0)
+
 func set_legal_actions(actions: Array) -> void:
 	model.set_legal_actions(actions)
+	_refresh_coach()
+
+
+func set_onboarding_state(state: Dictionary) -> void:
+	_onboarding_state = state.duplicate(true)
+	_refresh_coach()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -205,50 +303,101 @@ func set_input_locked(locked: bool) -> void:
 	%EndTurnButton.disabled = locked or snapshot.get("active_player_id") != "player"
 	%ConfirmButton.disabled = locked or not model.can_confirm()
 	%CancelButton.disabled = locked or model.selected_source_id.is_empty()
+	%AnimationButton.disabled = locked
 	%OpponentHQ.disabled = locked
 	%PlayerHQ.disabled = locked
 	%OpponentSupport.set_input_locked(locked)
 	%Frontline.set_input_locked(locked)
 	%PlayerSupport.set_input_locked(locked)
 	for card in %PlayerHand.get_children(): card.disabled = locked
+	_refresh_coach()
 
 func show_rejection(code: String, message: String) -> void:
 	model.apply_rejection(code, message)
+	_rejection_message = message
 	%StatusLabel.text = message
+	_refresh_coach()
 
 func _render_hand(cards: Array) -> void:
-	for child in %PlayerHand.get_children(): child.free()
+	for child in %PlayerHand.get_children():
+		%PlayerHand.remove_child(child)
 	for card_data in cards:
 		if not (card_data is Dictionary): continue
-		var card = CardViewScene.instantiate()
+		var card = _resolve_card_view(card_data, "hand")
+		if card.get_parent() != null: card.get_parent().remove_child(card)
 		%PlayerHand.add_child(card)
 		card.bind(card_data, "hand")
 		card.disabled = _input_locked
-		card.card_pressed.connect(_on_card_pressed)
+	_apply_hand_states()
+
+func _resolve_card_view(card_data: Dictionary, mode: String):
+	var instance_id := str(card_data.get("instance_id", ""))
+	var card = _card_registry.get(instance_id)
+	if card == null or not is_instance_valid(card):
+		card = CardViewScene.instantiate()
+		_card_registry[instance_id] = card
+		card.card_pressed.connect(_on_registered_card_pressed.bind(card))
+		card.card_dropped.connect(_on_registered_card_dropped.bind(card))
+	card.bind(card_data, mode)
+	return card
+
+func _on_registered_card_pressed(instance_id: String, card: CardView) -> void:
+	if card.mode == "hand": _on_card_pressed(instance_id)
+	else: _on_board_card_pressed(instance_id)
+
+func _on_registered_card_dropped(source_id: String, target_id: Variant, card: CardView) -> void:
+	if card.mode == "battlefield": _on_target_dropped(source_id, str(target_id))
+
+func _public_instance_ids(value: Dictionary) -> Dictionary:
+	var result := {}
+	var players: Dictionary = value.get("players", {})
+	for cards in [players.get("player", {}).get("hand", []), players.get("player", {}).get("support_line", []), players.get("opponent", {}).get("support_line", []), value.get("frontline", [])]:
+		for card in cards:
+			if card is Dictionary and not bool(card.get("hidden", false)):
+				var instance_id := str(card.get("instance_id", ""))
+				if not instance_id.is_empty(): result[instance_id] = true
+	return result
+
+func _release_missing_card_views(public_ids: Dictionary) -> void:
+	for instance_id in _card_registry.keys():
+		if not public_ids.has(instance_id):
+			var card = _card_registry[instance_id]
+			if is_instance_valid(card): card.free()
+			_card_registry.erase(instance_id)
 
 func _on_card_pressed(instance_id: String) -> void:
 	if _reject_locked(): return
+	_clear_rejection()
+	var reason := str(_coach_state.get("source_reasons", {}).get(instance_id, ""))
+	if not reason.is_empty():
+		model.cancel()
+		model.status_message = reason
+		%StatusLabel.text = reason
+		_refresh_coach()
+		return
 	model.select_source(instance_id)
 	var action = model.immediate_action()
 	if action != null: action_requested.emit(action)
-	%StatusLabel.text = model.status_message
-	_refresh_highlights()
+	%StatusLabel.text = ""
+	_refresh_coach()
 
 func _on_board_card_pressed(instance_id: String) -> void:
 	if _reject_locked(): return
+	_clear_rejection()
 	if model.selected_source_id.is_empty():
 		model.select_source(instance_id)
 	else:
 		var action = model.choose_target(instance_id)
 		if action != null:
 			action_requested.emit(action)
-	_refresh_highlights()
+	_refresh_coach()
 
 func _on_slot_pressed(zone: String, slot: int) -> void:
 	if _reject_locked(): return
+	_clear_rejection()
 	var action = model.choose_slot(zone, slot)
 	if action != null: action_requested.emit(action)
-	_refresh_highlights()
+	_refresh_coach()
 
 func _on_card_dropped(instance_id: String, zone: String, slot: int) -> void:
 	if _reject_locked(): return
@@ -257,17 +406,19 @@ func _on_card_dropped(instance_id: String, zone: String, slot: int) -> void:
 
 func _on_target_dropped(source_id: String, target_id: String) -> void:
 	if _reject_locked(): return
+	_clear_rejection()
 	model.select_source(source_id)
 	var action = model.choose_target(target_id)
 	if action != null: action_requested.emit(action)
-	_refresh_highlights()
+	_refresh_coach()
 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		if _reject_locked(): return
 		model.cancel()
+		_clear_rejection()
 		%StatusLabel.text = ""
-		_refresh_highlights()
+		_refresh_coach()
 
 func _on_end_turn_pressed() -> void:
 	if _reject_locked(): return
@@ -278,13 +429,14 @@ func _on_confirm_pressed() -> void:
 	if _reject_locked(): return
 	var action = model.confirm_action()
 	if action != null: action_requested.emit(action)
-	_refresh_highlights()
+	_refresh_coach()
 
 func _on_cancel_pressed() -> void:
 	if _reject_locked(): return
 	model.cancel()
+	_clear_rejection()
 	%StatusLabel.text = ""
-	_refresh_highlights()
+	_refresh_coach()
 
 func _reject_locked() -> bool:
 	if not _input_locked: return false
@@ -293,9 +445,11 @@ func _reject_locked() -> bool:
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
+		if _reject_locked(): return
 		model.cancel()
+		_clear_rejection()
 		%StatusLabel.text = ""
-		_refresh_highlights()
+		_refresh_coach()
 
 func _refresh_highlights() -> void:
 	var targets := model.highlighted_targets()
@@ -306,3 +460,73 @@ func _refresh_highlights() -> void:
 	%PlayerHQ.modulate = Color("f2d66d") if str(%PlayerHQ.card_data.get("instance_id", "")) in targets else Color("b9d8e8")
 	%ConfirmButton.disabled = _input_locked or not model.can_confirm()
 	%CancelButton.disabled = _input_locked or model.selected_source_id.is_empty()
+	_apply_hand_states()
+	_refresh_end_turn_state()
+	_refresh_coach_objective()
+
+
+func _refresh_coach() -> void:
+	_coach_state = MatchCoachModelScript.derive(snapshot, model._legal_actions, {
+		"selected_source_id": model.selected_source_id,
+		"selected_targets": model.selected_targets,
+		"selected_zone": model.selected_zone,
+		"selected_slot": model.selected_slot,
+	}, _onboarding_state)
+	_refresh_highlights()
+
+
+func _refresh_end_turn_state() -> void:
+	var end_actions := model._legal_actions.filter(func(action) -> bool: return action.type == "end_turn")
+	var can_end: bool = not end_actions.is_empty() and str(snapshot.get("active_player_id", "")) == "player" and str(snapshot.get("phase", "")) == "action"
+	%EndTurnButton.disabled = _input_locked or not can_end
+	%EndTurnButton.remove_theme_stylebox_override("normal")
+	if not can_end:
+		%EndTurnButton.set_meta("action_state", "disabled")
+	elif bool(_coach_state.get("end_turn_only", false)):
+		%EndTurnButton.set_meta("action_state", "strong")
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color("2b2d24")
+		style.border_color = Color("f0cf55")
+		style.set_border_width_all(3)
+		style.set_corner_radius_all(4)
+		%EndTurnButton.add_theme_stylebox_override("normal", style)
+	else:
+		%EndTurnButton.set_meta("action_state", "normal")
+
+
+func _refresh_coach_objective() -> void:
+	%CoachObjective.text = _rejection_message if not _rejection_message.is_empty() else str(_coach_state.get("objective", "No legal action is available."))
+
+
+func _apply_hand_states() -> void:
+	var legal_ids: Array = _coach_state.get("legal_source_ids", [])
+	var reasons: Dictionary = _coach_state.get("source_reasons", {})
+	for child in %PlayerHand.get_children():
+		var instance_id := str(child.card_data.get("instance_id", ""))
+		if instance_id == model.selected_source_id:
+			child.set_action_state("selected")
+		elif instance_id in legal_ids:
+			child.set_action_state("legal")
+		elif reasons.has(instance_id):
+			child.set_action_state("unavailable", str(reasons[instance_id]))
+		else:
+			child.set_action_state("normal")
+
+
+func _clear_rejection() -> void:
+	_rejection_message = ""
+	model.rejection_code = ""
+	if is_node_ready():
+		%StatusLabel.text = ""
+
+
+func _snapshot_state_key(value: Dictionary) -> String:
+	if value.is_empty():
+		return ""
+	return "%s|%s|%s|%s|%s" % [
+		str(value.get("sequence", "")),
+		str(value.get("turn", "")),
+		str(value.get("phase", "")),
+		str(value.get("active_player_id", "")),
+		str(value.get("winner_id", "")),
+	]

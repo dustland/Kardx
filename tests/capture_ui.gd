@@ -11,7 +11,9 @@ const CAPTURES := [
 	["deck_builder", Vector2i(1280, 720), "deck-builder.png"],
 	["mulligan", Vector2i(1280, 720), "mulligan.png"],
 	["match", Vector2i(1280, 720), "match-1280.png"],
-	["match", Vector2i(960, 640), "match-960.png"],
+	["match", Vector2i(1024, 720), "match-1024.png"],
+	["match", Vector2i(1280, 720), "match-selected-slot.png"],
+	["match", Vector2i(1024, 720), "match-end-turn.png"],
 	["result", Vector2i(1280, 720), "result.png"],
 ]
 
@@ -48,6 +50,11 @@ func _run() -> void:
 		var result = app.controller.submit_action(action)
 		_check(result.accepted, "accepts capture setup action %s for %s" % [step[0], step[1]])
 		match_events.append_array(result.events)
+	if app.controller.state.active_player_id == "opponent":
+		var opponent_end = app.controller.legal_actions("opponent").filter(func(action) -> bool: return action.type == "end_turn")[0]
+		var opponent_result = app.controller.submit_action(opponent_end)
+		_check(opponent_result.accepted, "advances capture setup to the player's first turn")
+		match_events.append_array(opponent_result.events)
 	app.ai = null
 	app.show_screen("match", {
 		"controller": app.controller,
@@ -57,9 +64,30 @@ func _run() -> void:
 		"snapshot": app.controller.state.snapshot_for("player"),
 	})
 	await _frames(2)
+	app.current_screen.animation_speed_scale = 0.01
 	_check(app.controller != null and app.controller.state.phase == "action", "reaches match through mulligan actions")
+	_check(app.controller.state.active_player_id == "player", "captures the active player's first turn")
+	_check(app.controller.state.players.player.credit == 1, "first player capture has 1 Credit")
 	await _capture_current_screen(app, CAPTURES[2])
 	await _capture_current_screen(app, CAPTURES[3])
+	var player_actions: Array = app.controller.legal_actions("player")
+	var deploy_actions := player_actions.filter(func(action) -> bool: return action.type == "deploy_unit")
+	_check(not deploy_actions.is_empty(), "first-turn controller exposes a genuine deploy action")
+	if not deploy_actions.is_empty():
+		app.current_screen._on_card_pressed(deploy_actions[0].source_id)
+	await _frames(1)
+	await _capture_current_screen(app, CAPTURES[4])
+	app.current_screen._on_cancel_pressed()
+	if not deploy_actions.is_empty():
+		app.submit_player_action(deploy_actions[0])
+		for _frame in range(12):
+			await process_frame
+			if not app._match_submission_active:
+				break
+	var end_only_actions: Array = app.controller.legal_actions("player")
+	_check(end_only_actions.size() == 1 and end_only_actions[0].type == "end_turn", "capture controller exposes genuine sole End Turn state")
+	await _frames(2)
+	await _capture_current_screen(app, CAPTURES[5])
 
 	var terminal_controller: MatchController = CoreCards.scripted_full_match(CAPTURE_SEED)
 	_check(terminal_controller != null, "creates terminal controller")
@@ -80,7 +108,7 @@ func _run() -> void:
 			"replay_log": terminal_controller.replay_log.to_dict(),
 		})
 		await _frames(2)
-		await _capture_current_screen(app, CAPTURES[4])
+		await _capture_current_screen(app, CAPTURES[6])
 
 	root.remove_child(app)
 	app.free()
@@ -108,8 +136,26 @@ func _capture_current_screen(app, capture: Array) -> void:
 	_check(_has_visible_pixels(image), "%s contains nontransparent pixels" % filename)
 	_check(_has_pixel_variation(image), "%s is not blank" % filename)
 	_check_artwork_regions(app.current_screen, image, filename)
+	_check_match_coach_bounds(app.current_screen, viewport_size, filename)
+	_check_match_grid(app.current_screen, filename)
 	var path := "%s/%s" % [CAPTURE_DIR, filename]
 	_check(image.save_png(path) == OK, "writes %s" % ProjectSettings.globalize_path(path))
+
+
+func _check_match_grid(screen: Control, filename: String) -> void:
+	if _screen_name(screen) != "match":
+		return
+	var expected: Array[float] = []
+	for zone_name in ["OpponentSupport", "Frontline", "PlayerSupport"]:
+		var zone := screen.get_node("%%%s" % zone_name) as Control
+		var centers: Array[float] = zone.grid_column_centers()
+		for slot in zone.get_children():
+			if (slot as Control).get_child_count() > 0:
+				_check((slot as Control).get_global_rect().encloses(((slot as Control).get_child(0) as Control).get_global_rect()), "%s cards remain inside stable slots" % filename)
+		if expected.is_empty(): expected = centers
+		_check(centers == expected and centers.size() == 5, "%s %s uses shared five-column centers" % [filename, zone_name])
+	_check((screen.get_node("%OpponentHQ") as Control).get_global_rect().end.x < (screen.get_node("%OpponentSupport") as Control).get_global_rect().position.x, "%s opponent HQ stays outside grid" % filename)
+	_check((screen.get_node("%PlayerHQ") as Control).get_global_rect().end.x < (screen.get_node("%PlayerSupport") as Control).get_global_rect().position.x, "%s player HQ stays outside grid" % filename)
 
 
 func _screen_name(screen: Control) -> String:
@@ -163,6 +209,17 @@ func _check_artwork_regions(screen: Control, image: Image, filename: String) -> 
 	if filename != "result.png":
 		_check(checked > 0, "%s checks at least one visible artwork region" % filename)
 		_check(onscreen > 0, "%s checks at least one on-screen artwork region" % filename)
+
+
+func _check_match_coach_bounds(screen: Control, viewport_size: Vector2i, filename: String) -> void:
+	if not screen.has_node("%CoachObjective"):
+		return
+	var coach := screen.get_node("%CoachObjective") as Control
+	var hand := screen.get_node("%HandScroll") as Control
+	var viewport_rect := Rect2(Vector2.ZERO, viewport_size)
+	_check(viewport_rect.encloses(coach.get_global_rect()), "%s coach stays inside viewport" % filename)
+	_check(coach.get_global_rect().end.y <= hand.get_global_rect().position.y, "%s coach does not overlap hand" % filename)
+	_check(coach.size.y == 30.0, "%s coach keeps fixed height" % filename)
 
 
 func _frames(count: int) -> void:

@@ -56,43 +56,96 @@ size_flags_horizontal = 3
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="OpponentArea" type="HBoxContainer" parent="Margin/Columns/Board"]
+[node name="OpponentArea" type="Control" parent="Margin/Columns/Board"]
 custom_minimum_size = Vector2(0, 122)
 layout_mode = 2
 alignment = 1
-[node name="OpponentHQ" parent="Margin/Columns/Board/OpponentArea" instance=ExtResource("4")]
+[node name="HQHolder" type="Control" parent="Margin/Columns/Board/OpponentArea"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+[node name="OpponentHQ" parent="Margin/Columns/Board/OpponentArea/HQHolder" instance=ExtResource("4")]
 unique_name_in_owner = true
-layout_mode = 2
-[node name="OpponentSupport" type="HBoxContainer" parent="Margin/Columns/Board/OpponentArea"]
+custom_minimum_size = Vector2(108, 118)
+layout_mode = 0
+offset_right = 108.0
+offset_bottom = 118.0
+[node name="GridHolder" type="Control" parent="Margin/Columns/Board/OpponentArea"]
+custom_minimum_size = Vector2(572, 118)
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+[node name="OpponentSupport" type="Control" parent="Margin/Columns/Board/OpponentArea/GridHolder"]
 unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-alignment = 1
+layout_mode = 1
+anchors_preset = 12
+anchor_left = 0.5
+anchor_top = 0.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -286.0
+offset_right = 286.0
+grow_horizontal = 2
+grow_vertical = 2
 script = ExtResource("2")
 zone_name = "opponent_support"
 
-[node name="Frontline" type="HBoxContainer" parent="Margin/Columns/Board"]
+[node name="Frontline" type="Control" parent="Margin/Columns/Board"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 122)
 layout_mode = 2
-size_flags_horizontal = 3
-alignment = 1
+size_flags_horizontal = 4
 script = ExtResource("2")
 zone_name = "frontline"
 slot_count = 5
 
-[node name="PlayerArea" type="HBoxContainer" parent="Margin/Columns/Board"]
+[node name="PlayerArea" type="Control" parent="Margin/Columns/Board"]
 custom_minimum_size = Vector2(0, 122)
 layout_mode = 2
 alignment = 1
-[node name="PlayerHQ" parent="Margin/Columns/Board/PlayerArea" instance=ExtResource("4")]
+[node name="HQHolder" type="Control" parent="Margin/Columns/Board/PlayerArea"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+[node name="PlayerHQ" parent="Margin/Columns/Board/PlayerArea/HQHolder" instance=ExtResource("4")]
 unique_name_in_owner = true
-layout_mode = 2
-[node name="PlayerSupport" type="HBoxContainer" parent="Margin/Columns/Board/PlayerArea"]
+custom_minimum_size = Vector2(108, 118)
+layout_mode = 0
+offset_right = 108.0
+offset_bottom = 118.0
+[node name="GridHolder" type="Control" parent="Margin/Columns/Board/PlayerArea"]
+custom_minimum_size = Vector2(572, 118)
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+[node name="PlayerSupport" type="Control" parent="Margin/Columns/Board/PlayerArea/GridHolder"]
 unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-alignment = 1
+layout_mode = 1
+anchors_preset = 12
+anchor_left = 0.5
+anchor_top = 0.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -286.0
+offset_right = 286.0
+grow_horizontal = 2
+grow_vertical = 2
 script = ExtResource("2")
 
 [node name="PlayerBar" type="HBoxContainer" parent="Margin/Columns/Board"]
@@ -121,12 +174,28 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(90, 40)
 layout_mode = 2
 text = "End Turn"
+[node name="AnimationButton" type="Button" parent="Margin/Columns/Board/PlayerBar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(132, 40)
+layout_mode = 2
+text = "Animation: On"
+tooltip_text = "Use reduced card motion"
 
 [node name="StatusLabel" type="Label" parent="Margin/Columns/Board"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 22)
 layout_mode = 2
 theme_override_colors/font_color = Color(0.819608, 0.709804, 0.435294, 1)
+text_overrun_behavior = 3
+
+[node name="CoachObjective" type="Label" parent="Margin/Columns/Board"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.945, 0.855, 0.55, 1)
+theme_override_font_sizes/font_size = 15
+text = "No legal action is available."
+vertical_alignment = 1
 text_overrun_behavior = 3
 
 [node name="HandScroll" type="ScrollContainer" parent="Margin/Columns/Board"]
@@ -141,6 +210,7 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 alignment = 1
+theme_override_constants/separation = 8
 
 [node name="TimelinePanel" type="PanelContainer" parent="Margin/Columns"]
 unique_name_in_owner = true
