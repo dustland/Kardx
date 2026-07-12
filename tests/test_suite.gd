@@ -1,6 +1,7 @@
 extends SceneTree
 
 const TestCase = preload("res://tests/support/test_case.gd")
+const UI_SUITE = preload("res://tests/ui/test_ui_contracts.gd")
 const SUITES := [
 	preload("res://tests/core/test_contracts.gd"),
 	preload("res://tests/core/test_state.gd"),
@@ -14,12 +15,15 @@ const SUITES := [
 	preload("res://tests/content/test_card_behaviors.gd"),
 	preload("res://tests/ai/test_ai.gd"),
 	preload("res://tests/ai/test_ai_matches.gd"),
+	UI_SUITE,
 ]
 
 func _init() -> void:
 	var test_case := TestCase.new()
-	for suite in SUITES:
+	var suites := [UI_SUITE] if "--ui-only" in OS.get_cmdline_user_args() else SUITES
+	for suite in suites:
 		suite.run(test_case)
-	if test_case.finish() == 0:
+	var failures := test_case.finish()
+	if failures == 0:
 		print("PASS contracts, state, setup, turns, combat, effects, replay, and full match")
-	quit(test_case.finish())
+	quit(failures)
