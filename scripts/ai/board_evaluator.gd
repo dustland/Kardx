@@ -9,11 +9,12 @@ static func score(snapshot: Variant, actor_id: String) -> float:
 	if not (players_value is Dictionary):
 		return 0.0
 	var players: Dictionary = players_value
-	if not players.has(actor_id):
+	if actor_id not in ["player", "opponent"] \
+		or players.size() != 2 \
+		or not players.has("player") \
+		or not players.has("opponent"):
 		return 0.0
-	var opponent_id := _other_id(players, actor_id)
-	if opponent_id.is_empty():
-		return 0.0
+	var opponent_id := "opponent" if actor_id == "player" else "player"
 	var me_value: Variant = players.get(actor_id, null)
 	var them_value: Variant = players.get(opponent_id, null)
 	if not (me_value is Dictionary) or not (them_value is Dictionary):
@@ -25,13 +26,6 @@ static func score(snapshot: Variant, actor_id: String) -> float:
 		+ float(_hand_count(me) - _hand_count(them)) * 1.5 \
 		+ _frontline_value(snapshot, actor_id) \
 		+ (_number(me.get("credit", 0)) - _number(them.get("credit", 0))) * 0.25
-
-
-static func _other_id(players: Dictionary, actor_id: String) -> String:
-	for player_id in players:
-		if player_id is String and player_id != actor_id:
-			return player_id
-	return ""
 
 
 static func _hand_count(player: Dictionary) -> int:

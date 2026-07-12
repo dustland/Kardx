@@ -14,9 +14,11 @@ static func run(t) -> void:
 	_test_action_keys_preserve_delimited_ids_and_typed_payloads(t)
 	_test_generator_rejects_wrong_actor_and_terminal_states(t)
 	_test_malformed_generator_inputs_are_safe(t)
+	_test_generator_requires_exact_player_map(t)
 	_test_simulation_clone_isolated_from_source(t)
 	_test_evaluator_respects_information_boundary(t)
 	_test_evaluator_handles_malformed_snapshots(t)
+	_test_evaluator_requires_exact_player_map(t)
 
 
 static func _test_rich_midgame_actions_are_complete_legal_and_stable(t) -> void:
@@ -113,6 +115,22 @@ static func _test_malformed_generator_inputs_are_safe(t) -> void:
 	t.assert_eq(ActionGenerator.generate(malformed_hand, "player"), [], "malformed card entries have no actions")
 
 
+static func _test_generator_requires_exact_player_map(t) -> void:
+	var one_player := _rich_controller(708)
+	var player = one_player.state.players.player
+	one_player.state.players = {"player": player}
+	t.assert_eq(ActionGenerator.generate(one_player, "player"), [], "one-player state has no actions before simulation")
+	var three_players := _rich_controller(709)
+	three_players.state.players["third"] = three_players.state.players.player
+	t.assert_eq(ActionGenerator.generate(three_players, "player"), [], "extra player state has no actions")
+	var missing_expected := _rich_controller(710)
+	missing_expected.state.players = {"player": missing_expected.state.players.player, "third": missing_expected.state.players.opponent}
+	t.assert_eq(ActionGenerator.generate(missing_expected, "player"), [], "missing opponent state has no actions")
+	var wrong_entry := _rich_controller(711)
+	wrong_entry.state.players = {"player": wrong_entry.state.players.player, "opponent": {}}
+	t.assert_eq(ActionGenerator.generate(wrong_entry, "player"), [], "wrong player entry has no actions")
+
+
 static func _test_simulation_clone_isolated_from_source(t) -> void:
 	var controller := _rich_controller(702)
 	var clone = controller.clone_for_simulation("player")
@@ -169,6 +187,21 @@ static func _test_evaluator_handles_malformed_snapshots(t) -> void:
 		"frontline_controller_id": "player",
 	}, "player")
 	t.assert_eq(partial, -19.25, "malformed nested values receive a stable partial score")
+
+
+static func _test_evaluator_requires_exact_player_map(t) -> void:
+	var player := {"hq_defense": 10, "hand": [], "credit": 3, "support_line": []}
+	var opponent := {"hq_defense": 4, "hand": [], "credit": 1, "support_line": []}
+	t.assert_eq(BoardEvaluator.score({"players": {"player": player}}, "player"), 0.0, "one-player snapshot is neutral")
+	t.assert_eq(BoardEvaluator.score({
+		"players": {"player": player, "opponent": opponent, "third": {"hq_defense": 7}},
+	}, "player"), 0.0, "three-player snapshot is neutral")
+	t.assert_eq(BoardEvaluator.score({
+		"players": {"player": player, "third": opponent},
+	}, "player"), 0.0, "snapshot missing expected opponent is neutral")
+	t.assert_eq(BoardEvaluator.score({
+		"players": {"player": player, "opponent": []},
+	}, "player"), 0.0, "wrong expected player entry is neutral")
 
 
 static func _rich_controller(seed: int) -> MatchController:

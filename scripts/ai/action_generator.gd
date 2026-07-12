@@ -20,7 +20,11 @@ static func generate(controller, actor_id: String) -> Array[GameAction]:
 	var players: Dictionary = players_value
 	if str(state.get("phase")) != "action" or str(state.get("active_player_id")) != actor_id:
 		return actions
-	if not players.has(actor_id) or not _valid_generation_state(state, players):
+	if actor_id not in ["player", "opponent"] \
+		or players.size() != 2 \
+		or not players.has("player") \
+		or not players.has("opponent") \
+		or not _valid_generation_state(state, players):
 		return actions
 
 	var player: PlayerState = players[actor_id]
