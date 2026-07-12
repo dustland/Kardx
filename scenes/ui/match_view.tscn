@@ -54,6 +54,7 @@ layout_mode = 2
 [node name="OpponentSupport" type="HBoxContainer" parent="Margin/Columns/Board/OpponentArea"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 alignment = 1
 script = ExtResource("2")
 zone_name = "opponent_support"
@@ -62,6 +63,7 @@ zone_name = "opponent_support"
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 122)
 layout_mode = 2
+size_flags_horizontal = 3
 alignment = 1
 script = ExtResource("2")
 zone_name = "frontline"
@@ -77,6 +79,7 @@ layout_mode = 2
 [node name="PlayerSupport" type="HBoxContainer" parent="Margin/Columns/Board/PlayerArea"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 alignment = 1
 script = ExtResource("2")
 
@@ -88,24 +91,37 @@ layout_mode = 2
 size_flags_horizontal = 3
 [node name="CreditLabel" type="Label" parent="Margin/Columns/Board/PlayerBar"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(88, 0)
 layout_mode = 2
+horizontal_alignment = 2
 [node name="CancelButton" type="Button" parent="Margin/Columns/Board/PlayerBar"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(72, 40)
 layout_mode = 2
 text = "Cancel"
 [node name="ConfirmButton" type="Button" parent="Margin/Columns/Board/PlayerBar"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(82, 40)
 layout_mode = 2
 text = "Confirm"
 [node name="EndTurnButton" type="Button" parent="Margin/Columns/Board/PlayerBar"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(90, 40)
 layout_mode = 2
 text = "End Turn"
 
+[node name="StatusLabel" type="Label" parent="Margin/Columns/Board"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 22)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.819608, 0.709804, 0.435294, 1)
+text_overrun_behavior = 3
+
 [node name="HandScroll" type="ScrollContainer" parent="Margin/Columns/Board"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 170)
+custom_minimum_size = Vector2(0, 166)
 layout_mode = 2
+size_flags_vertical = 3
 horizontal_scroll_mode = 2
 vertical_scroll_mode = 0
 [node name="PlayerHand" type="HBoxContainer" parent="Margin/Columns/Board/HandScroll"]
@@ -114,14 +130,9 @@ layout_mode = 2
 size_flags_horizontal = 3
 alignment = 1
 
-[node name="StatusLabel" type="Label" parent="Margin/Columns/Board"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 22)
-layout_mode = 2
-
 [node name="TimelinePanel" type="PanelContainer" parent="Margin/Columns"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(160, 0)
+custom_minimum_size = Vector2(148, 0)
 layout_mode = 2
 [node name="Scroll" type="ScrollContainer" parent="Margin/Columns/TimelinePanel"]
 layout_mode = 2
@@ -130,21 +141,3 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 script = ExtResource("3")
-
-[connection signal="card_pressed" from="Margin/Columns/Board/OpponentArea/OpponentHQ" to="." method="_on_board_card_pressed"]
-[connection signal="card_dropped" from="Margin/Columns/Board/OpponentArea/OpponentHQ" to="." method="_on_target_dropped"]
-[connection signal="card_pressed" from="Margin/Columns/Board/OpponentArea/OpponentSupport" to="." method="_on_board_card_pressed"]
-[connection signal="card_pressed" from="Margin/Columns/Board/Frontline" to="." method="_on_board_card_pressed"]
-[connection signal="card_pressed" from="Margin/Columns/Board/PlayerArea/PlayerHQ" to="." method="_on_board_card_pressed"]
-[connection signal="card_dropped" from="Margin/Columns/Board/PlayerArea/PlayerHQ" to="." method="_on_target_dropped"]
-[connection signal="card_pressed" from="Margin/Columns/Board/PlayerArea/PlayerSupport" to="." method="_on_board_card_pressed"]
-[connection signal="slot_pressed" from="Margin/Columns/Board/Frontline" to="." method="_on_slot_pressed"]
-[connection signal="slot_pressed" from="Margin/Columns/Board/PlayerArea/PlayerSupport" to="." method="_on_slot_pressed"]
-[connection signal="card_dropped" from="Margin/Columns/Board/Frontline" to="." method="_on_card_dropped"]
-[connection signal="card_dropped" from="Margin/Columns/Board/PlayerArea/PlayerSupport" to="." method="_on_card_dropped"]
-[connection signal="target_dropped" from="Margin/Columns/Board/OpponentArea/OpponentSupport" to="." method="_on_target_dropped"]
-[connection signal="target_dropped" from="Margin/Columns/Board/Frontline" to="." method="_on_target_dropped"]
-[connection signal="target_dropped" from="Margin/Columns/Board/PlayerArea/PlayerSupport" to="." method="_on_target_dropped"]
-[connection signal="pressed" from="Margin/Columns/Board/PlayerBar/CancelButton" to="." method="_on_cancel_pressed"]
-[connection signal="pressed" from="Margin/Columns/Board/PlayerBar/ConfirmButton" to="." method="_on_confirm_pressed"]
-[connection signal="pressed" from="Margin/Columns/Board/PlayerBar/EndTurnButton" to="." method="_on_end_turn_pressed"]

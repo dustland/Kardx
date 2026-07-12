@@ -224,7 +224,7 @@ func _restore_simulation_snapshot(snapshot: Dictionary) -> void:
 	var cards := {}
 	for card_id in snapshot.cards:
 		var data: Dictionary = snapshot.cards[card_id]
-		var card: CardInstance = CardInstance.headquarters(data.definition_id, data.owner_id, data.instance_id) \
+		var card: CardInstance = CardInstance.headquarters(data.definition_id, data.owner_id, data.instance_id, _definitions.get(data.definition_id, {})) \
 			if data.category == "Headquarters" else CardInstance.from_definition(_definitions.get(data.definition_id, {}), data.owner_id, data.instance_id)
 		_apply_card_snapshot(card, data)
 		cards[card_id] = card
@@ -405,7 +405,7 @@ func _restore_invalid_replay_snapshot(snapshot: Dictionary) -> Dictionary:
 	var cards := {}
 	for card_id in snapshot.cards:
 		var data: Dictionary = snapshot.cards[card_id]
-		var card: CardInstance = CardInstance.headquarters(data.definition_id, data.owner_id, data.instance_id) \
+		var card: CardInstance = CardInstance.headquarters(data.definition_id, data.owner_id, data.instance_id, _definitions.get(data.definition_id, {})) \
 			if data.category == "Headquarters" else CardInstance.from_definition(_definitions.get(data.definition_id, {}), data.owner_id, data.instance_id)
 		_apply_card_snapshot(card, data)
 		cards[card_id] = card
@@ -1032,7 +1032,7 @@ func _create_player(player_id: String, instance_prefix: String, deck_ids: Array)
 		var definition: Dictionary = _definitions.get(definition_id, {})
 		var instance_id := "%s-%03d" % [instance_prefix, index]
 		if str(definition.get("category", "")) == "Headquarters":
-			headquarters = CardInstance.headquarters(definition_id, player_id, instance_id)
+			headquarters = CardInstance.headquarters(definition_id, player_id, instance_id, definition)
 			nation = str(definition.get("nation", ""))
 			continue
 		var card := CardInstance.from_definition(definition, player_id, instance_id)

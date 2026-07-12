@@ -39,6 +39,7 @@ func bind(data: Dictionary, display_mode: String) -> void:
 		return
 
 	get_node("Frame/Title").text = str(data.get("title", ""))
+	_fit_title(str(data.get("title", "")))
 	get_node("Frame/Type").text = _type_mark(data)
 	get_node("Frame/Costs/Deployment").text = str(data.get("deployment_cost", ""))
 	get_node("Frame/Costs/Operation").text = str(data.get("operation_cost", ""))
@@ -112,21 +113,32 @@ func _apply_mode_layout() -> void:
 			_set_rect(keywords, 6, 192, 166, 211)
 			_set_rect(stats, 106, 216, 166, 237)
 		"hand":
-			title.add_theme_font_size_override("font_size", 10)
-			type.add_theme_font_size_override("font_size", 10)
-			_set_rect(title, 4, 2, 78, 21)
-			_set_rect(type, 82, 2, 104, 21)
-			_set_rect(costs, 62, 24, 104, 43)
-			_set_rect(artwork, 4, 47, 104, 119)
+			type.visible = false
+			_set_rect(title, 4, 2, 104, 29)
+			_set_rect(artwork, 4, 32, 104, 111)
+			_set_rect(costs, 4, 114, 46, 133)
 			_set_rect(stats, 44, 128, 104, 149)
 		"battlefield":
-			title.add_theme_font_size_override("font_size", 9)
-			type.add_theme_font_size_override("font_size", 9)
-			_set_rect(title, 3, 2, 51, 19)
-			_set_rect(type, 54, 2, 72, 19)
-			_set_rect(costs, 30, 22, 72, 41)
-			_set_rect(artwork, 3, 45, 72, 78)
-			_set_rect(stats, 12, 84, 72, 105)
+			type.visible = false
+			get_node("Frame/Costs/Deployment").visible = false
+			costs.add_theme_constant_override("separation", 2)
+			stats.add_theme_constant_override("separation", 3)
+			_set_rect(title, 3, 2, 72, 25)
+			_set_rect(artwork, 3, 28, 72, 77)
+			_set_rect(costs, 3, 84, 24, 105)
+			_set_rect(stats, 28, 84, 72, 105)
+
+
+func _fit_title(value: String) -> void:
+	var title := get_node("Frame/Title") as Label
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_WORD
+	var font_size := 13
+	if mode == "hand":
+		font_size = 9 if value.length() <= 16 else 8
+	elif mode == "battlefield":
+		font_size = 8 if value.length() <= 14 else 7
+	title.add_theme_font_size_override("font_size", font_size)
 
 
 func _set_rect(control: Control, left: float, top: float, right: float, bottom: float) -> void:

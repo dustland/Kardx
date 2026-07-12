@@ -12,6 +12,7 @@ var definition_id: String
 var instance_id: String
 var owner_id: String
 var title: String
+var image_path: String
 var category: String
 var unit_type: String
 var base_attack: int
@@ -42,6 +43,7 @@ static func from_definition(definition: Dictionary, card_owner_id: String, card_
 	card.instance_id = card_instance_id
 	card.owner_id = card_owner_id
 	card.title = str(definition.get("title", ""))
+	card.image_path = str(definition.get("image_path", ""))
 	card.category = str(definition.get("category", ""))
 	card.unit_type = str(definition.get("unit_type", definition.get("subtype", "")))
 	card.base_attack = int(definition.get("attack", definition.get("baseAttack", 0)))
@@ -54,12 +56,18 @@ static func from_definition(definition: Dictionary, card_owner_id: String, card_
 	card.abilities = (definition.get("abilities", []) as Array).duplicate(true)
 	return card
 
-static func headquarters(definition_id_value: String, card_owner_id: String, card_instance_id: String) -> CardInstance:
+static func headquarters(
+	definition_id_value: String,
+	card_owner_id: String,
+	card_instance_id: String,
+	definition: Dictionary = {}
+) -> CardInstance:
 	var card: CardInstance = load("res://scripts/core/card_instance.gd").new()
 	card.definition_id = definition_id_value
 	card.instance_id = card_instance_id
 	card.owner_id = card_owner_id
-	card.title = "Headquarters"
+	card.title = str(definition.get("title", "Headquarters"))
+	card.image_path = str(definition.get("image_path", ""))
 	card.category = "Headquarters"
 	card.unit_type = ""
 	card.base_attack = 0
@@ -150,10 +158,12 @@ func to_public_dict(reveal: bool) -> Dictionary:
 		"owner_id": owner_id,
 		"definition_id": definition_id,
 		"title": title,
+		"image_path": image_path,
 		"category": category,
 		"unit_type": unit_type,
 		"attack": current_attack,
 		"defense": current_defense,
+		"deployment_cost": deployment_cost,
 		"operation_cost": operation_cost,
 		"operations_used": operations_used,
 		"operation_chain": operation_chain,

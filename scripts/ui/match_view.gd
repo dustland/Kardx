@@ -114,6 +114,42 @@ class MatchInteractionModel:
 	func _source_actions() -> Array:
 		return _legal_actions.filter(func(action) -> bool: return action.source_id == selected_source_id)
 
+
+func _ready() -> void:
+	%OpponentHQ.card_pressed.connect(_on_board_card_pressed)
+	%OpponentHQ.card_dropped.connect(_on_target_dropped)
+	%OpponentSupport.card_pressed.connect(_on_board_card_pressed)
+	%OpponentSupport.target_dropped.connect(_on_target_dropped)
+	%Frontline.card_pressed.connect(_on_board_card_pressed)
+	%Frontline.slot_pressed.connect(_on_slot_pressed)
+	%Frontline.card_dropped.connect(_on_card_dropped)
+	%Frontline.target_dropped.connect(_on_target_dropped)
+	%PlayerHQ.card_pressed.connect(_on_board_card_pressed)
+	%PlayerHQ.card_dropped.connect(_on_target_dropped)
+	%PlayerSupport.card_pressed.connect(_on_board_card_pressed)
+	%PlayerSupport.slot_pressed.connect(_on_slot_pressed)
+	%PlayerSupport.card_dropped.connect(_on_card_dropped)
+	%PlayerSupport.target_dropped.connect(_on_target_dropped)
+	%CancelButton.pressed.connect(_on_cancel_pressed)
+	%ConfirmButton.pressed.connect(_on_confirm_pressed)
+	%EndTurnButton.pressed.connect(_on_end_turn_pressed)
+	resized.connect(_apply_responsive_layout)
+	_apply_responsive_layout()
+
+
+func _apply_responsive_layout() -> void:
+	if not is_node_ready():
+		return
+	var compact := size.x <= 1000.0
+	%TimelinePanel.custom_minimum_size.x = 136.0 if compact else 148.0
+	%HandScroll.custom_minimum_size.y = 164.0 if compact else 170.0
+	var row_height := 112.0 if compact else 118.0
+	for path in ["Margin/Columns/Board/OpponentArea", "Margin/Columns/Board/Frontline", "Margin/Columns/Board/PlayerArea"]:
+		(get_node(path) as Control).custom_minimum_size.y = row_height
+	var margin := get_node("Margin") as MarginContainer
+	margin.offset_left = 6.0 if compact else 8.0
+	margin.offset_right = -6.0 if compact else -8.0
+
 func initialize(main: Main, payload: Dictionary) -> void:
 	router = main
 	render_events(payload.get("events", []))

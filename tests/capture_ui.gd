@@ -107,6 +107,7 @@ func _capture_current_screen(app, capture: Array) -> void:
 	_check(image.get_size() == viewport_size, "%s is %dx%d" % [filename, viewport_size.x, viewport_size.y])
 	_check(_has_visible_pixels(image), "%s contains nontransparent pixels" % filename)
 	_check(_has_pixel_variation(image), "%s is not blank" % filename)
+	_check_artwork_regions(app.current_screen, image, filename)
 	var path := "%s/%s" % [CAPTURE_DIR, filename]
 	_check(image.save_png(path) == OK, "writes %s" % ProjectSettings.globalize_path(path))
 
@@ -131,6 +132,32 @@ func _has_pixel_variation(image: Image) -> bool:
 			if not image.get_pixel(x, y).is_equal_approx(first):
 				return true
 	return false
+
+
+func _check_artwork_regions(screen: Control, image: Image, filename: String) -> void:
+	var cards: Array[Node] = screen.find_children("*", "CardView", true, false)
+	var checked := 0
+	var onscreen := 0
+	for node in cards:
+		var card := node as Control
+		if not card.is_visible_in_tree() or bool(card.card_data.get("hidden", false)):
+			continue
+		var artwork := card.get_node("Frame/Artwork") as TextureRect
+		if not artwork.is_visible_in_tree() or artwork.texture == null:
+			continue
+		checked += 1
+		var art_path := artwork.texture.resource_path
+		_check(art_path.begins_with("res://game_assets/generated_cards/"), "%s card uses generated artwork" % filename)
+		var card_rect := card.get_global_rect()
+		var art_rect := artwork.get_global_rect()
+		_check(card_rect.encloses(art_rect), "%s artwork stays within card bounds" % filename)
+		var region := Rect2i(Vector2i(art_rect.position), Vector2i(art_rect.size)).intersection(Rect2i(Vector2i.ZERO, image.get_size()))
+		if region.has_area():
+			onscreen += 1
+			_check(_has_pixel_variation(image.get_region(region)), "%s artwork region is nonblank" % filename)
+	if filename != "result.png":
+		_check(checked > 0, "%s checks at least one visible artwork region" % filename)
+		_check(onscreen > 0, "%s checks at least one on-screen artwork region" % filename)
 
 
 func _frames(count: int) -> void:

@@ -20,6 +20,7 @@ func render(cards: Array, hidden := false) -> void:
 	for index in range(slot_count):
 		var slot := _DropSlot.new()
 		slot.custom_minimum_size = Vector2(90, 124)
+		slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		slot.zone = zone_name
 		slot.slot_index = index
 		slot.input_locked = input_locked
@@ -32,6 +33,7 @@ func render(cards: Array, hidden := false) -> void:
 			var card = CardViewScene.instantiate()
 			slot.add_child(card)
 			card.bind(card_data, "hidden" if hidden else "battlefield")
+			card.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 			card.disabled = input_locked
 			card.set_meta("owner_id", str(card_data.get("owner_id", "")))
 			card.card_pressed.connect(func(instance_id: String) -> void: card_pressed.emit(instance_id))

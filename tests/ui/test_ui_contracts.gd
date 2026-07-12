@@ -77,6 +77,8 @@ static func run_task5(t) -> void:
 
 
 static func run_task6(t) -> void:
+	_test_public_card_art_is_safe(t)
+	await _test_runtime_views_load_public_card_art(t)
 	_test_terminal_reason_uses_authoritative_events(t)
 	await _test_result_view_outcomes_and_layout(t)
 	await _test_result_view_signals(t)
@@ -86,6 +88,46 @@ static func run_task6(t) -> void:
 	await _test_rendered_opponent_hand_is_private(t)
 	await _test_keyboard_actions(t)
 	_test_main_routes_complete_terminal_payload(t)
+
+
+static func _test_public_card_art_is_safe(t) -> void:
+	var definition := _ui_card("definition", "", "Unit")
+	definition["id"] = "art-unit"
+	definition["image_path"] = "res://game_assets/generated_cards/us-infantry.png"
+	var card = CardInstanceScript.from_definition(definition, "player", "p-art")
+	t.assert_eq(card.to_public_dict(true).get("image_path"), definition.image_path, "revealed public card exposes generated art path")
+	t.assert_true(not card.to_public_dict(false).has("image_path"), "hidden card exposes no art path")
+
+
+static func _test_runtime_views_load_public_card_art(t) -> void:
+	var image_path := "res://game_assets/generated_cards/us-infantry.png"
+	var card := _ui_card("p-art", "player", "Unit")
+	card["title"] = "Rifle Platoon"
+	card["image_path"] = image_path
+	var snapshot := _match_snapshot()
+	snapshot.players.player.hand = [card]
+	snapshot.players.player.headquarters = card.merged({"instance_id": "p-hq-art", "category": "Headquarters"}, true)
+	snapshot.players.opponent.headquarters = card.merged({"instance_id": "o-hq-art", "owner_id": "opponent", "category": "Headquarters"}, true)
+
+	var mulligan = MulliganScene.instantiate()
+	Engine.get_main_loop().root.add_child(mulligan)
+	mulligan.initialize(null, {"snapshot": snapshot, "difficulty": "standard"})
+	await Engine.get_main_loop().process_frame
+	var mulligan_art = mulligan.get_node("%HandRow").get_child(0).get_node("Frame/Artwork")
+	t.assert_eq(mulligan_art.texture.resource_path, image_path, "mulligan hand loads generated texture")
+	mulligan.queue_free()
+	await Engine.get_main_loop().process_frame
+
+	var match_view = MatchViewScene.instantiate()
+	Engine.get_main_loop().root.add_child(match_view)
+	match_view.render_snapshot(snapshot)
+	await Engine.get_main_loop().process_frame
+	var hand_art = match_view.get_node("%PlayerHand").get_child(0).get_node("Frame/Artwork")
+	t.assert_eq(hand_art.texture.resource_path, image_path, "match player hand loads generated texture")
+	t.assert_eq(match_view.get_node("%PlayerHQ/Frame/Artwork").texture.resource_path, image_path, "match player HQ loads generated texture")
+	t.assert_eq(match_view.get_node("%OpponentHQ/Frame/Artwork").texture.resource_path, image_path, "match opponent HQ loads generated texture")
+	match_view.queue_free()
+	await Engine.get_main_loop().process_frame
 
 
 static func _test_terminal_reason_uses_authoritative_events(t) -> void:
