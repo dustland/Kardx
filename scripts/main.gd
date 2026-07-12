@@ -28,6 +28,7 @@ var selected_deck_id := "us-starter"
 var difficulty := "standard"
 var controller: MatchController
 var ai: AIPlayer
+var screen_factory: Callable
 
 
 func _ready() -> void:
@@ -39,7 +40,9 @@ func show_screen(screen_name: String, payload: Dictionary = {}) -> void:
 	assert(screen_name in VALID_SCREENS, "unknown screen: %s" % screen_name)
 	_clear_screen()
 	var scene_path: String = SCREEN_PATHS[screen_name]
-	if not ResourceLoader.exists(scene_path):
+	if screen_factory.is_valid():
+		current_screen = screen_factory.call(scene_path)
+	elif not ResourceLoader.exists(scene_path):
 		current_screen = _pending_screen(screen_name)
 	else:
 		var packed_scene: PackedScene = load(scene_path)
@@ -69,6 +72,8 @@ func _show_content_errors(diagnostics: Array[Dictionary]) -> void:
 
 func _clear_screen() -> void:
 	if current_screen != null and is_instance_valid(current_screen):
+		if current_screen.get_parent() == screen_host:
+			screen_host.remove_child(current_screen)
 		current_screen.queue_free()
 	current_screen = null
 
