@@ -13,7 +13,7 @@ func _run() -> void:
 	UiContracts.run(test_case)
 	var failures := test_case.finish()
 	if failures == 0:
-		print("PASS Task1 UI behavior contracts")
+		print("PASS focused UI behavior contracts")
 	await process_frame
 	await process_frame
 	quit(failures)
