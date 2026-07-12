@@ -5,11 +5,15 @@ signal action_requested(action: GameAction)
 
 const ActionBuilderScript = preload("res://scripts/ui/action_builder.gd")
 const CardViewScene = preload("res://scenes/ui/card_view.tscn")
+const MatchCoachModelScript = preload("res://scripts/ui/match_coach_model.gd")
 
 var router: Main
 var model := MatchInteractionModel.new()
 var snapshot: Dictionary = {}
 var _input_locked := false
+var _onboarding_state: Dictionary = {}
+var _coach_state: Dictionary = {}
+var _rejection_message := ""
 
 class MatchInteractionModel:
 	var selected_source_id := ""
@@ -152,6 +156,7 @@ func _apply_responsive_layout() -> void:
 
 func initialize(main: Main, payload: Dictionary) -> void:
 	router = main
+	_onboarding_state = payload.get("onboarding", {}).duplicate(true)
 	render_events(payload.get("events", []))
 	render_snapshot(payload.get("snapshot", {}))
 
@@ -172,7 +177,7 @@ func render_snapshot(next_snapshot: Dictionary) -> void:
 	%PlayerHQ.bind(player.get("headquarters", {}), "battlefield")
 	_render_hand(player.get("hand", []))
 	%EndTurnButton.disabled = _input_locked or snapshot.get("active_player_id") != "player" or snapshot.get("phase") != "action"
-	_refresh_highlights()
+	_refresh_coach()
 
 
 func _sanitize_hidden_opponent_hand() -> void:
@@ -187,6 +192,13 @@ func render_events(events: Array) -> void:
 
 func set_legal_actions(actions: Array) -> void:
 	model.set_legal_actions(actions)
+	_rejection_message = ""
+	_refresh_coach()
+
+
+func set_onboarding_state(state: Dictionary) -> void:
+	_onboarding_state = state.duplicate(true)
+	_refresh_coach()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -211,10 +223,13 @@ func set_input_locked(locked: bool) -> void:
 	%Frontline.set_input_locked(locked)
 	%PlayerSupport.set_input_locked(locked)
 	for card in %PlayerHand.get_children(): card.disabled = locked
+	_refresh_coach()
 
 func show_rejection(code: String, message: String) -> void:
 	model.apply_rejection(code, message)
+	_rejection_message = message
 	%StatusLabel.text = message
+	_refresh_coach()
 
 func _render_hand(cards: Array) -> void:
 	for child in %PlayerHand.get_children(): child.free()
@@ -225,30 +240,41 @@ func _render_hand(cards: Array) -> void:
 		card.bind(card_data, "hand")
 		card.disabled = _input_locked
 		card.card_pressed.connect(_on_card_pressed)
+	_apply_hand_states()
 
 func _on_card_pressed(instance_id: String) -> void:
 	if _reject_locked(): return
+	_clear_rejection()
+	var reason := str(_coach_state.get("source_reasons", {}).get(instance_id, ""))
+	if not reason.is_empty():
+		model.cancel()
+		model.status_message = reason
+		%StatusLabel.text = reason
+		_refresh_coach()
+		return
 	model.select_source(instance_id)
 	var action = model.immediate_action()
 	if action != null: action_requested.emit(action)
-	%StatusLabel.text = model.status_message
-	_refresh_highlights()
+	%StatusLabel.text = ""
+	_refresh_coach()
 
 func _on_board_card_pressed(instance_id: String) -> void:
 	if _reject_locked(): return
+	_clear_rejection()
 	if model.selected_source_id.is_empty():
 		model.select_source(instance_id)
 	else:
 		var action = model.choose_target(instance_id)
 		if action != null:
 			action_requested.emit(action)
-	_refresh_highlights()
+	_refresh_coach()
 
 func _on_slot_pressed(zone: String, slot: int) -> void:
 	if _reject_locked(): return
+	_clear_rejection()
 	var action = model.choose_slot(zone, slot)
 	if action != null: action_requested.emit(action)
-	_refresh_highlights()
+	_refresh_coach()
 
 func _on_card_dropped(instance_id: String, zone: String, slot: int) -> void:
 	if _reject_locked(): return
@@ -257,17 +283,19 @@ func _on_card_dropped(instance_id: String, zone: String, slot: int) -> void:
 
 func _on_target_dropped(source_id: String, target_id: String) -> void:
 	if _reject_locked(): return
+	_clear_rejection()
 	model.select_source(source_id)
 	var action = model.choose_target(target_id)
 	if action != null: action_requested.emit(action)
-	_refresh_highlights()
+	_refresh_coach()
 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		if _reject_locked(): return
 		model.cancel()
+		_clear_rejection()
 		%StatusLabel.text = ""
-		_refresh_highlights()
+		_refresh_coach()
 
 func _on_end_turn_pressed() -> void:
 	if _reject_locked(): return
@@ -278,13 +306,14 @@ func _on_confirm_pressed() -> void:
 	if _reject_locked(): return
 	var action = model.confirm_action()
 	if action != null: action_requested.emit(action)
-	_refresh_highlights()
+	_refresh_coach()
 
 func _on_cancel_pressed() -> void:
 	if _reject_locked(): return
 	model.cancel()
+	_clear_rejection()
 	%StatusLabel.text = ""
-	_refresh_highlights()
+	_refresh_coach()
 
 func _reject_locked() -> bool:
 	if not _input_locked: return false
@@ -295,7 +324,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		model.cancel()
 		%StatusLabel.text = ""
-		_refresh_highlights()
+		_refresh_coach()
 
 func _refresh_highlights() -> void:
 	var targets := model.highlighted_targets()
@@ -306,3 +335,56 @@ func _refresh_highlights() -> void:
 	%PlayerHQ.modulate = Color("f2d66d") if str(%PlayerHQ.card_data.get("instance_id", "")) in targets else Color("b9d8e8")
 	%ConfirmButton.disabled = _input_locked or not model.can_confirm()
 	%CancelButton.disabled = _input_locked or model.selected_source_id.is_empty()
+	_apply_hand_states()
+	_refresh_coach_objective()
+
+
+func _refresh_coach() -> void:
+	_coach_state = MatchCoachModelScript.derive(snapshot, model._legal_actions, {
+		"selected_source_id": model.selected_source_id,
+		"selected_targets": model.selected_targets,
+		"selected_zone": model.selected_zone,
+		"selected_slot": model.selected_slot,
+	}, _onboarding_state)
+	if model.selected_source_id.is_empty():
+		var guidance := MatchCoachModelScript.derive(snapshot, _unfinished_guidance_actions(), {}, _onboarding_state)
+		_coach_state.objective = guidance.objective
+		_coach_state.next_kind = guidance.next_kind
+		_coach_state.end_turn_only = guidance.end_turn_only
+	_refresh_highlights()
+
+
+func _unfinished_guidance_actions() -> Array:
+	return model._legal_actions.filter(func(action) -> bool:
+		match action.type:
+			"deploy_unit":
+				return not bool(_onboarding_state.get("deployed_unit", false))
+			"move_unit":
+				return not bool(_onboarding_state.get("moved_to_frontline", false))
+			"attack_unit", "attack_hq":
+				return not bool(_onboarding_state.get("completed_attack", false))
+		return true
+	)
+
+
+func _refresh_coach_objective() -> void:
+	%CoachObjective.text = _rejection_message if not _rejection_message.is_empty() else str(_coach_state.get("objective", "No legal action is available."))
+
+
+func _apply_hand_states() -> void:
+	var legal_ids: Array = _coach_state.get("legal_source_ids", [])
+	var reasons: Dictionary = _coach_state.get("source_reasons", {})
+	for child in %PlayerHand.get_children():
+		var instance_id := str(child.card_data.get("instance_id", ""))
+		if instance_id == model.selected_source_id:
+			child.set_action_state("selected")
+		elif instance_id in legal_ids:
+			child.set_action_state("legal")
+		elif reasons.has(instance_id):
+			child.set_action_state("unavailable", str(reasons[instance_id]))
+		else:
+			child.set_action_state("normal")
+
+
+func _clear_rejection() -> void:
+	_rejection_message = ""

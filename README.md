@@ -6,11 +6,13 @@ OpenCards is a Godot 4.7 card game.
 
 Open this repository in Godot 4 and press Play. The main scene is `scenes/main.tscn`.
 
-The playable flow is Deck Builder, opening-hand Mulligan, player-versus-AI Match, and Result. AI opponents support Easy, Standard, and Hard difficulties. Result supports a rematch with the same complete player deck and difficulty or a return to Deck Builder with the current in-memory deck still selected. The starter cards use original generated illustrations in `game_assets/generated_cards/`; other source assets are kept under `game_assets/`.
+The playable flow is Deck Builder, opening-hand Mulligan, player-versus-AI Match, and Result. Choose a difficulty and use **Start Battle** when the starter deck is ready. AI opponents support Easy, Standard, and Hard difficulties. Result supports a rematch with the same complete player deck and difficulty or a return to Deck Builder with the current in-memory deck still selected. The starter cards use original generated illustrations in `game_assets/generated_cards/`; other source assets are kept under `game_assets/`.
+
+During a match, the objective bar follows the current legal actions. Gold-bordered cards are legal, the brighter border marks the selected card, and unavailable cards explain why they cannot be played. Credit starts at 1 and grows by one slot each turn. Units deploy to the Support Line, then move to the Frontline before attacking highlighted units or Headquarters. When no other action is legal, the objective directs you to **End Turn**. Completed deploy, move, and attack lessons persist across rematches.
 
 ### Controls
 
-- Mouse: select cards and targets, drag cards to legal zones, and activate commands.
+- Mouse: select highlighted cards and targets, drag cards to highlighted legal zones, and activate commands.
 - Enter or Space: activate the primary command where supported, including Play, confirm, and Rematch.
 - Escape: clear the current Match selection or return from Result to Deck Builder.
 - E: end the player turn when End Turn is legal.

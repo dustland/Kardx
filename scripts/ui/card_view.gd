@@ -14,6 +14,8 @@ const MODE_SIZES := {
 
 var card_data: Dictionary = {}
 var mode := "catalog"
+var action_state := "normal"
+var _base_tooltip := ""
 
 
 func _ready() -> void:
@@ -33,7 +35,8 @@ func bind(data: Dictionary, display_mode: String) -> void:
 	card_data = {"hidden": true} if hidden else data.duplicate(true)
 	get_node("CardBack").visible = hidden
 	get_node("Frame").visible = not hidden
-	tooltip_text = "" if hidden else str(data.get("description", ""))
+	_base_tooltip = "" if hidden else str(data.get("description", ""))
+	tooltip_text = _base_tooltip
 	if hidden:
 		_clear_face()
 		return
@@ -49,6 +52,32 @@ func bind(data: Dictionary, display_mode: String) -> void:
 	get_node("Frame/Stats/Defense").text = str(data.get("defense", ""))
 	get_node("Frame/Artwork").texture = _load_art(str(data.get("image_path", "")))
 	_apply_semantic_accents(data)
+	set_action_state("normal")
+
+
+func set_action_state(state: String, reason: String = "") -> void:
+	assert(state in ["normal", "legal", "selected", "unavailable"], "Unsupported card action state: %s" % state)
+	action_state = state
+	tooltip_text = reason if not reason.is_empty() else _base_tooltip
+	if card_data.get("hidden", false):
+		return
+	var border := Color("a88f58")
+	var owner := str(card_data.get("owner_id", ""))
+	var nation := str(card_data.get("nation", ""))
+	if owner == "player" or nation == "UnitedStates":
+		border = Color("7899ad")
+	elif owner == "opponent" or nation == "SovietUnion":
+		border = Color("a96d5e")
+	match state:
+		"legal":
+			border = Color("e1c45a")
+		"selected":
+			border = Color("fff0a0")
+		"unavailable":
+			border = Color("59615d")
+	add_theme_stylebox_override("normal", _card_style(Color("171d1a") if state == "unavailable" else Color("1b241e"), border, 4 if state in ["legal", "selected"] else 2))
+	add_theme_stylebox_override("hover", _card_style(Color("202824"), border.lightened(0.12), 4 if state in ["legal", "selected"] else 2))
+	self_modulate = Color(0.68, 0.68, 0.68, 1.0) if state == "unavailable" else Color.WHITE
 
 
 func _on_pressed() -> void:

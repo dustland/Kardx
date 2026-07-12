@@ -5,6 +5,7 @@ const MatchCoachModel = preload("res://scripts/ui/match_coach_model.gd")
 const OnboardingStore = preload("res://scripts/ui/onboarding_store.gd")
 const ContentCatalog = preload("res://scripts/content/content_catalog.gd")
 const DeckBuilderScene = preload("res://scenes/ui/deck_builder_view.tscn")
+const MatchViewScene = preload("res://scenes/ui/match_view.tscn")
 
 
 static func run(t) -> void:
@@ -18,6 +19,10 @@ static func run(t) -> void:
 	await _test_deck_builder_starter_readiness(t)
 	await _test_deck_builder_edited_validation_and_restoration(t)
 	await _test_deck_builder_readiness_containment(t)
+	await _test_match_coach_and_card_states(t)
+	await _test_unavailable_card_does_not_submit(t)
+	await _test_target_highlights_preserve_geometry(t)
+	_test_accepted_action_milestones(t)
 
 
 static func _test_deck_builder_starter_readiness(t) -> void:
@@ -107,6 +112,75 @@ static func _create_deck_builder(onboarding_path: String, viewport_size: Vector2
 	})
 	await view.get_tree().process_frame
 	return view
+
+
+static func _test_match_coach_and_card_states(t) -> void:
+	var view = MatchViewScene.instantiate()
+	Engine.get_main_loop().root.add_child(view)
+	Engine.get_main_loop().root.size = Vector2i(1280, 720)
+	view.render_snapshot(_snapshot())
+	view.set_legal_actions([_action("deploy_unit", "one-cost", [], {"support_slot": 0}), _action("end_turn")])
+	view.set_onboarding_state(OnboardingStore.defaults())
+	await view.get_tree().process_frame
+	t.assert_eq(view.get_node("%CoachObjective").text, "Select a highlighted card to deploy. You have 1 Credit.", "coach renders first-turn deploy objective")
+	var cards := view.get_node("%PlayerHand").get_children()
+	t.assert_eq(cards[0].action_state, "legal", "legal hand source is highlighted")
+	t.assert_eq(cards[1].action_state, "unavailable", "illegal hand source is unavailable")
+	t.assert_eq(cards[1].tooltip_text, "Not enough Credit", "unavailable source exposes concrete reason")
+	view._on_card_pressed("one-cost")
+	t.assert_eq(cards[0].action_state, "selected", "selected source has selected semantics")
+	t.assert_eq(view.get_node("%CoachObjective").text, "Choose a highlighted Support Line slot.", "selection refreshes coach immediately")
+	t.assert_eq(view.get_node("%StatusLabel").text, "", "precise coach copy replaces legacy selection status")
+	var objective_height := (view.get_node("%CoachObjective") as Control).size.y
+	view.show_rejection("stale_action", "That action is no longer legal.")
+	t.assert_eq(view.get_node("%CoachObjective").text, "That action is no longer legal.", "rejection takes coach precedence")
+	t.assert_eq((view.get_node("%CoachObjective") as Control).size.y, objective_height, "rejection does not resize coach strip")
+	view.model.cancel()
+	view.set_legal_actions([_action("deploy_unit", "one-cost", [], {"support_slot": 0}), _action("move_unit", "support-unit", [], {"zone": "frontline", "slot": 0}), _action("end_turn")])
+	view.set_onboarding_state({"deployed_unit": true, "moved_to_frontline": false, "completed_attack": false})
+	t.assert_eq(view.get_node("%CoachObjective").text, "Select a ready unit, then choose a highlighted Frontline slot.", "completed deploy prompt yields to unfinished move lesson")
+	view.queue_free()
+	await Engine.get_main_loop().process_frame
+
+
+static func _test_unavailable_card_does_not_submit(t) -> void:
+	var view = MatchViewScene.instantiate()
+	Engine.get_main_loop().root.add_child(view)
+	view.render_snapshot(_snapshot())
+	view.set_legal_actions([_action("end_turn")])
+	view.set_onboarding_state(OnboardingStore.defaults())
+	var submitted := 0
+	view.action_requested.connect(func(_action_value) -> void: submitted += 1)
+	view._on_card_pressed("three-cost")
+	t.assert_eq(submitted, 0, "unavailable click never submits an action")
+	t.assert_eq(view.get_node("%StatusLabel").text, "Not enough Credit", "unavailable click displays concrete reason")
+	view.queue_free()
+	await Engine.get_main_loop().process_frame
+
+
+static func _test_target_highlights_preserve_geometry(t) -> void:
+	var view = MatchViewScene.instantiate()
+	Engine.get_main_loop().root.add_child(view)
+	Engine.get_main_loop().root.size = Vector2i(1024, 720)
+	view.render_snapshot(_snapshot())
+	await view.get_tree().process_frame
+	var slot := view.get_node("%PlayerSupport").get_child(0) as Control
+	var before := slot.get_global_rect()
+	view.get_node("%PlayerSupport").set_highlights([0], [])
+	await view.get_tree().process_frame
+	t.assert_eq(slot.get_global_rect(), before, "strong slot highlight does not shift layout")
+	t.assert_true(slot.get_theme_stylebox("normal").get_border_width(SIDE_LEFT) >= 3, "highlight uses a strong slot border")
+	view.queue_free()
+	await Engine.get_main_loop().process_frame
+
+
+static func _test_accepted_action_milestones(t) -> void:
+	t.assert_eq(Main.onboarding_milestone_for(_action("deploy_unit", "unit")), "deployed_unit", "accepted deploy maps to deploy milestone")
+	t.assert_eq(Main.onboarding_milestone_for(_action("move_unit", "unit", [], {"zone": "frontline", "slot": 0})), "moved_to_frontline", "frontline move maps to move milestone")
+	t.assert_eq(Main.onboarding_milestone_for(_action("move_unit", "unit", [], {"zone": "support", "slot": 0})), "", "support move does not map to milestone")
+	t.assert_eq(Main.onboarding_milestone_for(_action("attack_unit", "unit", ["enemy"])), "completed_attack", "unit attack maps to attack milestone")
+	t.assert_eq(Main.onboarding_milestone_for(_action("attack_hq", "unit", ["hq"])), "completed_attack", "HQ attack maps to attack milestone")
+	t.assert_eq(Main.onboarding_milestone_for(_action("end_turn")), "", "unrelated action has no milestone")
 
 
 static func _test_coach_priority_and_exact_copy(t) -> void:

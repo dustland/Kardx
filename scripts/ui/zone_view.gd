@@ -76,7 +76,15 @@ func set_highlights(slots: Array, targets: Array) -> void:
 func _apply_highlights() -> void:
 	for index in range(get_child_count()):
 		var slot := get_child(index) as _DropSlot
-		slot.modulate = Color("d8bd58") if index in highlighted_slots else Color.WHITE
+		var highlighted := index in highlighted_slots
+		var style := _slot_style(zone_name)
+		if highlighted:
+			style.border_color = Color("f0cf55")
+			style.set_border_width_all(4)
+		slot.add_theme_stylebox_override("normal", style)
+		slot.add_theme_stylebox_override("hover", style)
+		slot.add_theme_stylebox_override("disabled", style)
+		slot.modulate = Color.WHITE
 		if slot.get_child_count() > 0:
 			var card = slot.get_child(0)
 			var owner_color := Color("b9d8e8") if str(card.get_meta("owner_id", "")) == "player" else Color("e8b9b9")

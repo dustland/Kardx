@@ -8,6 +8,7 @@ const ContentErrorViewScene = preload("res://scenes/ui/content_error_view.tscn")
 const GameActionScript = preload("res://scripts/core/game_action.gd")
 const MatchControllerScript = preload("res://scripts/core/match_controller.gd")
 const AIPlayerScript = preload("res://scripts/ai/ai_player.gd")
+const OnboardingStoreScript = preload("res://scripts/ui/onboarding_store.gd")
 
 const VALID_SCREENS := ["deck_builder", "mulligan", "match", "result"]
 const SCREEN_PATHS := {
@@ -39,6 +40,7 @@ var _mulligan_action_submitter: Callable
 var _match_submission_active := false
 var _match_generation := 0
 var _terminal_events: Array = []
+var onboarding_store = OnboardingStoreScript.new()
 
 
 func _ready() -> void:
@@ -62,6 +64,8 @@ func show_screen(screen_name: String, payload: Dictionary = {}) -> void:
 		current_screen = _pending_screen(screen_name)
 	screen_host.add_child(current_screen)
 	if current_screen.has_method("initialize"):
+		if screen_name == "match" and not payload.has("onboarding"):
+			payload["onboarding"] = onboarding_store.load()
 		current_screen.initialize(self, payload)
 	if screen_name == "deck_builder" and current_screen.has_signal("play_requested"):
 		current_screen.play_requested.connect(_on_play_requested)
@@ -231,6 +235,10 @@ func submit_player_action(action: GameAction) -> void:
 	var generation := _match_generation
 	current_screen.set_input_locked(true)
 	var result = controller.submit_action(action)
+	if result.accepted:
+		var milestone := onboarding_milestone_for(action)
+		if not milestone.is_empty():
+			onboarding_store.complete(milestone)
 	_render_match_result(result)
 	if result.accepted and not _route_match_result_if_complete():
 		await _drive_ai_turn(generation)
@@ -307,6 +315,19 @@ func _refresh_match_view() -> void:
 		return
 	current_screen.render_snapshot(controller.state.snapshot_for("player"))
 	current_screen.set_legal_actions(controller.legal_actions("player"))
+	if current_screen.has_method("set_onboarding_state"):
+		current_screen.set_onboarding_state(onboarding_store.load())
+
+
+static func onboarding_milestone_for(action: GameAction) -> String:
+	match action.type:
+		"deploy_unit":
+			return "deployed_unit"
+		"move_unit":
+			return "moved_to_frontline" if str(action.payload.get("zone", "")) == "frontline" else ""
+		"attack_unit", "attack_hq":
+			return "completed_attack"
+	return ""
 
 
 func _route_match_result_if_complete() -> bool:

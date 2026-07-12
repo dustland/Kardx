@@ -129,6 +129,16 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.819608, 0.709804, 0.435294, 1)
 text_overrun_behavior = 3
 
+[node name="CoachObjective" type="Label" parent="Margin/Columns/Board"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.945, 0.855, 0.55, 1)
+theme_override_font_sizes/font_size = 15
+text = "No legal action is available."
+vertical_alignment = 1
+text_overrun_behavior = 3
+
 [node name="HandScroll" type="ScrollContainer" parent="Margin/Columns/Board"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 166)
