@@ -29,6 +29,7 @@ scripts/ui/deck_builder_view.gd      Starter readiness and Start Battle state
 scripts/ui/match_view.gd             Coach bar and semantic card/slot states
 scripts/ui/card_view.gd              Legal, unavailable, and selected visuals
 scripts/ui/zone_view.gd              Strong target-slot highlights
+scripts/ui/card_motion_director.gd   Accepted-event animation queue and proxies
 scripts/main.gd                      Accepted-action milestone recording
 scenes/ui/deck_builder_view.tscn     Starter readiness strip
 scenes/ui/match_view.tscn            Fixed-height objective strip
@@ -174,3 +175,71 @@ Expected: all commands exit zero; generated captures are nonblank; deterministic
 Document `Start Battle`, legal card highlighting, the objective bar, Credit growth, deployment to Support Line, movement to Frontline, attack targeting, and End Turn guidance.
 
 Commit: `feat: teach core gameplay contextually`
+
+### Task 4: Stable Battlefield Grid and Card Motion
+
+**Files:**
+- Create: `scripts/ui/card_motion_director.gd`
+- Modify: `scenes/ui/match_view.tscn`
+- Modify: `scripts/ui/match_view.gd`
+- Modify: `scripts/ui/zone_view.gd`
+- Modify: `scripts/ui/card_view.gd`
+- Modify: `scripts/main.gd`
+- Modify: `tests/ui/test_onboarding.gd`
+- Modify: `tests/capture_ui.gd`
+- Modify: `README.md`
+
+**Interfaces:**
+- Produces: `CardMotionDirector.play(events, before_snapshot, after_snapshot, view) -> void` as an awaitable coroutine.
+- Produces: `MatchView.visible_card_rects() -> Dictionary`, keyed by public `instance_id`.
+- Produces: `MatchView.set_animation_mode(mode)`, where mode is `on` or `reduced`.
+- Consumes accepted controller events in their emitted order and never submits actions.
+
+- [ ] **Step 1: Write failing stable-grid geometry tests**
+
+Render populated opponent Support, Frontline, and player Support rows at 1280x720 and 1024x720. Assert each row exposes five identical column-center x coordinates, every slot has the same bounded width, HQ rectangles stay outside the grid, and cards fill their assigned slot bounds without overlap.
+
+- [ ] **Step 2: Replace expanding HBox slots with a fixed centered grid**
+
+`ZoneView` calculates a shared slot width from its assigned grid rectangle and uses five stable cells. Four-slot Support rows reserve the fifth cell consistently rather than redistributing width. Card order and slot indices remain unchanged.
+
+- [ ] **Step 3: Write failing visual-registry tests**
+
+Render two successive snapshots containing the same public instance in different zones. Assert the same CardView identity is reused or transferred through a motion proxy, and that snapshot reconciliation leaves exactly one visible view for each public instance.
+
+- [ ] **Step 4: Implement visible rectangle registry**
+
+Expose visible hand, Support, Frontline, and HQ rectangles by instance ID. Hidden opponent hand cards never enter the registry. Screen replacement and resize cancel motion and rebuild the registry from the authoritative snapshot.
+
+- [ ] **Step 5: Write failing event-animation tests**
+
+Use animation speed `0.01` in headless tests. Cover `card_drawn`, unit deployment events, `unit_moved`, `attack_started`, damage events, destruction events, Order play, and Countermeasure activation. Assert queue order, final rectangles, damage indicator cleanup, no orphan proxy, and unlocked input after completion.
+
+- [ ] **Step 6: Implement CardMotionDirector**
+
+Use `create_tween()` with cubic ease-out travel and short color/scale feedback. Durations are 220ms draw, 240ms deploy, 220ms move, 260ms attack, 180ms destruction, and 220ms Order/Countermeasure. Reduced mode uses opacity-only tweens capped at 80ms. Missing or hidden sources produce a zone pulse and do not fail the queue.
+
+- [ ] **Step 7: Integrate animation before authoritative refresh**
+
+In `Main`, capture the public snapshot before accepted submission, submit the action, then pass events plus before/after snapshots to MatchView. Keep input locked while awaiting the queue. Render the final snapshot, refresh legal actions and coach, then unlock. AI actions use the same queue and may use reduced timing to keep turns responsive.
+
+- [ ] **Step 8: Add animation setting and documentation**
+
+Add `Animation: On/Reduced` to the match command menu and persist it through `OnboardingStore` or a small adjacent preference field. Document the fixed battlefield rows, deployment/movement/attack interaction, and Reduced mode.
+
+- [ ] **Step 9: Run strict visual and gameplay verification**
+
+Run:
+
+```bash
+sh tests/ui/run_onboarding.sh
+sh tests/ui/run_task6.sh
+sh tests/run_task5.sh
+godot --headless --path . --script tests/capture_ui.gd
+```
+
+Expected: all commands exit zero; captures show aligned five-column rows, visible legal highlights, and no card overlap; animation tests leave no leaked nodes or locked input.
+
+- [ ] **Step 10: Commit**
+
+Commit: `feat: animate cards on a stable battlefield grid`

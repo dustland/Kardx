@@ -84,6 +84,31 @@ Before each milestone is complete, the relevant coach message may include one ex
 - Target slots use a stronger inset highlight without resizing or shifting layout.
 - At 1024x720, the coach occupies one fixed-height line and must not reduce hand or board controls below their tested bounds.
 
+## Stable Battlefield Geometry
+
+- The battlefield uses five fixed tactical columns shared vertically by opponent Support, Frontline, and player Support.
+- Slot width is bounded and consistent; empty slots never expand independently to consume arbitrary remaining width.
+- Headquarters remain pinned to the outer command edge and do not participate in the five-column grid.
+- A card fills the stable visual bounds of its slot rather than sitting as a small control inside a stretched empty rectangle.
+- The hand remains horizontally scrollable with fixed card width and spacing. It does not stretch cards to fill the viewport.
+- Layout is computed from a centered battlefield grid at both 1280x720 and 1024x720. Resizing cannot change card order or relative column alignment.
+
+## Event-Driven Card Animation
+
+The view keeps a visual registry keyed by public `instance_id`. Snapshot rendering reconciles existing CardViews instead of deleting and recreating every card.
+
+- Draw: slide and fade from the player deck direction into the hand, 220ms.
+- Deploy: move a visual proxy from the hand card rectangle into the selected Support slot, 240ms.
+- Move: slide the existing unit between Support and Frontline positions, 220ms.
+- Attack: lunge the attacker toward the target, flash the target, then return, 260ms total.
+- Damage: show a short-lived numeric combat indicator near the damaged card or HQ.
+- Destroy: scale to 85 percent and fade out, 180ms.
+- Order and Countermeasure: lift/fade the hand card toward the board command area, 220ms.
+
+Animations consume accepted controller events and the before/after public snapshots. They never infer or mutate rules. Input stays locked until the animation queue completes, then legal actions and coach output refresh. Multiple events run in controller order; independent damage indicators may overlap without changing event order.
+
+If an event references a card that is hidden or has no visible rectangle, use a short zone-level pulse and continue. Resizing, rematch, or screen replacement cancels outstanding tweens and snaps to the authoritative snapshot. `prefers-reduced-motion` is not directly available in Godot Web, so an `Animation: On/Reduced` local setting is exposed; Reduced uses fades no longer than 80ms and no positional travel.
+
 ## Error Handling
 
 - Guidance is derived from legal actions first; it never claims an action is possible unless a matching legal candidate exists.
@@ -96,6 +121,8 @@ Before each milestone is complete, the relevant coach message may include one ex
 - Pure tests cover coach priority, legal source IDs, every unavailable reason, and sole-End-Turn detection.
 - Rules integration fixtures verify first own turn has 1 Credit and that the coach recognizes a playable 1-cost card when present.
 - Scene tests verify legal/subdued/selected styles, stronger slot highlights, and 1280x720 plus 1024x720 containment.
+- Geometry tests verify all three battlefield rows share the same five column centers and fixed slot bounds at both target resolutions.
+- Animation tests use an injected animation speed and assert deploy, move, attack, damage, destruction, draw, Order, and Countermeasure sequences finish at authoritative rectangles without leaving proxies or locked input.
 - Flow smoke covers starter deck readiness, first deployment, Frontline move, attack milestone, persistence reload, and a hand where End Turn is genuinely the only action.
 - Capture QA adds Deck Builder and Match onboarding states and checks that coach text and controls do not overlap.
 
