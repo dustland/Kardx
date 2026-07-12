@@ -77,11 +77,24 @@ static func run_task5(t) -> void:
 
 
 static func run_task6(t) -> void:
+	_test_terminal_reason_uses_authoritative_events(t)
 	await _test_result_view_outcomes_and_layout(t)
 	await _test_result_view_signals(t)
 	await _test_main_rematch_preserves_complete_selection(t)
 	_test_main_result_returns_to_builder_with_preferences(t)
+	await _test_builder_merges_returned_session_deck(t)
+	await _test_rendered_opponent_hand_is_private(t)
+	await _test_keyboard_actions(t)
 	_test_main_routes_complete_terminal_payload(t)
+
+
+static func _test_terminal_reason_uses_authoritative_events(t) -> void:
+	var ended := {"type": "match_ended", "winner_id": "player", "loser_id": "opponent"}
+	t.assert_eq(Main.terminal_reason("complete", "player", [{"type": "fatigue_damage", "player_id": "opponent"}, ended], {}), "fatigue", "fatal draw is reported as fatigue")
+	t.assert_eq(Main.terminal_reason("complete", "player", [{"type": "damage_dealt"}, ended], {}), "headquarters_destroyed", "combat lethal is reported as Headquarters destruction")
+	t.assert_eq(Main.terminal_reason("complete", "", [{"type": "match_ended"}], {}), "draw", "winnerless completion is a draw")
+	t.assert_eq(Main.terminal_reason("invalid", "", [], {"diagnostic": {"code": "ai_deadlock"}}), "ai_deadlock", "invalid terminal exposes authoritative diagnostic")
+	t.assert_eq(Main.terminal_reason("complete", "player", [], {}), "match_complete", "unknown completed cause is not mislabeled")
 
 
 static func _test_result_view_outcomes_and_layout(t) -> void:
@@ -160,13 +173,100 @@ static func _test_main_result_returns_to_builder_with_preferences(t) -> void:
 	main.screen_host = host
 	main.screen_factory = func(path: String) -> Control: return ResultViewScene.instantiate() if path.ends_with("result_view.tscn") else TestScreen.new()
 	main.selected_deck_id = "user-preferred"
+	main.selected_player_deck = {"id": "user-preferred", "name": "Session Deck", "cards": ["one"]}
 	main.difficulty = "hard"
 	main.show_screen("result", {"winner_id": "opponent", "reason": "concede", "turns": 3, "seed": 4, "replay_log": {}})
 	main.current_screen.deck_builder_requested.emit()
 	var payload: Dictionary = (main.current_screen as TestScreen).payload
-	t.assert_eq(payload, {"catalog": null, "deck_id": "user-preferred", "difficulty": "hard"}, "builder return preserves deck and difficulty preferences")
+	t.assert_eq(payload, {"catalog": null, "deck_id": "user-preferred", "difficulty": "hard", "player_deck": main.selected_player_deck}, "builder return preserves full deck and difficulty preferences")
+	(payload.player_deck.cards as Array).append("mutated")
+	t.assert_eq(main.selected_player_deck.cards, ["one"], "builder payload owns a deep copy")
 	main.free()
 	host.free()
+
+
+static func _test_builder_merges_returned_session_deck(t) -> void:
+	var catalog = ContentCatalog.load_from_paths("res://data/cards.json", "res://data/abilities.json", "res://data/decks.json", "res://data/rules.json")
+	var session_deck: Dictionary = catalog.decks_by_id["us-starter"].duplicate(true)
+	session_deck.id = "user-unsaved-session"
+	session_deck.name = "Unsaved Session"
+	var view = DeckBuilderScene.instantiate()
+	Engine.get_main_loop().root.add_child(view)
+	view.initialize(null, {"catalog": catalog, "deck_id": session_deck.id, "difficulty": "hard", "player_deck": session_deck})
+	await Engine.get_main_loop().process_frame
+	t.assert_eq(view.selected_deck(), session_deck, "builder merges and selects returned unsaved session deck")
+	t.assert_eq(view.difficulty, "hard", "builder restores returned difficulty")
+	(session_deck.cards as Array).clear()
+	t.assert_eq((view.selected_deck().cards as Array).size(), 40, "builder owns a deep copy of returned deck")
+	view.queue_free()
+	await Engine.get_main_loop().process_frame
+
+
+static func _test_rendered_opponent_hand_is_private(t) -> void:
+	var view = MatchViewScene.instantiate()
+	Engine.get_main_loop().root.add_child(view)
+	var snapshot := _match_snapshot()
+	snapshot.players.opponent.hand = [
+		{"instance_id": "private-o-1", "definition_id": "secret-card", "title": "Secret Tank", "description": "Private plan", "hidden": true},
+		{"instance_id": "private-o-2", "hidden": true},
+	]
+	view.render_snapshot(snapshot)
+	await Engine.get_main_loop().process_frame
+	t.assert_true("Hand 2" in view.get_node("%OpponentLabel").text, "rendered opponent hand count matches snapshot")
+	for card in view.snapshot.players.opponent.hand:
+		t.assert_eq(card, {"hidden": true}, "rendered hidden card retains no private identifier")
+	var rendered_text := _visible_text(view)
+	for private_value in ["private-o-1", "private-o-2", "secret-card", "Secret Tank", "Private plan"]:
+		t.assert_true(private_value not in rendered_text, "rendered match omits private value %s" % private_value)
+	view.queue_free()
+	await Engine.get_main_loop().process_frame
+
+
+static func _visible_text(node: Node) -> String:
+	var result := ""
+	if node is Label or node is Button:
+		result += str(node.text) + "\n"
+	if node is LineEdit:
+		result += str(node.text) + "\n"
+	for child in node.get_children():
+		result += _visible_text(child)
+	return result
+
+
+static func _test_keyboard_actions(t) -> void:
+	for action_name in ["ui_accept", "ui_cancel", "end_turn"]:
+		t.assert_true(InputMap.has_action(action_name), "%s is registered in InputMap" % action_name)
+	var match_view = MatchViewScene.instantiate()
+	Engine.get_main_loop().root.add_child(match_view)
+	match_view.render_snapshot(_match_snapshot())
+	var end_turn = GameAction.create("end_turn", "player", "", [], {}, 5)
+	match_view.set_legal_actions([end_turn])
+	var submitted: Array = []
+	match_view.action_requested.connect(func(action) -> void: submitted.append(action))
+	match_view._unhandled_input(_action_event("end_turn"))
+	t.assert_eq(submitted, [end_turn], "end_turn keyboard action submits legal command")
+	match_view.model.select_source("p-front")
+	match_view._unhandled_input(_action_event("ui_cancel"))
+	t.assert_eq(match_view.model.selected_source_id, "", "ui_cancel clears match selection")
+	match_view.queue_free()
+	await Engine.get_main_loop().process_frame
+
+	var result_view = ResultViewScene.instantiate()
+	Engine.get_main_loop().root.add_child(result_view)
+	await Engine.get_main_loop().process_frame
+	var rematches := [0]
+	result_view.rematch_requested.connect(func() -> void: rematches[0] += 1)
+	result_view._unhandled_input(_action_event("ui_accept"))
+	t.assert_eq(rematches[0], 1, "ui_accept activates Result primary action")
+	result_view.queue_free()
+	await Engine.get_main_loop().process_frame
+
+
+static func _action_event(action: String) -> InputEventAction:
+	var event := InputEventAction.new()
+	event.action = action
+	event.pressed = true
+	return event
 
 
 static func _test_main_routes_complete_terminal_payload(t) -> void:
@@ -568,7 +668,7 @@ static func _test_card_view_hidden_mode_redacts_data(t) -> void:
 	var view = CardViewScene.instantiate()
 	view.bind(_card_data(), "hidden")
 	t.assert_eq(view.custom_minimum_size, Vector2(116, 162), "hidden mode uses hand geometry")
-	t.assert_eq(view.card_data, {"instance_id": "p-01", "hidden": true}, "hidden mode retains only identity metadata")
+	t.assert_eq(view.card_data, {"hidden": true}, "hidden mode retains no identity metadata")
 	t.assert_eq(view.get_node("Frame/Title").text, "", "hidden mode redacts title")
 	t.assert_eq(view.tooltip_text, "", "hidden mode redacts description")
 	t.assert_true(view.get_node("CardBack").visible, "hidden mode shows card back")

@@ -38,6 +38,7 @@ var _mulligan_submitted := false
 var _mulligan_action_submitter: Callable
 var _match_submission_active := false
 var _match_generation := 0
+var _terminal_events: Array = []
 
 
 func _ready() -> void:
@@ -102,6 +103,7 @@ func start_mulligan(player_deck: Dictionary, selected_difficulty: String, seed: 
 		match_seed,
 	)
 	ai = AIPlayerScript.create(difficulty, match_seed)
+	_terminal_events.clear()
 	var started = controller.submit_action(GameActionScript.create("start_match", "system"))
 	if not started.accepted or controller.state.phase != "mulligan":
 		controller = null
@@ -293,6 +295,7 @@ func _render_match_result(result: ActionResult) -> void:
 	if current_screen == null:
 		return
 	if result.accepted:
+		_terminal_events = result.events.duplicate(true)
 		current_screen.render_events(result.events)
 	else:
 		current_screen.show_rejection(result.reason_code, result.message)
@@ -312,7 +315,12 @@ func _route_match_result_if_complete() -> bool:
 	_match_generation += 1
 	var payload := {
 		"winner_id": controller.state.winner_id,
-		"reason": _terminal_reason(),
+		"reason": terminal_reason(
+			controller.state.phase,
+			controller.state.winner_id,
+			_terminal_events,
+			controller.replay_log.terminal_result if controller.replay_log != null else {},
+		),
 		"turns": controller.state.turn,
 		"seed": controller.state.seed,
 		"replay_log": controller.replay_log.to_dict() if controller.replay_log != null else {},
@@ -321,12 +329,18 @@ func _route_match_result_if_complete() -> bool:
 	return true
 
 
-func _terminal_reason() -> String:
-	if controller.state.phase == "invalid":
-		return "invalid"
-	if controller.state.winner_id.is_empty():
+static func terminal_reason(phase: String, winner_id: String, events: Array, terminal_result: Dictionary) -> String:
+	if phase == "invalid":
+		return str(terminal_result.get("diagnostic", {}).get("code", "invalid"))
+	if winner_id.is_empty():
 		return "draw"
-	return "headquarters_destroyed"
+	var event_types: Array[String] = []
+	for event_value in events:
+		if event_value is Dictionary:
+			event_types.append(str((event_value as Dictionary).get("type", "")))
+	if "match_ended" in event_types:
+		return "fatigue" if "fatigue_damage" in event_types else "headquarters_destroyed"
+	return "match_complete"
 
 
 func _on_rematch_requested() -> void:
@@ -344,12 +358,15 @@ func _next_match_seed() -> int:
 
 
 func _on_deck_builder_requested() -> void:
+	var player_deck := selected_player_deck.duplicate(true)
 	controller = null
 	ai = null
+	_terminal_events.clear()
 	show_screen("deck_builder", {
 		"catalog": catalog,
 		"deck_id": selected_deck_id,
 		"difficulty": difficulty,
+		"player_deck": player_deck,
 	})
 
 

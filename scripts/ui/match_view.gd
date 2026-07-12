@@ -121,6 +121,7 @@ func initialize(main: Main, payload: Dictionary) -> void:
 
 func render_snapshot(next_snapshot: Dictionary) -> void:
 	snapshot = next_snapshot.duplicate(true)
+	_sanitize_hidden_opponent_hand()
 	var players: Dictionary = snapshot.get("players", {})
 	var player: Dictionary = players.get("player", {})
 	var opponent: Dictionary = players.get("opponent", {})
@@ -137,11 +138,31 @@ func render_snapshot(next_snapshot: Dictionary) -> void:
 	%EndTurnButton.disabled = _input_locked or snapshot.get("active_player_id") != "player" or snapshot.get("phase") != "action"
 	_refresh_highlights()
 
+
+func _sanitize_hidden_opponent_hand() -> void:
+	var opponent: Dictionary = snapshot.get("players", {}).get("opponent", {})
+	var hand: Array = opponent.get("hand", [])
+	for index in range(hand.size()):
+		if hand[index] is Dictionary and bool((hand[index] as Dictionary).get("hidden", false)):
+			hand[index] = {"hidden": true}
+
 func render_events(events: Array) -> void:
 	%Timeline.render_events(events)
 
 func set_legal_actions(actions: Array) -> void:
 	model.set_legal_actions(actions)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_cancel"):
+		_on_cancel_pressed()
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("end_turn"):
+		_on_end_turn_pressed()
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("ui_accept") and model.can_confirm():
+		_on_confirm_pressed()
+		get_viewport().set_input_as_handled()
 
 func set_input_locked(locked: bool) -> void:
 	_input_locked = locked

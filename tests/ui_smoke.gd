@@ -1,6 +1,7 @@
 extends SceneTree
 
 const MainScene = preload("res://scenes/main.tscn")
+const GameAction = preload("res://scripts/core/game_action.gd")
 
 var _failed := false
 
@@ -39,14 +40,28 @@ func _run_complete_flow(viewport_size: Vector2i) -> void:
 	await _frames(5)
 	_check(app.controller != null and app.controller.state.phase == "action", "Mulligan reaches Match")
 	_check_controls(app.current_screen, viewport_size, ["%OpponentHQ", "%OpponentSupport", "%Frontline", "%PlayerHQ", "%PlayerSupport", "%CreditLabel", "%EndTurnButton", "%HandScroll", "%TimelinePanel"])
-	_check_perspective(app.controller.state.snapshot_for("player"))
+	_check_rendered_perspective(app.current_screen, app.controller)
 
-	app.controller.state.phase = "complete"
-	app.controller.state.winner_id = "player"
-	app._route_match_result_if_complete()
+	_check(app.controller.state.active_player_id == "player", "controlled fixture reaches player turn")
+	var opponent = app.controller.state.players.opponent
+	while not opponent.deck.is_empty():
+		var exhausted_card = opponent.deck.pop_back()
+		exhausted_card.zone = "discard"
+		opponent.discard.append(exhausted_card)
+	opponent.headquarters.current_defense = 1
+	opponent.fatigue = 1
+	var end_turn = GameAction.create("end_turn", "player", "", [], {}, app.controller.state.sequence)
+	await app.submit_player_action(end_turn)
 	await _frames(2)
 	_check_controls(app.current_screen, viewport_size, ["%OutcomeLabel", "%WinnerLabel", "%ReasonLabel", "%TurnsLabel", "%RematchButton", "%DeckBuilderButton"])
-	_check(app.current_screen.result_payload.has("replay_log"), "Result retains replay data")
+	var result_payload: Dictionary = app.current_screen.result_payload
+	_check(result_payload.winner_id == "player", "accepted fatal fatigue routes player winner")
+	_check(result_payload.reason == "fatigue", "accepted fatal fatigue routes exact reason")
+	_check(result_payload.turns == app.controller.state.turn, "Result routes authoritative turn count")
+	_check(result_payload.seed == app.controller.state.seed, "Result routes authoritative seed")
+	_check(not (result_payload.get("replay_log", {}) as Dictionary).is_empty(), "Result retains replay data")
+	var replay_actions: Array = result_payload.replay_log.get("actions", [])
+	_check(not replay_actions.is_empty() and str(replay_actions.back().action.type) == "end_turn", "terminal route follows an accepted recorded GameAction")
 	var old_seed: int = app.controller.state.seed
 	app._match_rng.seed = 991
 	app.current_screen.rematch_requested.emit()
@@ -61,6 +76,7 @@ func _run_complete_flow(viewport_size: Vector2i) -> void:
 	await _frames(2)
 	_check_controls(app.current_screen, viewport_size, ["%DeckSelector", "%Difficulty", "%PlayButton"])
 	_check(app.selected_deck_id == str(complete_deck.id) and app.difficulty == "easy", "Deck Builder return preserves preference")
+	_check(app.current_screen.selected_deck() == complete_deck, "Deck Builder restores complete in-memory deck")
 	app.queue_free()
 	await _frames(3)
 
@@ -86,12 +102,30 @@ func _check_controls(screen: Control, viewport_size: Vector2i, paths: Array[Stri
 			_check(not first.get_global_rect().intersects(second.get_global_rect()), "%s and %s do not overlap" % [paths[index], paths[other_index]])
 
 
-func _check_perspective(snapshot: Dictionary) -> void:
-	var opponent_hand: Array = snapshot.get("players", {}).get("opponent", {}).get("hand", [])
-	for card_value in opponent_hand:
-		var card: Dictionary = card_value
-		_check(bool(card.get("hidden", false)), "opponent hand remains hidden")
-		_check(not card.has("owner_id") and not card.has("title") and not card.has("definition_id"), "hidden cards expose no private identity")
+func _check_rendered_perspective(view: Control, match_controller) -> void:
+	var private_values: Array[String] = []
+	for card in match_controller.state.players.opponent.hand:
+		private_values.append(str(card.instance_id))
+		private_values.append(str(card.definition_id))
+		private_values.append(str(card.title))
+	var rendered_hand: Array = view.snapshot.get("players", {}).get("opponent", {}).get("hand", [])
+	_check(rendered_hand.size() == match_controller.state.players.opponent.hand.size(), "rendered hidden hand count is exact")
+	_check("Hand %d" % rendered_hand.size() in view.get_node("%OpponentLabel").text, "visible opponent hand count is exact")
+	for card_value in rendered_hand:
+		_check(card_value == {"hidden": true}, "rendered hidden card contains no private identity")
+	var rendered_text := _node_text(view)
+	for private_value in private_values:
+		if not private_value.is_empty():
+			_check(private_value not in rendered_text, "rendered MatchView omits opponent private value")
+
+
+func _node_text(node: Node) -> String:
+	var result := ""
+	if node is Label or node is Button or node is LineEdit:
+		result += str(node.text) + "\n"
+	for child in node.get_children():
+		result += _node_text(child)
+	return result
 
 
 func _check(condition: bool, message: String) -> void:

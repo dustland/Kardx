@@ -30,8 +30,7 @@ func bind(data: Dictionary, display_mode: String) -> void:
 	_apply_mode_layout()
 
 	var hidden := mode == "hidden" or bool(data.get("hidden", false))
-	var instance_id := str(data.get("instance_id", ""))
-	card_data = {"instance_id": instance_id, "hidden": true} if hidden else data.duplicate(true)
+	card_data = {"hidden": true} if hidden else data.duplicate(true)
 	get_node("CardBack").visible = hidden
 	get_node("Frame").visible = not hidden
 	tooltip_text = "" if hidden else str(data.get("description", ""))

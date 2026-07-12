@@ -29,6 +29,13 @@ class DeckBuilderViewModel:
 		if decks.has(deck_id):
 			selected_deck_id = deck_id
 
+	func merge_session_deck(deck: Dictionary) -> void:
+		var deck_id := str(deck.get("id", ""))
+		if deck_id.is_empty() or not (deck.get("cards", null) is Array):
+			return
+		decks[deck_id] = deck.duplicate(true)
+		selected_deck_id = deck_id
+
 	func card_count() -> int:
 		return _cards().size()
 
@@ -140,7 +147,11 @@ func initialize(main, payload: Dictionary) -> void:
 		return
 	store = DeckStore.new(str(payload.get("store_path", DeckStore.DEFAULT_PATH)))
 	model = DeckBuilderViewModel.new(catalog, store.load_all(catalog.decks))
-	model.select_deck(str(payload.get("deck_id", "us-starter")))
+	var session_deck: Dictionary = payload.get("player_deck", {})
+	if session_deck.is_empty():
+		model.select_deck(str(payload.get("deck_id", "us-starter")))
+	else:
+		model.merge_session_deck(session_deck)
 	difficulty = str(payload.get("difficulty", "standard"))
 	_populate_controls()
 	_refresh()
@@ -279,3 +290,9 @@ func _on_play_pressed() -> void:
 	if not model.validation().valid:
 		return
 	play_requested.emit(model.selected_deck_id, difficulty)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_accept") and not %PlayButton.disabled:
+		_on_play_pressed()
+		get_viewport().set_input_as_handled()

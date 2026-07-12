@@ -39,3 +39,12 @@ func _reason_text(reason: String) -> String:
 		"invalid": "Invalid match",
 	}
 	return str(known.get(reason, reason.replace("_", " ").capitalize()))
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_accept"):
+		rematch_requested.emit()
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("ui_cancel"):
+		deck_builder_requested.emit()
+		get_viewport().set_input_as_handled()
