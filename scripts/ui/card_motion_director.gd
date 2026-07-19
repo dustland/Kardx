@@ -9,6 +9,13 @@ const DURATIONS_MS := {
 	"countermeasure_triggered": 220.0,
 }
 
+const CATEGORY_TINTS := {
+	"Unit": Color(0.74, 0.82, 0.58, 0.7),
+	"Order": Color(0.86, 0.72, 0.42, 0.72),
+	"Countermeasure": Color(0.58, 0.7, 0.84, 0.72),
+	"Headquarters": Color(0.82, 0.78, 0.62, 0.7),
+}
+
 var speed_scale := 1.0
 var processed_event_types: Array[String] = []
 var last_duration_ms := 0.0
@@ -69,7 +76,8 @@ func _play_event(event_type: String, event: Dictionary, before: Dictionary, afte
 		destination_rect = before_rects.get(target_id, after_rects.get(target_id, source_rect))
 	last_source_rect = source_rect
 	last_destination_rect = destination_rect
-	var proxy := _proxy(view, source_rect if source_rect.has_area() else view.animation_zone_rect(str(event.get("player_id", ""))))
+	var card_info := _card_info_for(source_id, before, after)
+	var proxy := _proxy(view, source_rect if source_rect.has_area() else view.animation_zone_rect(str(event.get("player_id", ""))), card_info)
 	var duration := duration_ms * speed_scale / 1000.0
 	_active_tween = view.create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	if view.animation_mode == "reduced" or not source_rect.has_area():
@@ -99,16 +107,57 @@ func _wait_for_tween(view: MatchView, generation: int) -> void:
 	while generation == _generation and is_instance_valid(view) and _active_tween != null and _active_tween.is_valid() and _active_tween.is_running():
 		await view.get_tree().process_frame
 
-func _proxy(view: MatchView, rect: Rect2) -> ColorRect:
+func _proxy(view: MatchView, rect: Rect2, card_info: Dictionary = {}) -> ColorRect:
 	var proxy := ColorRect.new()
-	proxy.color = Color(0.94, 0.81, 0.33, 0.55)
+	var category := str(card_info.get("category", ""))
+	var tint: Color = CATEGORY_TINTS.get(category, Color(0.94, 0.81, 0.33, 0.55))
+	proxy.color = tint
 	proxy.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	proxy.add_to_group("card_motion_proxy")
+	proxy.clip_contents = true
 	view.add_child(proxy)
 	proxy.global_position = rect.position
 	proxy.size = rect.size
+	var title := str(card_info.get("title", ""))
+	# Show the card title on the moving proxy so the player can tell which card
+	# is being deployed/moved/attacking, instead of a blank golden rectangle.
+	if not title.is_empty() and rect.size.y >= 30.0:
+		var label := Label.new()
+		label.text = title
+		label.add_theme_font_size_override("font_size", 13)
+		label.add_theme_color_override("font_color", Color(0.07, 0.09, 0.07, 0.95))
+		label.add_theme_color_override("font_outline_color", Color(0.95, 0.83, 0.4, 0.9))
+		label.add_theme_constant_override("outline_size", 2)
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		proxy.add_child(label)
+		label.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_transients.append(proxy)
 	return proxy
+
+func _card_info_for(instance_id: String, before: Dictionary, after: Dictionary) -> Dictionary:
+	if instance_id.is_empty():
+		return {}
+	var found := _find_card_in_snapshot(before, instance_id)
+	if found.is_empty():
+		found = _find_card_in_snapshot(after, instance_id)
+	return found
+
+func _find_card_in_snapshot(snapshot: Dictionary, instance_id: String) -> Dictionary:
+	var players: Dictionary = snapshot.get("players", {})
+	for player_id in ["player", "opponent"]:
+		var player: Dictionary = players.get(player_id, {})
+		for zone_name in ["hand", "support_line", "discard"]:
+			for card in player.get(zone_name, []):
+				if card is Dictionary and str(card.get("instance_id", "")) == instance_id and not bool(card.get("hidden", false)):
+					return card
+	var frontline: Array = snapshot.get("frontline", [])
+	for card in frontline:
+		if card is Dictionary and str(card.get("instance_id", "")) == instance_id:
+			return card
+	return {}
 
 func _flash_target(card, duration: float) -> void:
 	if card == null or not is_instance_valid(card): return
