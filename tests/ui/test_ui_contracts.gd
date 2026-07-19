@@ -74,6 +74,8 @@ static func run_task5(t) -> void:
 	await _test_main_rejection_recovers_fresh_actions(t)
 	await _test_main_drives_opponent_first_without_reentrancy(t)
 	_test_main_routes_terminal_payload(t)
+	_test_match_label_reports_active_player_and_player_zones(t)
+	await _test_match_concede_button_routes_concede_action(t)
 
 
 static func run_task6(t) -> void:
@@ -414,6 +416,47 @@ static func _test_match_scene_contract_and_responsive_layout(t) -> void:
 		if viewport_size.x == 1024.0:
 			t.assert_true(hand_width > hand_viewport_width, "eight cards use horizontal scrolling at genuine 1024 width")
 		root_control.free()
+
+
+static func _test_match_label_reports_active_player_and_player_zones(t) -> void:
+	var view = MatchViewScene.instantiate()
+	Engine.get_main_loop().root.add_child(view)
+	var snapshot := _match_snapshot(2)
+	snapshot.players.player.discard = [{"instance_id": "p-discard-1", "title": "Discarded", "category": "Unit", "owner_id": "player"}]
+	view.render_snapshot(snapshot)
+	t.assert_true("YOUR TURN" in view.get_node("%TurnLabel").text, "turn label advertises the active player's turn")
+	t.assert_true("Discard 1" in view.get_node("%PlayerLabel").text, "player label reports the discard pile size")
+	t.assert_true("Deck 34" in view.get_node("%PlayerLabel").text, "player label reports the deck count for fatigue awareness")
+
+	snapshot.active_player_id = "opponent"
+	view.render_snapshot(snapshot)
+	t.assert_true("OPPONENT'S TURN" in view.get_node("%TurnLabel").text, "turn label advertises the opponent's turn")
+	view.queue_free()
+	await Engine.get_main_loop().process_frame
+
+
+static func _test_match_concede_button_routes_concede_action(t) -> void:
+	var view = MatchViewScene.instantiate()
+	Engine.get_main_loop().root.add_child(view)
+	view.render_snapshot(_match_snapshot())
+	var submitted: Array = []
+	view.action_requested.connect(func(action) -> void: submitted.append(action))
+	# Player turn, action phase: Concede must be interactive.
+	t.assert_false(view.get_node("%ConcedeButton").disabled, "concede button is enabled on the player's action turn")
+	view._on_concede_confirmed()
+	t.assert_eq(submitted.size(), 1, "confirming concede emits exactly one action")
+	t.assert_eq(submitted[0].type, "concede", "concede confirmation emits a concede action")
+	t.assert_eq(submitted[0].actor_id, "player", "concede action belongs to the player")
+
+	# Opponent turn: confirming is a no-op (the dialog is guarded by active player).
+	submitted.clear()
+	var opponent_turn := _match_snapshot()
+	opponent_turn.active_player_id = "opponent"
+	view.render_snapshot(opponent_turn)
+	view._on_concede_confirmed()
+	t.assert_eq(submitted.size(), 0, "concede confirmation is ignored outside the player's turn")
+	view.queue_free()
+	await Engine.get_main_loop().process_frame
 
 
 static func _match_snapshot(hand_count := 0) -> Dictionary:

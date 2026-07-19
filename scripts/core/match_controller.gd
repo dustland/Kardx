@@ -913,6 +913,8 @@ func _dispatch_action(action: GameAction) -> ActionResult:
 			return _toggle_countermeasure(action)
 		"activate_ability":
 			return _activate_ability(action)
+		"concede":
+			return _concede(action)
 		_:
 			return _reject(action, "unknown_action", "Unknown action")
 
@@ -1129,6 +1131,32 @@ func _end_turn(action: GameAction) -> ActionResult:
 	_emit(events, "turn_ended", {"player_id": player.id, "turn": state.turn})
 	state.active_player_id = next_player_id
 	_start_turn(next_player, events)
+	return _accept(action, events)
+
+func _concede(action: GameAction) -> ActionResult:
+	# A player may concede from the action or mulligan phase. The conceding
+	# player loses immediately; the opponent is declared the winner and the
+	# match enters the complete phase. The conceding player's Headquarters is
+	# reduced to zero so the existing terminal invariants (loser HQ at 0)
+	# hold and replays stay deterministic alongside natural HQ defeats.
+	if _is_terminal():
+		return _reject(action, "match_complete", "Match is already complete")
+	if not state.players.has(action.actor_id):
+		return _reject(action, "invalid_actor", "Unknown player cannot concede")
+	var conceding: PlayerState = state.players[action.actor_id]
+	var events: Array = []
+	_emit(events, "player_conceded", {"player_id": action.actor_id})
+	# Drop the conceding HQ to zero so the shared terminal invariants
+	# (loser Headquarters at 0, winner still standing) hold, matching the
+	# natural Headquarters-defeat end state.
+	conceding.headquarters.current_defense = 0
+	state.winner_id = _other_player_id(action.actor_id)
+	state.phase = "complete"
+	_emit(events, "match_ended", {
+		"winner_id": state.winner_id,
+		"loser_id": action.actor_id,
+		"reason": "concede",
+	})
 	return _accept(action, events)
 
 func _deploy_unit(action: GameAction) -> ActionResult:

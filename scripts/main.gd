@@ -399,6 +399,8 @@ static func terminal_reason(phase: String, winner_id: String, events: Array, ter
 	for event_value in events:
 		if event_value is Dictionary:
 			event_types.append(str((event_value as Dictionary).get("type", "")))
+	if "player_conceded" in event_types:
+		return "concede"
 	if "match_ended" in event_types:
 		return "fatigue" if "fatigue_damage" in event_types else "headquarters_destroyed"
 	return "match_complete"

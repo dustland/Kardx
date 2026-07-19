@@ -144,6 +144,8 @@ func _ready() -> void:
 	%CancelButton.pressed.connect(_on_cancel_pressed)
 	%ConfirmButton.pressed.connect(_on_confirm_pressed)
 	%EndTurnButton.pressed.connect(_on_end_turn_pressed)
+	%ConcedeButton.pressed.connect(_on_concede_pressed)
+	%ConcedeDialog.confirmed.connect(_on_concede_confirmed)
 	%AnimationButton.pressed.connect(_on_animation_pressed)
 	resized.connect(_apply_responsive_layout)
 	tree_exiting.connect(cancel_motion)
@@ -180,9 +182,20 @@ func render_snapshot(next_snapshot: Dictionary) -> void:
 	var players: Dictionary = snapshot.get("players", {})
 	var player: Dictionary = players.get("player", {})
 	var opponent: Dictionary = players.get("opponent", {})
-	%TurnLabel.text = "Turn %d  |  %s" % [int(snapshot.get("turn", 0)), str(snapshot.get("phase", "")).capitalize()]
+	var phase_text := str(snapshot.get("phase", "")).capitalize()
+	var active_player_id := str(snapshot.get("active_player_id", ""))
+	var phase_suffix := ""
+	if phase_text.to_lower() == "action":
+		phase_suffix = "  —  " + ("YOUR TURN" if active_player_id == "player" else "OPPONENT'S TURN")
+	%TurnLabel.text = "Turn %d  |  %s%s" % [int(snapshot.get("turn", 0)), phase_text, phase_suffix]
 	%OpponentLabel.text = "%s  HQ %d  Hand %d  Deck %d" % [str(opponent.get("nation", "Opponent")), int(opponent.get("hq_defense", 0)), (opponent.get("hand", []) as Array).size(), int(opponent.get("deck_count", 0))]
-	%PlayerLabel.text = "%s  HQ %d" % [str(player.get("nation", "Player")), int(player.get("hq_defense", 0))]
+	%PlayerLabel.text = "%s  HQ %d  Hand %d  Deck %d  Discard %d" % [
+		str(player.get("nation", "Player")),
+		int(player.get("hq_defense", 0)),
+		(player.get("hand", []) as Array).size(),
+		int(player.get("deck_count", 0)),
+		(player.get("discard", []) as Array).size(),
+	]
 	%CreditLabel.text = "Credit %d / %d" % [int(player.get("credit", 0)), int(player.get("credit_slots", 0))]
 	%OpponentSupport.render(opponent.get("support_line", []), false, _resolve_card_view)
 	%Frontline.render(snapshot.get("frontline", []), false, _resolve_card_view)
@@ -303,6 +316,7 @@ func set_input_locked(locked: bool) -> void:
 	%EndTurnButton.disabled = locked or snapshot.get("active_player_id") != "player"
 	%ConfirmButton.disabled = locked or not model.can_confirm()
 	%CancelButton.disabled = locked or model.selected_source_id.is_empty()
+	%ConcedeButton.disabled = locked or str(snapshot.get("phase", "")) == "complete" or str(snapshot.get("active_player_id", "")) != "player"
 	%AnimationButton.disabled = locked
 	%OpponentHQ.disabled = locked
 	%PlayerHQ.disabled = locked
@@ -425,6 +439,15 @@ func _on_end_turn_pressed() -> void:
 	for action in model._legal_actions:
 		if action.type == "end_turn": action_requested.emit(action); return
 
+func _on_concede_pressed() -> void:
+	if _reject_locked(): return
+	%ConcedeDialog.popup_centered()
+
+func _on_concede_confirmed() -> void:
+	if str(snapshot.get("active_player_id", "")) != "player":
+		return
+	action_requested.emit(GameAction.create("concede", "player"))
+
 func _on_confirm_pressed() -> void:
 	if _reject_locked(): return
 	var action = model.confirm_action()
@@ -479,6 +502,7 @@ func _refresh_end_turn_state() -> void:
 	var end_actions := model._legal_actions.filter(func(action) -> bool: return action.type == "end_turn")
 	var can_end: bool = not end_actions.is_empty() and str(snapshot.get("active_player_id", "")) == "player" and str(snapshot.get("phase", "")) == "action"
 	%EndTurnButton.disabled = _input_locked or not can_end
+	%ConcedeButton.disabled = _input_locked or not (str(snapshot.get("active_player_id", "")) == "player" and str(snapshot.get("phase", "")) == "action")
 	%EndTurnButton.remove_theme_stylebox_override("normal")
 	if not can_end:
 		%EndTurnButton.set_meta("action_state", "disabled")

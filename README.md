@@ -8,7 +8,7 @@ Open this repository in Godot 4 and press Play. The main scene is `scenes/main.t
 
 The playable flow is Deck Builder, opening-hand Mulligan, player-versus-AI Match, and Result. Choose a difficulty and use **Start Battle** when the starter deck is ready. AI opponents support Easy, Standard, and Hard difficulties. Result supports a rematch with the same complete player deck and difficulty or a return to Deck Builder with the current in-memory deck still selected. The starter cards use original generated illustrations in `game_assets/generated_cards/`; other source assets are kept under `game_assets/`.
 
-During a match, the objective bar follows the current legal actions. Gold-bordered cards are legal, the brighter border marks the selected card, and unavailable cards explain why they cannot be played. Credit starts at 1 and grows by one slot each turn. Units deploy into fixed Support Line columns, then move into the aligned five-column Frontline before attacking highlighted units or Headquarters. The four-card Support Lines reserve the fifth grid cell, while Headquarters remain outside the battlefield grid and hand cards keep fixed spacing. Accepted draws, deployments, moves, attacks, damage, destruction, Orders, and Countermeasures animate in event order. Use **Animation: Reduced** for brief opacity feedback instead of full card motion. When no other action is legal, the objective directs you to **End Turn**. Completed deploy, move, and attack lessons and the animation preference persist across rematches.
+During a match, the objective bar follows the current legal actions. Gold-bordered cards are legal, the brighter border marks the selected card, and unavailable cards explain why they cannot be played. The turn header announces whose turn it is (`YOUR TURN` / `OPPONENT'S TURN`), and the player strip shows HQ, hand, deck, and discard counts so fatigue risk is always visible. Credit starts at 1 and grows by one slot each turn. Units deploy into fixed Support Line columns, then move into the aligned five-column Frontline before attacking highlighted units or Headquarters. The four-card Support Lines reserve the fifth grid cell, while Headquarters remain outside the battlefield grid and hand cards keep fixed spacing. Accepted draws, deployments, moves, attacks, damage, destruction, Orders, and Countermeasures animate in event order, with the moving card's title and category tint shown on the motion proxy so opponent actions are easy to follow. Use **Animation: Reduced** for brief opacity feedback instead of full card motion. When no other action is legal, the objective directs you to **End Turn**. **Concede** forfeits the match (with a confirmation prompt) and routes to Result. Completed deploy, move, and attack lessons and the animation preference persist across rematches.
 
 ### Controls
 
@@ -16,6 +16,7 @@ During a match, the objective bar follows the current legal actions. Gold-border
 - Enter or Space: activate the primary command where supported, including Play, confirm, and Rematch.
 - Escape: clear the current Match selection or return from Result to Deck Builder.
 - E: end the player turn when End Turn is legal.
+- Concede button: forfeit the match (confirmation required); only available on your turn.
 
 ## Validate
 
