@@ -442,7 +442,7 @@ static func _test_match_concede_button_routes_concede_action(t) -> void:
 	var submitted: Array = []
 	view.action_requested.connect(func(action) -> void: submitted.append(action))
 	# Player turn, action phase: Concede must be interactive.
-	t.assert_false(view.get_node("%ConcedeButton").disabled, "concede button is enabled on the player's action turn")
+	t.assert_eq(view.get_node("%ConcedeButton").disabled, false, "concede button is enabled on the player's action turn")
 	view._on_concede_confirmed()
 	t.assert_eq(submitted.size(), 1, "confirming concede emits exactly one action")
 	t.assert_eq(submitted[0].type, "concede", "concede confirmation emits a concede action")
