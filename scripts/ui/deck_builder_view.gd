@@ -157,6 +157,16 @@ func initialize(main, payload: Dictionary) -> void:
 		model.select_deck(str(payload.get("deck_id", "us-starter")))
 	else:
 		model.merge_session_deck(session_deck)
+	# Never strand the player on an invalid deck (e.g. a stale saved user deck
+	# from a previous session). If the selected deck fails validation, fall
+	# back to a valid shipped starter so Start Battle is always available.
+	if not model.validation().valid:
+		model.select_deck("us-starter")
+		if not model.validation().valid:
+			for deck_id in model.decks:
+				model.select_deck(deck_id)
+				if model.validation().valid:
+					break
 	difficulty = str(payload.get("difficulty", "standard"))
 	_populate_controls()
 	_apply_onboarding_hint(onboarding_store.load())
@@ -247,10 +257,12 @@ func _refresh_deck() -> void:
 func _readiness_status(validation: Dictionary) -> String:
 	if not validation.valid:
 		var errors: Array = validation.get("errors", [])
-		return "Deck invalid" if errors.is_empty() else str(errors[0]).replace("_", " ").capitalize()
+		if errors.is_empty():
+			return "Deck invalid - pick a starter from the Deck menu to start."
+		return "%s - edit the deck or pick a starter from the Deck menu." % str(errors[0]).replace("_", " ").capitalize()
 	if not model.selected_deck_id.begins_with("user-") and model.card_count() == 40:
-		return "Starter deck ready - 40 valid cards."
-	return "Deck ready - %d valid cards." % model.card_count()
+		return "Starter deck ready - 40 valid cards. Press Start Battle."
+	return "Deck ready - %d valid cards. Press Start Battle." % model.card_count()
 
 
 func _apply_onboarding_hint(state: Dictionary) -> void:

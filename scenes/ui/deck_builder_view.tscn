@@ -76,7 +76,7 @@ theme_override_constants/separation = 0
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 22)
 layout_mode = 2
-text = "Starter deck ready - 40 valid cards."
+text = "Starter deck ready - 40 valid cards. Press Start Battle."
 vertical_alignment = 1
 
 [node name="HintLine" type="HBoxContainer" parent="Margin/Page/StarterReadiness"]
@@ -88,7 +88,7 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 22)
 layout_mode = 2
 size_flags_horizontal = 3
-text = "Choose a difficulty and start battle, or click cards to edit."
+text = "Pick a deck from the Deck menu, choose a difficulty, then press Start Battle. Click cards to edit."
 text_overrun_behavior = 3
 vertical_alignment = 1
 

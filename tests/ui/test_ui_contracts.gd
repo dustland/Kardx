@@ -76,6 +76,7 @@ static func run_task5(t) -> void:
 	_test_main_routes_terminal_payload(t)
 	_test_match_label_reports_active_player_and_player_zones(t)
 	await _test_match_concede_button_routes_concede_action(t)
+	_test_deck_builder_falls_back_when_selected_deck_invalid(t)
 
 
 static func run_task6(t) -> void:
@@ -1187,6 +1188,26 @@ static func _test_deck_builder_copy_selection_and_save_failure(t) -> void:
 	view._on_save_pressed()
 	t.assert_true("failed" in (view.get_node("%Validation") as Label).text.to_lower(), "failed persistence never claims Saved")
 	t.assert_true(not view.store.last_error.is_empty(), "save failure exposes actionable detail")
+	view.free()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+static func _test_deck_builder_falls_back_when_selected_deck_invalid(t) -> void:
+	# Simulate a stale, invalid user deck persisted from a previous session and
+	# selected as the entry deck. Start Battle must not strand the player on it:
+	# initialize falls back to a valid shipped starter so play is always reachable.
+	var path := "user://test-decks-stale-invalid.json"
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	file.store_string(JSON.stringify([{"id": "user-broken", "cards": ["us-hq"]}]))
+	file.close()
+	var view = DeckBuilderScene.instantiate()
+	view.theme = ThemeFactory.create()
+	Engine.get_main_loop().root.add_child(view)
+	view.initialize(null, {"catalog": _catalog(), "deck_id": "user-broken", "difficulty": "standard", "store_path": path})
+	await Engine.get_main_loop().process_frame
+	await Engine.get_main_loop().process_frame
+	t.assert_eq((view.get_node("%PlayButton") as Button).disabled, false, "invalid selected deck falls back so Start Battle is enabled")
+	t.assert_eq(view.model.selected_deck_id, "us-starter", "invalid entry deck falls back to the US starter")
 	view.free()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
